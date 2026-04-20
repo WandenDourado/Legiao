@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go mod:*)",
+      "Bash(go run:*)",
+      "Bash(echo:*)",
+      "Bash(where go:*)",
+      "Bash(go version:*)",
+      "Bash(internal/entity/manager.go:*)",
+      "Bash(internal/system/combat.go:*)",
+      "Bash(internal/network/host.go:*)",
+      "Bash(go build:*)",
+      "Bash(go env:*)",
+      "Bash(go get:*)",
+      "Bash(find:*)",
+      "Bash(GOPROXY=direct go mod tidy 2>&1)",
+      "Bash(cd:*)"
+    ]
+  }
+}
