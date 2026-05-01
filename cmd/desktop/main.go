@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/WandenDourado/legiao/internal/entity/player"
-	"github.com/WandenDourado/legiao/internal/ui/hud"
+	"github.com/WandenDourado/Legiao/internal/entity"
+	"github.com/WandenDourado/Legiao/internal/ui"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -18,8 +18,8 @@ func main() {
 	rl.SetTargetFPS(60)
 
 	// Create game objects
-	p := player.NewPlayer()
-	vjoy := hud.NewVirtualJoystick()
+	p := entity.NewPlayer()
+	vjoy := ui.NewVirtualJoystick()
 
 	// Main game loop
 	for !rl.WindowShouldClose() {

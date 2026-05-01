@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"github.com/WandenDourado/legiao/internal/game"
+	"github.com/WandenDourado/Legiao/internal/game"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
