@@ -6,7 +6,7 @@ Este documento descreve como configurar o ambiente e compilar o projeto **Legiã
 
 1.  **Go (Golang)**: Instalado e configurado no PATH.
 2.  **Android SDK**: Necessário para ferramentas de build.
-3.  **Android NDK**: Versão recomendada: `23.2.8568313`.
+3.  **Android NDK**: Versão recomendada: `25.2.9519653`.
     *   *Nota*: Versões muito recentes (como NDK 27) podem não ser compatíveis com o `raylib-go` no momento.
 4.  **C-Compiler para Android**: O script utiliza o `clang` contido no NDK.
 

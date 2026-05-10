@@ -1,2 +1,0 @@
-br.wandendourado.legiao:string/app_name = 0x7f020000
-br.wandendourado.legiao:drawable/icon = 0x7f010000

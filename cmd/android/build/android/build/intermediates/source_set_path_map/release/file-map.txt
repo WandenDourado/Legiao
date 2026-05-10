@@ -1,7 +1,0 @@
-br.wandendourado.legiao.android-pngs-0 C:\Users\guilh\Documents\Projetos\Legiao\cmd\android\build\android\build\generated\res\pngs\release
-br.wandendourado.legiao.android-resValues-1 C:\Users\guilh\Documents\Projetos\Legiao\cmd\android\build\android\build\generated\res\resValues\release
-br.wandendourado.legiao.android-packageReleaseResources-2 C:\Users\guilh\Documents\Projetos\Legiao\cmd\android\build\android\build\intermediates\incremental\release\packageReleaseResources\merged.dir
-br.wandendourado.legiao.android-packageReleaseResources-3 C:\Users\guilh\Documents\Projetos\Legiao\cmd\android\build\android\build\intermediates\incremental\release\packageReleaseResources\stripped.dir
-br.wandendourado.legiao.android-merged_res-4 C:\Users\guilh\Documents\Projetos\Legiao\cmd\android\build\android\build\intermediates\merged_res\release
-br.wandendourado.legiao.android-android-5 C:\Users\guilh\Documents\Projetos\Legiao\cmd\android\build\android\res
-br.wandendourado.legiao.android-release-6 C:\Users\guilh\Documents\Projetos\Legiao\cmd\android\build\android\src\release\res

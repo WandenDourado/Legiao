@@ -1,7 +1,9 @@
 package ui
 
 import (
-	"github.com/WandenDourado/Legiao/internal/game"
+	"fmt"
+
+	"github.com/WandenDourado/Legiao/internal/entity"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -20,10 +22,10 @@ type VirtualJoystick struct {
 // The joystick is placed in the bottom-left corner of the screen.
 func NewVirtualJoystick() *VirtualJoystick {
 	return &VirtualJoystick{
-		Center:     rl.NewVector2(150, float32(game.ScreenHeight)-150),
+		Center:     rl.NewVector2(150, float32(entity.ScreenHeight)-150),
 		BaseRadius: 80,
 		KnobRadius: 40,
-		KnobPos:    rl.NewVector2(150, float32(game.ScreenHeight)-150),
+		KnobPos:    rl.NewVector2(150, float32(entity.ScreenHeight)-150),
 		IsDragging: false,
 		MaxOffset:  50, // Knob can move up to 50 pixels from center
 	}
@@ -31,14 +33,17 @@ func NewVirtualJoystick() *VirtualJoystick {
 
 // Update processes input and returns the normalized direction vector.
 // If not dragging, returns (0,0).
+// Only starts dragging if touch/click starts inside the joystick base.
 func (vj *VirtualJoystick) Update() rl.Vector2 {
 	mousePos := rl.GetMousePosition()
+
+	// Only start dragging if click/touch STARTED inside the joystick base
 	if rl.IsMouseButtonPressed(rl.MouseLeftButton) {
-		// Check if the touch/click is inside the base circle
 		if rl.CheckCollisionPointCircle(mousePos, vj.Center, vj.BaseRadius) {
 			vj.IsDragging = true
 		}
 	}
+
 	if rl.IsMouseButtonReleased(rl.MouseLeftButton) {
 		vj.IsDragging = false
 		// Reset knob to center when released
@@ -69,4 +74,91 @@ func (vj *VirtualJoystick) Draw() {
 	rl.DrawCircleV(vj.Center, vj.BaseRadius, rl.Fade(rl.Gray, 0.5))
 	// Draw knob circle
 	rl.DrawCircleV(vj.KnobPos, vj.KnobRadius, rl.Fade(rl.LightGray, 0.8))
+}
+
+// AttackButton represents an on-screen attack button.
+type AttackButton struct {
+	Position  rl.Vector2
+	Radius    float32
+	IsPressed bool
+	Color     rl.Color
+}
+
+// NewAttackButton creates a new attack button in the bottom-right corner.
+func NewAttackButton() *AttackButton {
+	return &AttackButton{
+		Position: rl.NewVector2(float32(entity.ScreenWidth)-100, float32(entity.ScreenHeight)-100),
+		Radius:   35.0,
+		Color:     rl.Fade(rl.Red, 0.7),
+	}
+}
+
+// Update processes input and returns true if the button was just pressed.
+func (ab *AttackButton) Update() bool {
+	mousePos := rl.GetMousePosition()
+
+	if rl.IsMouseButtonPressed(rl.MouseLeftButton) {
+		if rl.CheckCollisionPointCircle(mousePos, ab.Position, ab.Radius) {
+			ab.IsPressed = true
+			return true // Button was pressed this frame
+		}
+	}
+
+	if rl.IsMouseButtonReleased(rl.MouseLeftButton) {
+		ab.IsPressed = false
+	}
+
+	return false
+}
+
+// Draw renders the attack button.
+func (ab *AttackButton) Draw() {
+	// Draw button circle
+	color := ab.Color
+	if ab.IsPressed {
+		color = rl.Fade(rl.Red, 0.9)
+	}
+	rl.DrawCircleV(ab.Position, ab.Radius, color)
+	rl.DrawCircleLinesV(ab.Position, ab.Radius, rl.White)
+
+	// Draw "FIRE" text
+	text := "FIRE"
+	textWidth := rl.MeasureText(text, 14)
+	rl.DrawText(text,
+		int32(ab.Position.X)-textWidth/2,
+		int32(ab.Position.Y)-7,
+		14, rl.White)
+}
+
+// DrawHealthBar draws the player's health bar in the top-left corner.
+func DrawHealthBar(health, maxHealth float32) {
+	barWidth := float32(200.0)
+	barHeight := float32(20.0)
+	x := float32(10.0)
+	y := float32(10.0)
+
+	// Background (dark red)
+	rl.DrawRectangle(int32(x), int32(y), int32(barWidth), int32(barHeight), rl.Fade(rl.DarkGray, 0.8))
+
+	// Health fill (green to red gradient based on health percentage)
+	healthPercent := health / maxHealth
+	fillWidth := int32(barWidth * float32(healthPercent))
+
+	var healthColor rl.Color
+	if healthPercent > 0.5 {
+		healthColor = rl.Green
+	} else if healthPercent > 0.25 {
+		healthColor = rl.Orange
+	} else {
+		healthColor = rl.Red
+	}
+
+	rl.DrawRectangle(int32(x), int32(y), fillWidth, int32(barHeight), healthColor)
+
+	// Border
+	rl.DrawRectangleLinesEx(rl.NewRectangle(float32(x), float32(y), barWidth, barHeight), 2, rl.White)
+
+	// Text
+	healthText := fmt.Sprintf("%.0f/%.0f", health, maxHealth)
+	rl.DrawText(healthText, int32(x)+int32(barWidth)+10, int32(y), 20, rl.White)
 }

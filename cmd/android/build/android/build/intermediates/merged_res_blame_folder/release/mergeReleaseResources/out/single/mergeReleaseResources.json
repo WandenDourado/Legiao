@@ -1,0 +1,46 @@
+[
+    {
+        "merged": "br.wandendourado.legiao.android-release-4:/drawable_downloadimageh.png.flat",
+        "source": "br.wandendourado.legiao.android-android-5:/drawable/downloadimageh.png"
+    },
+    {
+        "merged": "br.wandendourado.legiao.android-release-4:/drawable_downloadimagev.png.flat",
+        "source": "br.wandendourado.legiao.android-android-5:/drawable/downloadimagev.png"
+    },
+    {
+        "merged": "br.wandendourado.legiao.android-release-4:/drawable-ldpi_icon.png.flat",
+        "source": "br.wandendourado.legiao.android-android-5:/drawable-ldpi/icon.png"
+    },
+    {
+        "merged": "br.wandendourado.legiao.android-release-4:/drawable-nodpi_vr_icon_background.png.flat",
+        "source": "br.wandendourado.legiao.android-android-5:/drawable-nodpi/vr_icon_background.png"
+    },
+    {
+        "merged": "br.wandendourado.legiao.android-release-4:/drawable-nodpi_vr_icon.png.flat",
+        "source": "br.wandendourado.legiao.android-android-5:/drawable-nodpi/vr_icon.png"
+    },
+    {
+        "merged": "br.wandendourado.legiao.android-release-4:/drawable_icon.png.flat",
+        "source": "br.wandendourado.legiao.android-android-5:/drawable/icon.png"
+    },
+    {
+        "merged": "br.wandendourado.legiao.android-release-4:/drawable_splashscreen_portrait.png.flat",
+        "source": "br.wandendourado.legiao.android-android-5:/drawable/splashscreen_portrait.png"
+    },
+    {
+        "merged": "br.wandendourado.legiao.android-release-4:/drawable-xhdpi_icon.png.flat",
+        "source": "br.wandendourado.legiao.android-android-5:/drawable-xhdpi/icon.png"
+    },
+    {
+        "merged": "br.wandendourado.legiao.android-release-4:/drawable-hdpi_icon.png.flat",
+        "source": "br.wandendourado.legiao.android-android-5:/drawable-hdpi/icon.png"
+    },
+    {
+        "merged": "br.wandendourado.legiao.android-release-4:/drawable-mdpi_icon.png.flat",
+        "source": "br.wandendourado.legiao.android-android-5:/drawable-mdpi/icon.png"
+    },
+    {
+        "merged": "br.wandendourado.legiao.android-release-4:/drawable_splashscreen_landscape.png.flat",
+        "source": "br.wandendourado.legiao.android-android-5:/drawable/splashscreen_landscape.png"
+    }
+]

@@ -5,7 +5,7 @@
 @REM Set your android sdk folder here
 @set ANDROID_HOME=C:\Users\guilh\AppData\Local\Android\Sdk
 @REM Set your android NDK folder here. WARNING: NDK 27 is not supported yet. See https://github.com/raysan5/raylib/issues/4166
-@set ANDROID_NDK_HOME=C:\Users\guilh\AppData\Local\Android\Sdk\ndk\23.2.8568313
+@set ANDROID_NDK_HOME=C:\Users\guilh\AppData\Local\Android\Sdk\ndk\25.2.9519653
 @REM The target architecture for android. See https://developer.android.com/ndk/guides/abis. 
 @REM Valid options are: armeabi-v7a,arm64-v8a,x86,x86_64 or "all" if you want to build for all architectures.
 @set TARGET_ARCH="all"
@@ -26,7 +26,7 @@
         @set CGO_ENABLED=1
         @set GOOS=android
         @set GOARCH=%GOARCH%
-        @go build -buildmode=c-shared -ldflags="-s -w -extldflags=-Wl,-soname,lib%LIBRARY_NAME%.so" -o=android/libs/%FL%/lib%LIBRARY_NAME%.so
+        @go build -buildmode=c-shared -ldflags="-s -w -extldflags=-Wl,-soname,lib%LIBRARY_NAME%.so,-z,max-page-size=0x4000" -o=android/libs/%FL%/lib%LIBRARY_NAME%.so
 @EXIT /B
 
 :BUILDALL
