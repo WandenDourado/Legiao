@@ -4,22 +4,26 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/WandenDourado/Legiao/internal/assets"
+	"github.com/WandenDourado/Legiao/internal/world"
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 // Wizard sprite sheet constants
 const (
-	WizardFrameWidth  = 163
-	WizardFrameHeight = 240
-	WizardColumns     = 6
-	WizardRows        = 4
-	WizardFrameTime   = 0.12 // seconds per frame
+	WizardFrameWidth              = 165
+	WizardFrameHeight             = 246
+	WizardColumns                 = 6
+	WizardRows                    = 5
+	WizardFrameTime       float32 = 0.12 // seconds per frame (walk)
+	WizardSprintFrameTime float32 = 0.08 // seconds per frame (sprint — faster playback)
 
 	// Sprite rows
 	RowWalkUp       = 0
 	RowWalkDown     = 1
 	RowWalkLeft     = 2
 	RowWalkDownLeft = 3
+	RowWalkUpLeft   = 4
 )
 
 // Game constants
@@ -37,7 +41,18 @@ const (
 	// Entity sizes (radius for circular collision)
 	PlayerSize     = 20.0
 	EnemySize      = 15.0
-	ProjectileSize = 5.0
+	ProjectileSize = 20.0
+
+	// Respawn constants
+	RespawnDelay         = 15.0 // Seconds before respawn
+	RespawnHealthPercent = 0.15 // 15% health on respawn
+)
+
+// Sprint input thresholds
+const (
+	// SprintThreshold is the minimum joystick displacement (normalized 0-1)
+	// that triggers sprint mode on Android.
+	SprintThreshold = 0.70
 )
 
 // Player represents the player character.
@@ -58,13 +73,14 @@ type Player struct {
 	CurrentFrame  int
 	CurrentRow    int
 	LastRow       int
+	IsSprinting   bool
 	Initialized   bool
 }
 
 // NewPlayer creates a new player with default values.
-func NewPlayer() *Player {
+func NewPlayer(spawn rl.Vector2) *Player {
 	return &Player{
-		Position:   rl.NewVector2(float32(ScreenWidth/2), float32(ScreenHeight/2)),
+		Position:   spawn,
 		Velocity:   rl.NewVector2(0, 0),
 		Health:     100,
 		MaxHealth:  100,
@@ -78,7 +94,7 @@ func NewPlayer() *Player {
 
 // InitSprite loads the wizard texture for the player.
 func (p *Player) InitSprite() {
-	p.WizardTexture = rl.LoadTexture("assets/sprites/wizard/wizard.png")
+	p.WizardTexture = rl.LoadTexture(assets.Path("assets/sprites/wizard/wizard.png"))
 	p.Initialized = true
 }
 
@@ -92,7 +108,7 @@ func (p *Player) UnloadSprite() {
 
 // Update updates the player's position based on input direction and delta time.
 // dir is a normalized vector (dx, dy) in the range [-1, 1] for each axis.
-func (p *Player) Update(dir rl.Vector2, dt float32) {
+func (p *Player) Update(dir rl.Vector2, dt float32, bounds world.Bounds) {
 	// Calculate velocity from input direction and speed
 	p.Velocity.X = dir.X * p.Speed
 	p.Velocity.Y = dir.Y * p.Speed
@@ -101,16 +117,16 @@ func (p *Player) Update(dir rl.Vector2, dt float32) {
 	p.Position.X += p.Velocity.X * dt
 	p.Position.Y += p.Velocity.Y * dt
 
-	// Keep player within screen bounds (optional, but good for testing)
-	if p.Position.X < p.Radius {
-		p.Position.X = p.Radius
-	} else if p.Position.X > float32(ScreenWidth)-p.Radius {
-		p.Position.X = float32(ScreenWidth) - p.Radius
+	// Keep player within world bounds
+	if p.Position.X < 0 {
+		p.Position.X = 0
+	} else if p.Position.X > bounds.Width {
+		p.Position.X = bounds.Width
 	}
-	if p.Position.Y < p.Radius {
-		p.Position.Y = p.Radius
-	} else if p.Position.Y > float32(ScreenHeight)-p.Radius {
-		p.Position.Y = float32(ScreenHeight) - p.Radius
+	if p.Position.Y < 0 {
+		p.Position.Y = 0
+	} else if p.Position.Y > bounds.Height {
+		p.Position.Y = bounds.Height
 	}
 
 	// Update sprite animation
@@ -133,11 +149,20 @@ func (p *Player) updateAnimation(dir rl.Vector2, dt float32) {
 			absY = -absY
 		}
 
-		if dir.Y < 0 && absY >= absX {
-			// Moving up (or up-diagonal)
+		if dir.Y < 0 && dir.X < 0 && absX > absY*0.5 {
+			// Moving up-left diagonal
+			p.CurrentRow = RowWalkUpLeft
+		} else if dir.Y < 0 && dir.X > 0 && absX > absY*0.5 {
+			// Moving up-right diagonal (mirrored)
+			p.CurrentRow = RowWalkUpLeft
+		} else if dir.Y < 0 && absY >= absX {
+			// Moving up (or up-diagonal but mostly vertical)
 			p.CurrentRow = RowWalkUp
 		} else if dir.Y > 0 && dir.X < 0 && absX > absY*0.5 {
 			// Moving down-left diagonal
+			p.CurrentRow = RowWalkDownLeft
+		} else if dir.Y > 0 && dir.X > 0 && absX > absY*0.5 {
+			// Moving down-right diagonal (mirrored)
 			p.CurrentRow = RowWalkDownLeft
 		} else if dir.X < 0 {
 			// Moving left
@@ -152,10 +177,14 @@ func (p *Player) updateAnimation(dir rl.Vector2, dt float32) {
 
 		p.LastRow = p.CurrentRow
 
-		// Advance animation timer
+		// Advance animation timer — faster during sprint
+		frameTime := WizardFrameTime
+		if p.IsSprinting {
+			frameTime = WizardSprintFrameTime
+		}
 		p.AnimTimer += dt
-		if p.AnimTimer >= WizardFrameTime {
-			p.AnimTimer -= WizardFrameTime
+		if p.AnimTimer >= frameTime {
+			p.AnimTimer -= frameTime
 			p.CurrentFrame++
 			if p.CurrentFrame >= WizardColumns {
 				p.CurrentFrame = 0
@@ -186,16 +215,26 @@ func (p *Player) Draw() {
 		return
 	}
 
+	currentRow := p.CurrentRow
+	// Fallback to RowWalkUp if the texture doesn't have the 5th row (upper-diagonal)
+	if p.Initialized && p.WizardTexture.Height > 0 && currentRow*WizardFrameHeight >= int(p.WizardTexture.Height) {
+		if currentRow == RowWalkUpLeft {
+			currentRow = RowWalkUp
+		} else {
+			currentRow = RowWalkDown
+		}
+	}
+
 	// Calculate source rectangle from sprite sheet
 	sourceRect := rl.NewRectangle(
 		float32(p.CurrentFrame*WizardFrameWidth),
-		float32(p.CurrentRow*WizardFrameHeight),
+		float32(currentRow*WizardFrameHeight),
 		WizardFrameWidth,
 		WizardFrameHeight,
 	)
 
-	// Mirror for right-facing (row 2 with negative width)
-	if p.Velocity.X > 0 && p.CurrentRow == RowWalkLeft {
+	// Mirror for right-facing (left-facing rows with negative width)
+	if p.Velocity.X > 0 && (currentRow == RowWalkLeft || currentRow == RowWalkDownLeft || currentRow == RowWalkUpLeft) {
 		sourceRect.Width = -WizardFrameWidth
 	}
 

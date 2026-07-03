@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
@@ -14,7 +13,7 @@ import (
 )
 
 // ShowMenu renders the start menu where the player can host or join a game.
-func ShowMenu() {
+func ShowMenu(playerSpawn rl.Vector2) {
 	selected := false
 	joinMode := false
 	manualMode := false
@@ -33,7 +32,7 @@ func ShowMenu() {
 				drawDiscoveryView(&selected, &manualMode, &manualIP, &refreshTimer, &scanning)
 			}
 		} else {
-			drawMainMenu(&selected, &joinMode)
+			drawMainMenu(&selected, &joinMode, playerSpawn)
 		}
 
 		rl.EndDrawing()
@@ -46,14 +45,14 @@ func ShowMenu() {
 }
 
 // drawMainMenu draws the host/join selection screen
-func drawMainMenu(selected *bool, joinMode *bool) {
+func drawMainMenu(selected *bool, joinMode *bool, playerSpawn rl.Vector2) {
 	hostRect := rl.NewRectangle(200, 150, 200, 50)
 	joinRect := rl.NewRectangle(200, 250, 200, 50)
 
 	if rl.IsMouseButtonPressed(rl.MouseLeftButton) {
 		mouse := rl.GetMousePosition()
 		if rl.CheckCollisionPointRec(mouse, hostRect) {
-			startHost(selected)
+			startHost(selected, playerSpawn)
 		} else if rl.CheckCollisionPointRec(mouse, joinRect) {
 			*joinMode = true
 		}
@@ -198,7 +197,7 @@ func drawManualInput(manualIP *string, selected *bool) {
 }
 
 // startHost initializes the host
-func startHost(selected *bool) {
+func startHost(selected *bool, playerSpawn rl.Vector2) {
 	log.Println("[Menu] Host selected")
 	network.Role = "host"
 	network.LocalPlayerID = generatePlayerID()
@@ -207,12 +206,12 @@ func startHost(selected *bool) {
 
 	network.UpdatePlayerState(network.PlayerState{
 		PlayerID: network.LocalPlayerID,
-		X:        100,
-		Y:        100,
+		X:        int(playerSpawn.X),
+		Y:        int(playerSpawn.Y),
 		Color:    color,
 	})
 
-	h, err := network.StartHost(9000, network.LocalPlayerID, color)
+	h, err := network.StartHost(9000, network.LocalPlayerID, color, playerSpawn)
 	if err != nil {
 		log.Fatalf("Failed to start host: %v", err)
 	}
@@ -247,7 +246,7 @@ func connectToHost(addr string) {
 		color := entity.PresetColors[rand.Intn(len(entity.PresetColors))]
 		joinMsg := network.Message{
 			Type: network.MsgJoin,
-			Payload: mustMarshal(network.JoinPayload{
+			Payload: network.MustMarshal(network.JoinPayload{
 				PlayerID: playerID,
 				Color:    color,
 			}),
@@ -275,12 +274,4 @@ func getOutboundIP() string {
 	defer conn.Close()
 	localAddr := conn.LocalAddr().(*net.UDPAddr)
 	return localAddr.IP.String()
-}
-
-func mustMarshal(v interface{}) json.RawMessage {
-	data, err := json.Marshal(v)
-	if err != nil {
-		panic(err)
-	}
-	return data
 }

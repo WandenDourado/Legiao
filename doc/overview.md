@@ -1,100 +1,33 @@
-# Legião - Project Overview
+# Project Overview
 
-Legião is a 2D cooperative multiplayer local survival shooter inspired by Vampire Survivors.
-The game is built in Go using Raylib for rendering and targets Android (with desktop for development).
+Legiao is a 2D cooperative LAN survival shooter built in Go with raylib-go. Desktop is used for fast development and Android is a target platform.
 
-## Project Structure
+## Current Gameplay
 
-```
-/cmd
-  /android        → Entry point for Android (gomobile)
-  /desktop        → Entry point for desktop (development and testing)
+- One host runs the authoritative simulation.
+- Clients join over local Wi-Fi.
+- Players move, sprint, aim, fire projectiles, fight enemies, die, and respawn.
+- The map is a Tiled tilemap loaded from `assets/maps`.
+- Camera follows the local player within map-derived world bounds.
 
-/internal
-  /game
-    game.go       → Main game loop
-    config.go     → Global constants and configurations
-  /entity
-    player.go     → Player entity definition and behavior
-    enemy.go      → Enemy entities
-    projectile.go → Projectiles (bullets, etc.)
-    manager.go    → Manages collections of entities (players, enemies, projectiles)
-  /system
-    movement.go   → Handles movement logic
-    combat.go     → Handles combat (hit detection, damage)
-    spawn.go      → Handles spawning of enemies and items
-    upgrade.go    → Handles power-up/upgrade system
-  /network
-    protocol.go   → Message definitions and JSON serialization
-    host.go       → Authoritative host simulation logic
-    client.go     → Client logic (sends input, receives state)
-    discovery.go  → Local network discovery (Wi-Fi)
-    transport.go  → Common interface for Wi-Fi and Bluetooth transport
-  /transport
-    wifi.go       → Wi-Fi specific transport implementation
-    bluetooth.go  → Bluetooth specific transport implementation
-  /screen
-    menu.go       → Main menu screen
-    lobby.go      → Lobby screen (waiting for players)
-    game.go       → In-game screen
-    upgrade.go    → Upgrade selection screen
-    gameover.go   → Game over screen
-  /ui
-    hud.go        → Heads-up display (including virtual joystick for touch)
-    camera.go     → Camera system (follows players, zoom, etc.)
+## Current Architecture
 
-/assets
-  /sprites        → 2D sprites for entities, UI, etc.
-  /sounds         → Sound effects and music
-  /maps           → Tilemaps or level data (if used)
+| Area | Source |
+|---|---|
+| Game loop orchestration | `internal/game/loop.go` |
+| Input processing | `internal/game/input_handler.go`, `internal/input/` |
+| Rendering | `internal/game/renderer.go`, `internal/tilemap/renderer.go` |
+| Entities | `internal/entity/` |
+| Combat/movement/spawn systems | `internal/system/` |
+| Multiplayer | `internal/network/` |
+| Menu/HUD | `internal/ui/` |
+| Map data | `assets/maps/`, `assets/tilesets/` |
 
-/doc
-  architecture.md → Detailed architecture (to be created)
-  overview.md     → This file
-```
+See `project_structure.md` for the detailed package map.
 
-## Key Components
+## Design Direction
 
-### Game Loop
-- Runs at a fixed tick rate (20 ticks per second for state updates, inputs processed in real-time).
-- The host runs the authoritative simulation; clients are dumb terminals that send input and render state.
-
-### Networking
-- Uses TCP sockets for Wi-Fi LAN and Bluetooth for direct connections.
-- Messages are JSON-encoded (defined in `protocol.go`).
-- Communication channels:
-  - `stateChan`: Network → Game (receives state from host)
-  - `inputChan`: Game → Network (sends input to host)
-
-### Entities
-- Player, Enemy, Projectile are defined in `/internal/entity`.
-- Managed by entity managers (in `/internal/entity/manager.go`).
-
-### Systems
-- Movement, Combat, Spawn, Upgrade systems are in `/internal/system`.
-- These systems operate on entities each tick.
-
-### Screens
-- Different game states (menu, lobby, game, upgrade, gameover) are handled in `/internal/screen`.
-- Each screen has its own update and draw logic.
-
-### UI
-- HUD includes health, score, and virtual joystick for touch input (`/internal/ui/hud.go`).
-- Camera follows the player(s) and handles zoom (`/internal/ui/camera.go`).
-
-## Multiplayer Architecture
-- The host is authoritative: it runs the full game simulation.
-- Clients only send their input (joystick, buttons) and receive the full game state to render.
-- Input is sent in real-time; state is synchronized at 20 ticks per second.
-- Discovery: Players can find each other via local network (Wi-Fi) or Bluetooth pairing.
-
-## Development Notes
-- Desktop (`/cmd/desktop`) is used for development and testing.
-- Android builds are done via `gomobile` (`/cmd/android`).
-- The game design is cooperative: two players on the same screen, surviving waves of enemies.
-
-## Future Work
-- Week 1: Basic game loop, player movement, virtual joystick, camera.
-- Week 2: Enemy types, wave system, upgrades, HUD, screens.
-- Week 3: Full multiplayer (Wi-Fi + Bluetooth), lobby, synchronization.
-- Week 4: Android build, touch adjustments, assets, Google Play release.
+- Keep the host authoritative.
+- Keep Android and desktop sharing the same game logic.
+- Prefer small focused files over large mixed-responsibility files.
+- Keep docs as current source-of-truth references; put historical details in `changelog.md`.

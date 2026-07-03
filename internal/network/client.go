@@ -74,6 +74,9 @@ func (c *Client) handleMessage(msg Message) {
 		RemoteEnemiesMutex.Unlock()
 		log.Printf("[Client] Updated RemoteEnemies: %d enemies", len(enemyUpdate.Enemies))
 
+	case MsgProjectileUpdate:
+		c.handleProjectileUpdate(msg.Payload)
+
 	case MsgCombatEvent:
 		var combat CombatEventPayload
 		if err := json.Unmarshal(msg.Payload, &combat); err != nil {

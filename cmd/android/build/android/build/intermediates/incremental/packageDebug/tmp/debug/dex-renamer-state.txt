@@ -1,0 +1,7 @@
+#Thu Jul 02 19:01:28 BRT 2026
+base.0=C\:\\Users\\guilh\\Documents\\Projetos\\Legiao\\cmd\\android\\build\\android\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\0\\classes.dex
+base.1=C\:\\Users\\guilh\\Documents\\Projetos\\Legiao\\cmd\\android\\build\\android\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\3\\classes.dex
+path.0=0/classes.dex
+path.1=3/classes.dex
+renamed.0=classes.dex
+renamed.1=classes2.dex

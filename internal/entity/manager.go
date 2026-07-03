@@ -3,6 +3,7 @@ package entity
 import (
 	"sync"
 
+	"github.com/WandenDourado/Legiao/internal/world"
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -13,6 +14,7 @@ type EntityManager struct {
 	Projectiles  map[string]*Projectile
 	enemiesMutex sync.RWMutex
 	projMutex    sync.RWMutex
+	WorldBounds  world.Bounds
 }
 
 // NewEntityManager creates a new entity manager with initialized maps.
@@ -125,7 +127,7 @@ func (em *EntityManager) UpdateAll(dt float32, players []PlayerState) map[string
 	em.projMutex.Lock()
 	for id, p := range em.Projectiles {
 		if p.IsActive {
-			if !p.Update(dt) {
+			if !p.Update(dt, em.WorldBounds) {
 				delete(em.Projectiles, id)
 			}
 		} else {

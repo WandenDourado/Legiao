@@ -1,0 +1,41 @@
+{
+  "image": "blue_wizard_walk.png",
+  "frame_width": 165,
+  "frame_height": 246,
+  "origin": "foot-center",
+  "directions": [
+    "N",
+    "S",
+    "W",
+    "SW"
+  ],
+  "animations": {
+    "walk": {
+      "frames_per_direction": 6,
+      "frame_time_seconds": 0.12,
+      "rows": {
+        "N": 0,
+        "S": 1,
+        "W": 2,
+        "SW": 3
+      }
+    }
+  },
+  "mirrored": {
+    "E": "W"
+  },
+  "legiao_compatibility": {
+    "rows": [
+      "N",
+      "S",
+      "W",
+      "SW"
+    ],
+    "frame_size": [
+      165,
+      246
+    ],
+    "frames_per_direction": 6,
+    "origin": "foot-center"
+  }
+}

@@ -1,6 +1,7 @@
 package entity
 
 import (
+	"github.com/WandenDourado/Legiao/internal/world"
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -35,7 +36,7 @@ func NewProjectile(ownerID string, startPos rl.Vector2, direction rl.Vector2) *P
 
 // Update updates the projectile's position and lifetime.
 // Returns true if the projectile is still active, false if it should be removed.
-func (p *Projectile) Update(dt float32) bool {
+func (p *Projectile) Update(dt float32, bounds world.Bounds) bool {
 	if !p.IsActive {
 		return false
 	}
@@ -50,9 +51,9 @@ func (p *Projectile) Update(dt float32) bool {
 		return false
 	}
 
-	// Check if out of screen bounds
-	if p.Position.X < -p.Radius || p.Position.X > float32(ScreenWidth)+p.Radius ||
-		p.Position.Y < -p.Radius || p.Position.Y > float32(ScreenHeight)+p.Radius {
+	// Check if out of world bounds
+	if p.Position.X < -p.Radius || p.Position.X > bounds.Width+p.Radius ||
+		p.Position.Y < -p.Radius || p.Position.Y > bounds.Height+p.Radius {
 		p.IsActive = false
 		return false
 	}

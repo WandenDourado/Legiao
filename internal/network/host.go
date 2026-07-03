@@ -7,31 +7,34 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
 	"net"
 	"sync"
 
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/WandenDourado/Legiao/internal/entity"
+	"github.com/WandenDourado/Legiao/internal/world"
+	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 // Host represents the server that manages the authoritative game state.
 type Host struct {
-	listener     net.Listener
-	peers        map[string]*ClientConn // key: remote address
-	peersMutex   sync.Mutex
+	listener   net.Listener
+	peers      map[string]*ClientConn // key: remote address
+	peersMutex sync.Mutex
 	// Authoritative game state: all connected players
 	players      map[string]*PlayerState // key: player ID
 	playersMutex sync.RWMutex
 	// Entity management (enemies and projectiles)
 	EntityManager *entity.EntityManager
-	spawnTimer   float32
+	spawnTimer    float32
+	// World bounds for spawn positions and projectile validation
+	WorldBounds world.Bounds
+	PlayerSpawn rl.Vector2
 }
 
 type ClientConn struct {
-	conn   net.Conn
-	writer *bufio.Writer
-	reader *bufio.Reader
+	conn     net.Conn
+	writer   *bufio.Writer
+	reader   *bufio.Reader
 	playerID string // associated player ID for this connection
 	// Done channel signals that the client has disconnected.
 	done chan struct{}
@@ -39,27 +42,28 @@ type ClientConn struct {
 
 // StartHost starts a TCP server listening on the given port.
 // playerID and color are used to register the host as a player in the authoritative state.
-func StartHost(port int, playerID string, color string) (*Host, error) {
+func StartHost(port int, playerID string, color string, playerSpawn rl.Vector2) (*Host, error) {
 	addr := fmt.Sprintf("0.0.0.0:%d", port)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
 	h := &Host{
-		listener:     ln,
-		peers:        make(map[string]*ClientConn),
-		players:      make(map[string]*PlayerState),
+		listener:      ln,
+		peers:         make(map[string]*ClientConn),
+		players:       make(map[string]*PlayerState),
 		EntityManager: entity.NewEntityManager(),
+		PlayerSpawn:   playerSpawn,
 	}
 	// Register host as a player in the authoritative state
 	h.players[playerID] = &PlayerState{
-		PlayerID: playerID,
-		X:        100,
-		Y:        100,
-		Color:    color,
-		Health:   100,
+		PlayerID:  playerID,
+		X:         int(h.PlayerSpawn.X),
+		Y:         int(h.PlayerSpawn.Y),
+		Color:     color,
+		Health:    100,
 		MaxHealth: 100,
-		IsDead:   false,
+		IsDead:    false,
 	}
 	log.Printf("[Host] StartHost: registered host %s, players map now has %d entries", playerID, len(h.players))
 	go h.acceptLoop()
@@ -122,13 +126,13 @@ func (h *Host) handleClient(c *ClientConn) {
 			// Register player in authoritative state
 			h.playersMutex.Lock()
 			h.players[join.PlayerID] = &PlayerState{
-				PlayerID: join.PlayerID,
-				X:        100, // Initial position X
-				Y:        100, // Initial position Y
-				Color:    join.Color,
-				Health:   100,
+				PlayerID:  join.PlayerID,
+				X:         int(h.PlayerSpawn.X),
+				Y:         int(h.PlayerSpawn.Y),
+				Color:     join.Color,
+				Health:    100,
 				MaxHealth: 100,
-				IsDead:   false,
+				IsDead:    false,
 			}
 			h.playersMutex.Unlock()
 			log.Printf("[Host] Player %s joined with color %s", join.PlayerID, join.Color)
@@ -145,10 +149,16 @@ func (h *Host) handleClient(c *ClientConn) {
 				continue
 			}
 			// Update player position in authoritative state (absolute position)
+			// Also update animation state if provided
 			h.playersMutex.Lock()
 			if p, ok := h.players[input.PlayerID]; ok {
 				p.X = input.X
 				p.Y = input.Y
+				p.CurrentFrame = input.CurrentFrame
+				p.CurrentRow = input.CurrentRow
+				p.IsSprinting = input.IsSprinting
+				p.VelX = input.VelX
+				p.VelY = input.VelY
 			}
 			h.playersMutex.Unlock()
 			// Broadcast updated state to all peers
@@ -212,45 +222,6 @@ func (h *Host) UpdateSimulation(dt float32) {
 	h.BroadcastFullState()
 }
 
-// spawnEnemies spawns enemies at random positions.
-func (h *Host) spawnEnemies() {
-	if h.EntityManager.GetActiveEnemyCount() >= 20 {
-		return // Max enemies reached
-	}
-
-	// Spawn 1-3 enemies per wave
-	count := rand.Intn(3) + 1
-	for i := 0; i < count; i++ {
-		x, y := getRandomSpawnPosition()
-		e := entity.NewEnemy(entity.EnemyTypeBasic, x, y)
-		h.EntityManager.AddEnemy(e)
-		log.Printf("[Host] Spawned enemy %s at (%.0f, %.0f)", e.ID, x, y)
-	}
-}
-
-// getRandomSpawnPosition returns a random position at screen edges.
-func getRandomSpawnPosition() (float32, float32) {
-	side := rand.Intn(4) // 0=top, 1=right, 2=bottom, 3=left
-	var x, y float32
-
-	switch side {
-	case 0: // Top
-		x = rand.Float32() * 1280
-		y = -20
-	case 1: // Right
-		x = 1280 + 20
-		y = rand.Float32() * 720
-	case 2: // Bottom
-		x = rand.Float32() * 1280
-		y = 720 + 20
-	case 3: // Left
-		x = -20
-		y = rand.Float32() * 720
-	}
-
-	return x, y
-}
-
 // getAllPlayersForAI returns player states for enemy AI.
 func (h *Host) getAllPlayersForAI() []entity.PlayerState {
 	h.playersMutex.RLock()
@@ -259,13 +230,13 @@ func (h *Host) getAllPlayersForAI() []entity.PlayerState {
 	players := make([]entity.PlayerState, 0, len(h.players))
 	for _, p := range h.players {
 		players = append(players, entity.PlayerState{
-			PlayerID: p.PlayerID,
-			X:        p.X,
-			Y:        p.Y,
-			Color:    p.Color,
-			Health:   p.Health,
+			PlayerID:  p.PlayerID,
+			X:         p.X,
+			Y:         p.Y,
+			Color:     p.Color,
+			Health:    p.Health,
 			MaxHealth: p.MaxHealth,
-			IsDead:   p.IsDead,
+			IsDead:    p.IsDead,
 		})
 	}
 	return players
@@ -436,65 +407,61 @@ func (h *Host) BroadcastFullState() {
 
 	// Broadcast enemy state
 	enemies := h.EntityManager.GetAllEnemies()
-	if len(enemies) > 0 {
-		enemyStates := make([]EnemyState, 0, len(enemies))
-		for _, e := range enemies {
-			if e.IsActive {
-				enemyStates = append(enemyStates, EnemyState{
-					EnemyID:   e.ID,
-					Type:      string(e.Type),
-					X:         int(e.Position.X),
-					Y:         int(e.Position.Y),
-					Health:    e.Health,
-					MaxHealth: e.MaxHealth,
-					Color:     e.Color,
-				})
-			}
+	enemyStates := make([]EnemyState, 0, len(enemies))
+	for _, e := range enemies {
+		if e.IsActive {
+			enemyStates = append(enemyStates, EnemyState{
+				EnemyID:   e.ID,
+				Type:      string(e.Type),
+				X:         int(e.Position.X),
+				Y:         int(e.Position.Y),
+				Health:    e.Health,
+				MaxHealth: e.MaxHealth,
+				Color:     e.Color,
+			})
 		}
-		enemyPayload := EnemyUpdatePayload{Enemies: enemyStates}
-		data, err := json.Marshal(enemyPayload)
-		if err != nil {
-			log.Printf("[Host] failed to marshal enemy update: %v", err)
-		} else {
-			msg := Message{Type: MsgEnemyUpdate, Payload: data}
-			h.broadcast(msg)
-		}
+	}
+	enemyPayload := EnemyUpdatePayload{Enemies: enemyStates}
+	data, err := json.Marshal(enemyPayload)
+	if err != nil {
+		log.Printf("[Host] failed to marshal enemy update: %v", err)
+	} else {
+		msg := Message{Type: MsgEnemyUpdate, Payload: data}
+		h.broadcast(msg)
 	}
 
 	// Broadcast projectile state
 	projectiles := h.EntityManager.GetAllProjectiles()
-	if len(projectiles) > 0 {
-		projStates := make([]ProjectileState, 0, len(projectiles))
-		for _, p := range projectiles {
-			if p.IsActive {
-				projStates = append(projStates, ProjectileState{
-					ProjectileID: p.ID,
-					OwnerID:      p.OwnerID,
-					X:            int(p.Position.X),
-					Y:            int(p.Position.Y),
-					Active:       p.IsActive,
-				})
-			}
+	projStates := make([]ProjectileState, 0, len(projectiles))
+	for _, p := range projectiles {
+		if p.IsActive {
+			projStates = append(projStates, ProjectileState{
+				ProjectileID: p.ID,
+				OwnerID:      p.OwnerID,
+				X:            int(p.Position.X),
+				Y:            int(p.Position.Y),
+				Active:       p.IsActive,
+			})
 		}
-		projPayload := ProjectileUpdatePayload{Projectiles: projStates}
-		data, err := json.Marshal(projPayload)
-		if err != nil {
-			log.Printf("[Host] failed to marshal projectile update: %v", err)
-		} else {
-			msg := Message{Type: MsgEnemyUpdate, Payload: data} // Reuse enemy update or create new msg type
-			h.broadcast(msg)
-		}
+	}
+	projPayload := ProjectileUpdatePayload{Projectiles: projStates}
+	data, err = json.Marshal(projPayload)
+	if err != nil {
+		log.Printf("[Host] failed to marshal projectile update: %v", err)
+	} else {
+		msg := Message{Type: MsgProjectileUpdate, Payload: data}
+		h.broadcast(msg)
 	}
 }
 
 // broadcastCombatEvent broadcasts a combat event to all peers.
 func (h *Host) broadcastCombatEvent(eventType, entityID, entityType string, value float32, killerID string) {
 	payload := CombatEventPayload{
-		EventType: eventType,
-		EntityID:  entityID,
+		EventType:  eventType,
+		EntityID:   entityID,
 		EntityType: entityType,
-		Value:     value,
-		KillerID:  killerID,
+		Value:      value,
+		KillerID:   killerID,
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -591,8 +558,8 @@ func (h *Host) RespawnPlayer(playerID string) {
 	if p, ok := h.players[playerID]; ok && p.IsDead {
 		p.Health = 0.15 * p.MaxHealth // 15% health on respawn
 		p.IsDead = false
-		p.X = 100 // Respawn position
-		p.Y = 100
+		p.X = int(h.PlayerSpawn.X)
+		p.Y = int(h.PlayerSpawn.Y)
 		log.Printf("[Host] Player %s respawned with health %.0f", playerID, p.Health)
 	}
 	h.playersMutex.Unlock()

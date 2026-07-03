@@ -1,0 +1,10 @@
+R_DEF: Internal format may change without notice
+local
+drawable downloadimageh
+drawable downloadimagev
+drawable icon
+drawable splashscreen_landscape
+drawable splashscreen_portrait
+drawable vr_icon
+drawable vr_icon_background
+string app_name

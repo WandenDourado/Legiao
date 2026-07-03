@@ -9,6 +9,13 @@
 @REM The target architecture for android. See https://developer.android.com/ndk/guides/abis. 
 @REM Valid options are: armeabi-v7a,arm64-v8a,x86,x86_64 or "all" if you want to build for all architectures.
 @set TARGET_ARCH="all"
+@REM Copy game assets into the Android assets directory so they are bundled in the APK.
+@REM The sourceSets in android/build.gradle points assets.srcDirs = ['assets'].
+@xcopy /E /I /Y "..\..\..\assets" "android\assets" >nul 2>&1
+@if errorlevel 1 (
+    @echo WARNING: Failed to copy assets folder. Make sure ..\..\..\assets exists.
+)
+
 @REM Automatic setup. Should work by default. Do not change anything below here
 @set PATH=%ANDROID_NDK_HOME%\toolchains\llvm\prebuilt\windows-x86_64\bin;%PATH%
 @set ANDROID_SYSROOT=%ANDROID_NDK_HOME%\toolchains\llvm\prebuilt\windows-x86_64\sysroot

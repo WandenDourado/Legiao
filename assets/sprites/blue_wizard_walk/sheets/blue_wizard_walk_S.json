@@ -1,0 +1,18 @@
+{
+  "image": "blue_wizard_walk_S.png",
+  "frame_width": 165,
+  "frame_height": 246,
+  "origin": "foot-center",
+  "directions": [
+    "S"
+  ],
+  "animations": {
+    "walk": {
+      "frames_per_direction": 6,
+      "frame_time_seconds": 0.12,
+      "rows": {
+        "S": 0
+      }
+    }
+  }
+}

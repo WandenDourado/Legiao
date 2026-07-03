@@ -1,45 +1,70 @@
-# Configuração do Ambiente e Execução no Android
+# Android
 
-Este documento descreve como configurar o ambiente e compilar o projeto **Legião** para dispositivos Android.
+Use this doc for Android build, APK packaging, manifest, NDK, and APK asset access. For actual artifact builds, use the `legiao-android-build` skill.
 
-## Pré-requisitos
+## Prerequisites
 
-1.  **Go (Golang)**: Instalado e configurado no PATH.
-2.  **Android SDK**: Necessário para ferramentas de build.
-3.  **Android NDK**: Versão recomendada: `25.2.9519653`.
-    *   *Nota*: Versões muito recentes (como NDK 27) podem não ser compatíveis com o `raylib-go` no momento.
-4.  **C-Compiler para Android**: O script utiliza o `clang` contido no NDK.
+- Go in `PATH`.
+- `ANDROID_HOME` set to the Android SDK.
+- `ANDROID_NDK_HOME` set to the Android NDK used by the build scripts.
+- Gradle wrapper in `cmd/android/build/`.
 
-## Estrutura de Arquivos para Android
+## Build Commands
 
-*   `cmd/android/main.go`: Ponto de entrada otimizado para Android (usa `rl.SetMain`).
-*   `cmd/android/build/`: Pasta contendo o ambiente de compilação.
-    *   `android/AndroidManifest.xml`: Configurações do aplicativo (nome, permissões, orientação).
-    *   `androidcompile.bat`: Script de automação para compilação CGO cruzada.
+From `cmd/android/build/`:
 
-## Como Compilar
+```powershell
+.\androidcompile.bat
+.\gradlew.bat assembleDebug
+```
 
-1.  Abra o arquivo `cmd/android/build/androidcompile.bat`.
-2.  Ajuste as variáveis de ambiente no topo do arquivo para apontar para as suas pastas locais (especialmente `ANDROID_HOME` e `ANDROID_NDK_HOME`).
-3.  Abra um terminal na pasta `cmd/android/build/`.
-4.  Execute o script:
-    ```bash
-    ./androidcompile.bat
-    ```
-5.  O script gerará arquivos `.so` na pasta `android/libs/` para as arquiteturas selecionadas.
+Debug APK output:
 
-## Como Gerar o APK
+```text
+cmd/android/build/android/build/outputs/apk/debug/android-debug.apk
+```
 
-Após compilar as bibliotecas nativas, você pode usar o Gradle para gerar o APK:
-1.  Navegue até `cmd/android/build/`.
-2.  Execute:
-    ```bash
-    ./gradlew assembleDebug
-    ```
-3.  O APK será gerado em `cmd/android/build/android/build/outputs/apk/debug/`.
+Release bundle, when signing env vars are configured:
 
-## Observações Técnicas
+```powershell
+.\gradlew.bat bundleRelease
+```
 
-*   **Resolução**: No Android, o jogo inicia automaticamente em tela cheia usando `rl.InitWindow(0, 0, "Legião")`.
-*   **Controles**: O jogo utiliza um `VirtualJoystick` na tela para processar entradas de toque.
-*   **Compatibilidade**: O código principal reside em `internal/`, garantindo que a lógica seja a mesma para Windows e Android.
+## Runtime Assets
+
+All runtime files needed on Android must live under project-root `assets/`. The build script copies this tree into:
+
+```text
+cmd/android/build/android/assets/
+```
+
+Rules:
+
+- Use `assets.Path()` for every `rl.Load*` path.
+- Use `internal/tilemap/readFile()` wrappers for map/TSX data; Android uses `rl.OpenAsset()`.
+- Do not use `os.ReadFile` directly for runtime game data that must work inside the APK.
+- Maps used at runtime should be loaded from `assets/maps/...`.
+- Tileset references inside maps should stay relative within the `assets/` tree, for example `../tilesets/title_set.tsx`.
+
+## Manifest And Network
+
+The Android manifest must include local-network permissions used by multiplayer discovery/connect:
+
+```xml
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+<uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+<uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+```
+
+The app is Go/raylib driven and should not require custom Java application code for discovery.
+
+## Install And Logs
+
+```powershell
+adb install android/build/outputs/apk/debug/android-debug.apk
+adb logcat | findstr Legiao
+```
+
+If the app exits on launch, first check asset paths and Android asset reading. Most launch failures after map changes come from missing APK assets or direct filesystem reads.

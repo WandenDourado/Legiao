@@ -89,7 +89,7 @@ func NewAttackButton() *AttackButton {
 	return &AttackButton{
 		Position: rl.NewVector2(float32(entity.ScreenWidth)-100, float32(entity.ScreenHeight)-100),
 		Radius:   35.0,
-		Color:     rl.Fade(rl.Red, 0.7),
+		Color:    rl.Fade(rl.Red, 0.7),
 	}
 }
 
@@ -131,13 +131,20 @@ func (ab *AttackButton) Draw() {
 }
 
 // DrawHealthBar draws the player's health bar in the top-left corner.
+// All dimensions are derived from the current screen size so the bar
+// scales correctly on any resolution (fullscreen, windowed, etc.).
 func DrawHealthBar(health, maxHealth float32) {
-	barWidth := float32(200.0)
-	barHeight := float32(20.0)
-	x := float32(10.0)
-	y := float32(10.0)
+	sw := float32(rl.GetScreenWidth())
+	barWidth := sw * 0.20
+	barHeight := float32(20)
+	x := float32(10)
+	y := float32(60)
+	fontSize := int32(sw * 0.015)
+	if fontSize < 14 {
+		fontSize = 14
+	}
 
-	// Background (dark red)
+	// Background
 	rl.DrawRectangle(int32(x), int32(y), int32(barWidth), int32(barHeight), rl.Fade(rl.DarkGray, 0.8))
 
 	// Health fill (green to red gradient based on health percentage)
@@ -160,5 +167,5 @@ func DrawHealthBar(health, maxHealth float32) {
 
 	// Text
 	healthText := fmt.Sprintf("%.0f/%.0f", health, maxHealth)
-	rl.DrawText(healthText, int32(x)+int32(barWidth)+10, int32(y), 20, rl.White)
+	rl.DrawText(healthText, int32(x)+int32(barWidth)+10, int32(y), fontSize, rl.White)
 }
