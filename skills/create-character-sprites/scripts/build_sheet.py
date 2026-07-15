@@ -28,7 +28,7 @@ def main() -> int:
     parser.add_argument("--input-root", required=True, help="Folder containing direction subfolders.")
     parser.add_argument("--output", required=True, help="Output sprite sheet PNG.")
     parser.add_argument("--metadata-output", required=True, help="Output metadata JSON.")
-    parser.add_argument("--directions", default="S,N,E,W,SE,SW,NE,NW")
+    parser.add_argument("--directions", default="S,SW,W,N,NW")
     parser.add_argument("--animation", default="walk")
     parser.add_argument("--frame-width", type=int, required=True)
     parser.add_argument("--frame-height", type=int, required=True)

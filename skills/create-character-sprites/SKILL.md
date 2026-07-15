@@ -1,45 +1,62 @@
 ---
 name: create-character-sprites
-description: Create and validate 2D character sprites from reference images for isometric/top-down RPGs. Use when the user provides a character reference or concept and asks for directional sprites, animation frames, walk/idle/combat sprite sheets, RPG character model sheets, frame validation, transparent PNG exports, or metadata for game integration.
+description: Create and validate reference-driven 2D RPG character sprites. Use when asked for directional walk, idle, combat, or model-sheet sprites; to turn AI grids into transparent animation frames; or to preflight, review, assemble, and install a game-ready sprite sheet.
 ---
 
 # Create Character Sprites
 
-## Overview
+Generate and accept one animation direction at a time. Preserve the supplied character's identity; describe observable visual traits instead of copying a named game's exact style.
 
-Use this skill to turn a character reference into consistent directional sprite frames and sprite sheets. Favor an iterative workflow: define the character once, generate one direction at a time, validate, then assemble the final sheet and metadata.
+## Export Contract
 
-## Defaults
-
-- Target style: readable isometric/three-quarter fantasy RPG character art, with compact proportions and clear feet placement. Use the user's references for mood and angle, but do not copy a named game's exact style.
-- Recommended production sizes: start with `128x192` px for painterly high-readability characters, or `96x128` px for lighter/mobile-friendly characters. Use `64x96` only for simplified sprites. Keep the sheet internally consistent even if the engine later scales it.
-- Recommended animation counts: `6` frames for walk/run, `4` frames for idle, `6-8` frames for attack/cast, and `4-6` frames for hit/death placeholders. Prefer fewer clean frames over many inconsistent frames.
-- Output defaults: transparent PNG, origin at foot-center, one row per direction, one frame size for the full character set.
-- Legiao compatibility note: the current wizard asset/code uses `165x246`, `6` walk frames, 5 rows (`N`, `S`, `W`, `SW`, `NW`) and mirrors `E`, `SE`, `NE` from `W`, `SW`, `NW` respectively. Treat this as legacy compatibility, not the project standard.
-- Preferred full direction order: `S`, `N`, `E`, `W`, `SE`, `SW`, `NE`, `NW`.
-- Direction aliases: accept Portuguese aliases (`L` = `E`, `O` = `W`, `SO` = `SW`, `NO` = `NW`) but export canonical `N/S/E/W/NE/SE/SW/NW`.
+- Ship lossless RGBA PNGs with one frame size, stable foot anchor, and no visible magenta. Magenta is generation matte only.
+- Default to eight `128x192` walk/run frames. Generate each source cell at least 2x target size, then downsample once.
+- Keep asymmetric props on the same body side. Do not mirror a source direction until that remains true.
+- For Legiao's wizard, export `S,SW,W,N,NW`, eight frames per row, at `128x192`. The renderer mirrors `W/SW/NW` for `E/SE/NE` and loads `assets/sprites/wizard/wizard.png`.
+- Metadata does not configure the current renderer. Run preflight before generation and do not install until staging validation passes.
 
 ## Workflow
 
-1. Gather inputs: reference image, target frame size, frame count, animation names, output folder, and whether asymmetrical details must stay on the same body side.
-2. If details are missing, use market-oriented production defaults above and state the assumptions.
-3. Create a concise character bible before generating frames. Include silhouette, clothing, palette, props, face/hair, asymmetric details, scale, and forbidden drift.
-4. Generate a small model sheet first when the reference only shows one angle: `S`, `N`, `E`, and one diagonal. Validate it before animation frames.
-5. Generate only one final animation direction per image request. Do not ask an image model for a final 8-direction sheet in one pass unless the user explicitly wants a rough concept sheet.
-6. Validate each direction before moving to the next one. Read `references/validation-checklist.md` before accepting frames.
-7. Assemble the final sheet with `scripts/build_sheet.py` and validate it with `scripts/validate_frames.py`.
-8. Deliver the sprite sheet, metadata, assumptions, and any directions that still need manual review.
+1. Read `references/character_creation_guide.md`; write a concise bible (silhouette, palette, props, body-side asymmetries, forbidden drift). Approve a five-view model sheet before animation when only one view exists.
+2. Verify the active renderer contract:
 
-## References
+```powershell
+python skills/create-character-sprites/scripts/preflight_renderer.py --asset assets/sprites/wizard/wizard.png --frame-width 128 --frame-height 192 --columns 8 --directions S,SW,W,N,NW
+```
 
-- Read `references/art-direction.md` when adapting a visual reference into a character bible or writing image-generation prompts.
-- Read `references/generation-workflow.md` when planning a full sprite production run.
-- Read `references/validation-checklist.md` before approving any direction or final sheet.
-- Read `references/metadata-format.md` when exporting or explaining animation metadata.
+3. Generate one direction as an unguttered 2 rows x 4 columns grid at `1024x768` or larger for the default export. Follow the guide's eight-pose plan; do not request a multi-direction final sheet.
+4. Slice every approved grid into staging frames, then normalize only small anchor drift. If normalization rejects a direction, regenerate it; never force clipping or compensate by scaling.
 
-## Scripts
+```powershell
+python skills/create-character-sprites/scripts/slice_and_stitch.py work/raw/S.png --direction S --output-root work/sliced --frame-width 128 --frame-height 192 --minimum-source-scale 2
+python skills/create-character-sprites/scripts/normalize_frames.py --input-root work/sliced --output-root work/frames --directions S,SW,W,N,NW --frame-width 128 --frame-height 192 --max-shift 4
+```
 
-- `scripts/validate_frames.py`: validate PNG dimensions, frame grid dimensions, transparency mode when Pillow is available, and basic file consistency.
-- `scripts/build_sheet.py`: assemble direction folders into a single PNG sheet and JSON metadata.
+5. Validate and review each direction before proceeding. Replace `S` below for every direction; use the GIF for motion and the contact sheet to inspect the red baseline.
 
-If Pillow is missing, install it in the active environment before using `build_sheet.py`. `validate_frames.py` can still read PNG dimensions without Pillow, but alpha/transparency checks are limited.
+```powershell
+python skills/create-character-sprites/scripts/validate_frames.py work/frames/S/*.png --frame-width 128 --frame-height 192 --require-alpha --require-transparent --reject-magenta --check-baseline --baseline-tolerance 2
+python skills/create-character-sprites/scripts/review_animation.py work/frames/S --gif work/review/S.gif --contact-sheet work/review/S.png --report work/review/S.json --frame-width 128 --frame-height 192
+```
+
+6. Assemble and validate staging. Copy only a passing export to the path verified in step 2:
+
+```powershell
+python skills/create-character-sprites/scripts/build_sheet.py --input-root work/frames --output work/wizard.png --metadata-output work/wizard.json --frame-width 128 --frame-height 192 --frames-per-direction 8 --directions S,SW,W,N,NW
+python skills/create-character-sprites/scripts/validate_frames.py work/wizard.png --sheet --columns 8 --rows 5 --frame-width 128 --frame-height 192 --require-alpha --require-transparent --reject-magenta
+Copy-Item work/wizard.png assets/sprites/wizard/wizard.png
+Copy-Item work/wizard.json assets/sprites/wizard/wizard.json
+```
+
+7. Deliver the sheet, metadata, bible, and per-direction review reports. Record an accepted/rejected decision and reason for every direction.
+
+## Tools
+
+- `preflight_renderer.py`: compare the requested export with the live Legiao renderer constants and asset path.
+- `slice_and_stitch.py`: split a 2x4 grid, key and despill magenta, and downsample production frames once.
+- `normalize_frames.py`: correct small foot-anchor drift without clipping or resizing frames.
+- `validate_frames.py`: validate geometry, alpha, matte leakage, and body baseline.
+- `review_animation.py`: create a looped GIF, a baseline contact sheet, and an audit report.
+- `build_sheet.py`: assemble direction folders and metadata.
+
+Install Pillow in the active environment before using the image scripts.
