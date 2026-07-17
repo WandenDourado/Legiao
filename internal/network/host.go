@@ -42,7 +42,7 @@ type ClientConn struct {
 
 // StartHost starts a TCP server listening on the given port.
 // playerID and color are used to register the host as a player in the authoritative state.
-func StartHost(port int, playerID string, color string, playerSpawn rl.Vector2) (*Host, error) {
+func StartHost(port int, playerID string, color string, charType string, playerSpawn rl.Vector2) (*Host, error) {
 	addr := fmt.Sprintf("0.0.0.0:%d", port)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -61,6 +61,7 @@ func StartHost(port int, playerID string, color string, playerSpawn rl.Vector2) 
 		X:         int(h.PlayerSpawn.X),
 		Y:         int(h.PlayerSpawn.Y),
 		Color:     color,
+		Character: charType,
 		Health:    100,
 		MaxHealth: 100,
 		IsDead:    false,
@@ -130,6 +131,7 @@ func (h *Host) handleClient(c *ClientConn) {
 				X:         int(h.PlayerSpawn.X),
 				Y:         int(h.PlayerSpawn.Y),
 				Color:     join.Color,
+				Character: join.Character,
 				Health:    100,
 				MaxHealth: 100,
 				IsDead:    false,

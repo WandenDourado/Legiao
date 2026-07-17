@@ -47,6 +47,12 @@ Use for reference-driven character sprite work:
 
 Generate and validate one direction at a time. Do not use for Android artifact generation unless the task also asks to bundle or build Android outputs.
 
+### install-character-sprites
+
+Skill file: `skills/install-character-sprites/SKILL.md`
+
+Use to add a validated output from `create-character-sprites` to Legiao as a selectable playable character. It registers the asset, preserves the shared animation contract, and verifies desktop compilation.
+
 ### legiao-android-build
 
 Skill file: `skills/legiao-android-build/SKILL.md`

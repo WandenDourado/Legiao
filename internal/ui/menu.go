@@ -13,7 +13,7 @@ import (
 )
 
 // ShowMenu renders the start menu where the player can host or join a game.
-func ShowMenu(playerSpawn rl.Vector2) {
+func ShowMenu(playerSpawn rl.Vector2) entity.CharacterType {
 	selected := false
 	joinMode := false
 	manualMode := false
@@ -21,18 +21,20 @@ func ShowMenu(playerSpawn rl.Vector2) {
 	refreshTimer := 0
 	scanning := false
 
+	var chosenChar entity.CharacterType
+
 	for !selected && !rl.WindowShouldClose() {
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.RayWhite)
 
 		if joinMode {
 			if manualMode {
-				drawManualInput(&manualIP, &selected)
+				drawManualInput(&manualIP, &selected, &chosenChar)
 			} else {
-				drawDiscoveryView(&selected, &manualMode, &manualIP, &refreshTimer, &scanning)
+				drawDiscoveryView(&selected, &manualMode, &manualIP, &refreshTimer, &scanning, &chosenChar)
 			}
 		} else {
-			drawMainMenu(&selected, &joinMode, playerSpawn)
+			drawMainMenu(&selected, &joinMode, playerSpawn, &chosenChar)
 		}
 
 		rl.EndDrawing()
@@ -42,17 +44,20 @@ func ShowMenu(playerSpawn rl.Vector2) {
 	// Stop discovery when leaving menu
 	network.StopDiscovery()
 	fmt.Printf("[Menu] Exiting menu, role=%s\n", network.Role)
+	return chosenChar
 }
 
 // drawMainMenu draws the host/join selection screen
-func drawMainMenu(selected *bool, joinMode *bool, playerSpawn rl.Vector2) {
+func drawMainMenu(selected *bool, joinMode *bool, playerSpawn rl.Vector2, chosenChar *entity.CharacterType) {
 	hostRect := rl.NewRectangle(200, 150, 200, 50)
 	joinRect := rl.NewRectangle(200, 250, 200, 50)
 
 	if rl.IsMouseButtonPressed(rl.MouseLeftButton) {
 		mouse := rl.GetMousePosition()
 		if rl.CheckCollisionPointRec(mouse, hostRect) {
-			startHost(selected, playerSpawn)
+			charType := ShowCharacterSelect()
+			*chosenChar = charType
+			startHost(selected, playerSpawn, string(charType))
 		} else if rl.CheckCollisionPointRec(mouse, joinRect) {
 			*joinMode = true
 		}
@@ -65,7 +70,7 @@ func drawMainMenu(selected *bool, joinMode *bool, playerSpawn rl.Vector2) {
 }
 
 // drawDiscoveryView shows discovered hosts with options to scan/enter manually
-func drawDiscoveryView(selected *bool, manualMode *bool, manualIP *string, refreshTimer *int, scanning *bool) {
+func drawDiscoveryView(selected *bool, manualMode *bool, manualIP *string, refreshTimer *int, scanning *bool, chosenChar *entity.CharacterType) {
 	// Start TCP scan when entering discovery view (more reliable for Android/Desktop)
 	if !*scanning {
 		*scanning = true
@@ -120,7 +125,9 @@ func drawDiscoveryView(selected *bool, manualMode *bool, manualIP *string, refre
 		for i, host := range hosts {
 			hostRect := rl.NewRectangle(80, float32(140+i*40), 340, 30)
 			if rl.CheckCollisionPointRec(mouse, hostRect) {
-				connectToHost(host)
+				charType := ShowCharacterSelect()
+				*chosenChar = charType
+				connectToHost(host, string(charType))
 				*selected = true
 				break
 			}
@@ -143,7 +150,7 @@ func drawDiscoveryView(selected *bool, manualMode *bool, manualIP *string, refre
 }
 
 // drawManualInput shows manual IP input field
-func drawManualInput(manualIP *string, selected *bool) {
+func drawManualInput(manualIP *string, selected *bool, chosenChar *entity.CharacterType) {
 	rl.DrawText("Enter Host IP Address:", 80, 80, 20, rl.Black)
 	rl.DrawText("Port 9000 will be used automatically", 80, 105, 16, rl.DarkGray)
 
@@ -188,7 +195,9 @@ func drawManualInput(manualIP *string, selected *bool) {
 			if ip == "" {
 				ip = "127.0.0.1"
 			}
-			connectToHost(ip + ":9000")
+			charType := ShowCharacterSelect()
+			*chosenChar = charType
+			connectToHost(ip + ":9000", string(charType))
 			*selected = true
 		} else if rl.CheckCollisionPointRec(mouse, backRect) {
 			*manualIP = ""
@@ -197,7 +206,7 @@ func drawManualInput(manualIP *string, selected *bool) {
 }
 
 // startHost initializes the host
-func startHost(selected *bool, playerSpawn rl.Vector2) {
+func startHost(selected *bool, playerSpawn rl.Vector2, charType string) {
 	log.Println("[Menu] Host selected")
 	network.Role = "host"
 	network.LocalPlayerID = generatePlayerID()
@@ -205,13 +214,14 @@ func startHost(selected *bool, playerSpawn rl.Vector2) {
 	log.Printf("[Menu] Host ID: %s, Color: %s", network.LocalPlayerID, color)
 
 	network.UpdatePlayerState(network.PlayerState{
-		PlayerID: network.LocalPlayerID,
-		X:        int(playerSpawn.X),
-		Y:        int(playerSpawn.Y),
-		Color:    color,
+		PlayerID:  network.LocalPlayerID,
+		X:         int(playerSpawn.X),
+		Y:         int(playerSpawn.Y),
+		Color:     color,
+		Character: charType,
 	})
 
-	h, err := network.StartHost(9000, network.LocalPlayerID, color, playerSpawn)
+	h, err := network.StartHost(9000, network.LocalPlayerID, color, charType, playerSpawn)
 	if err != nil {
 		log.Fatalf("Failed to start host: %v", err)
 	}
@@ -231,7 +241,7 @@ func startHost(selected *bool, playerSpawn rl.Vector2) {
 	*selected = true
 }
 
-func connectToHost(addr string) {
+func connectToHost(addr string, charType string) {
 	network.Role = "client"
 	playerID := generatePlayerID()
 	network.LocalPlayerID = playerID
@@ -247,8 +257,9 @@ func connectToHost(addr string) {
 		joinMsg := network.Message{
 			Type: network.MsgJoin,
 			Payload: network.MustMarshal(network.JoinPayload{
-				PlayerID: playerID,
-				Color:    color,
+				PlayerID:  playerID,
+				Color:     color,
+				Character: charType,
 			}),
 		}
 		network.SendMessage(joinMsg)

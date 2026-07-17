@@ -28,7 +28,7 @@
 |---|---|
 | `assets/maps/` | Runtime maps bundled into Android APK. |
 | `assets/tilesets/` | Tileset image and TSX files. |
-| `assets/sprites/` | Sprite sheets, including the wizard player. |
+| `assets/sprites/` | Sprite sheets and per-character `reference.png` files used by character selection. |
 | `maps/` | Source copies of maps; runtime should prefer `assets/maps/`. |
 
 ## Android Build Tree
@@ -47,6 +47,7 @@
 |---|---|
 | `skills/legiao-android-build/` | Android APK/AAB build workflow for agents. |
 | `skills/create-character-sprites/` | Directional character sprite generation, validation, sheet assembly, and metadata workflow for agents. |
+| `skills/install-character-sprites/` | Registers validated character sprite output as a selectable Legiao character. |
 | `mcp/legiao-android-build/` | MCP compatibility notes for the Android build skill. |
 
 ## Where To Add Code

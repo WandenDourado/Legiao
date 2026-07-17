@@ -36,6 +36,8 @@ const (
 
 // Player represents the player character.
 type Player struct {
+	// CharType identifies which character this player is using.
+	CharType CharacterType
 	// Color is a hex string like "#FF0000" representing the player's unique color.
 	Color     string
 	Position  rl.Vector2
@@ -47,18 +49,19 @@ type Player struct {
 	IsDead    bool
 
 	// Sprite animation fields
-	WizardTexture rl.Texture2D
-	AnimTimer     float32
-	CurrentFrame  int
-	CurrentRow    int
-	LastRow       int
-	IsSprinting   bool
-	Initialized   bool
+	Texture     rl.Texture2D
+	AnimTimer   float32
+	CurrentFrame int
+	CurrentRow   int
+	LastRow      int
+	IsSprinting  bool
+	Initialized  bool
 }
 
-// NewPlayer creates a new player with default values.
-func NewPlayer(spawn rl.Vector2) *Player {
+// NewPlayer creates a new player with default values for the given character type.
+func NewPlayer(spawn rl.Vector2, charType CharacterType) *Player {
 	return &Player{
+		CharType:   charType,
 		Position:   spawn,
 		Velocity:   rl.NewVector2(0, 0),
 		Health:     100,

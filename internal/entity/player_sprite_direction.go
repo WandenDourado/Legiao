@@ -24,15 +24,15 @@ func walkRowForDirection(dir rl.Vector2) int {
 	return RowWalkDown
 }
 
-func validWalkFrame(frame int) int {
-	if frame < 0 || frame >= WizardColumns {
+func validWalkFrame(frame, columns int) int {
+	if frame < 0 || frame >= columns {
 		return 0
 	}
 	return frame
 }
 
-func validWalkRow(row int) int {
-	if row < 0 || row >= WizardRows {
+func validWalkRow(row, rows int) int {
+	if row < 0 || row >= rows {
 		return RowWalkDown
 	}
 	return row
@@ -48,3 +48,4 @@ func abs32(value float32) float32 {
 	}
 	return value
 }
+

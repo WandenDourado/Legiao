@@ -3,6 +3,7 @@ package game
 import (
 	"fmt"
 
+	"github.com/WandenDourado/Legiao/internal/assets"
 	"github.com/WandenDourado/Legiao/internal/entity"
 	"github.com/WandenDourado/Legiao/internal/input"
 	"github.com/WandenDourado/Legiao/internal/network"
@@ -12,6 +13,8 @@ import (
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
+
+var remoteTextures = make(map[entity.CharacterType]rl.Texture2D)
 
 // DrawFrame renders the entire frame in three depth passes:
 // bottom layers → entities (player, enemies) → top layers.
@@ -43,9 +46,23 @@ func DrawFrame(
 			if id == network.LocalPlayerID {
 				continue
 			}
-			entity.DrawWizardStateAt(
-				p.WizardTexture,
-				p.Initialized,
+
+			charType := entity.CharacterType(state.Character)
+			if charType == "" {
+				charType = entity.CharWizard
+			}
+			
+			tex, ok := remoteTextures[charType]
+			if !ok {
+				def := entity.GetCharacter(charType)
+				tex = rl.LoadTexture(assets.Path(def.SpritePath))
+				remoteTextures[charType] = tex
+			}
+
+			entity.DrawRemotePlayer(
+				tex,
+				true,
+				entity.GetCharacter(charType),
 				float32(state.X),
 				float32(state.Y),
 				state.CurrentFrame,

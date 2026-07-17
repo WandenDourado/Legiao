@@ -29,8 +29,9 @@ type Message struct {
 }
 
 type JoinPayload struct {
-	PlayerID string `json:"player_id"`
-	Color    string `json:"color"`
+	PlayerID  string `json:"player_id"`
+	Color     string `json:"color"`
+	Character string `json:"character"`
 }
 
 type InputPayload struct {
@@ -56,6 +57,7 @@ type PlayerState struct {
 	X         int     `json:"x"`
 	Y         int     `json:"y"`
 	Color     string  `json:"color"`
+	Character string  `json:"character"`
 	Health    float32 `json:"health,omitempty"`
 	MaxHealth float32 `json:"max_health,omitempty"`
 	IsDead    bool    `json:"is_dead,omitempty"`

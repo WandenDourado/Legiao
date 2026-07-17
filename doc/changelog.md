@@ -51,3 +51,6 @@
 2026-07-03 - Adjusted create-character-sprites skill and game codebase to support 5-row sprite sheets (adding NW diagonal walk direction).
 15/07/2026 - Hardened `create-character-sprites` into a compact, verifiable production pipeline: it now slices each 2x4 AI grid into RGBA direction frames with magenta-key removal, validates alpha/transparency/matte leakage, and documents the exact five-row wizard export contract. Files: skills/create-character-sprites/, doc/changelog.md.
 15/07/2026 - Added renderer preflight, despill/matte-range validation, bounded foot-anchor normalization, baseline checks, and GIF/contact-sheet animation review to `create-character-sprites`; the guide now includes an explicit eight-pose walk plan. Files: skills/create-character-sprites/, doc/changelog.md.
+- Added character selection screen in the menu and generalized sprite rendering logic to support multiple characters via a new CharacterDef registry.
+16/07/2026 - Made `create-character-sprites` character-agnostic and added `skills/install-character-sprites/` to validate, register, and expose generated sprite sheets in the existing Legiao character selection.
+16/07/2026 - Character selection now renders each character's saved creation reference from `assets/sprites/<character-id>/reference.png`, falling back to the south-facing sprite frame for legacy entries.

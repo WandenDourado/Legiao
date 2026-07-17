@@ -32,12 +32,12 @@ func Run(cfg Config) {
 
 	playerSpawn := entity.InitialPlayerSpawn(bounds)
 
-	ui.ShowMenu(playerSpawn)
+	charType := ui.ShowMenu(playerSpawn)
 	if network.CurrentHost != nil {
 		network.CurrentHost.EntityManager.WorldBounds = bounds
 	}
 
-	p := entity.NewPlayer(playerSpawn)
+	p := entity.NewPlayer(playerSpawn, charType)
 	p.InitSprite()
 	defer p.UnloadSprite()
 
@@ -70,6 +70,7 @@ func Run(cfg Config) {
 					X:            int(p.Position.X),
 					Y:            int(p.Position.Y),
 					Color:        p.Color,
+					Character:    string(p.CharType),
 					Health:       p.Health,
 					MaxHealth:    p.MaxHealth,
 					IsDead:       p.IsDead,
@@ -85,6 +86,7 @@ func Run(cfg Config) {
 						X:            int(p.Position.X),
 						Y:            int(p.Position.Y),
 						Color:        p.Color,
+						Character:    string(p.CharType),
 						Health:       p.Health,
 						MaxHealth:    p.MaxHealth,
 						IsDead:       p.IsDead,

@@ -5,16 +5,9 @@ import (
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
-// Wizard sprite sheet constants for skills/create-character-sprites output.
+// Row order shared by all characters generated via the create-character-sprites skill:
+// S, SW, W, N, NW. E, SE, and NE mirror W, SW, and NW.
 const (
-	WizardFrameWidth              = 128
-	WizardFrameHeight             = 192
-	WizardColumns                 = 8
-	WizardRows                    = 5
-	WizardFrameTime       float32 = 0.12
-	WizardSprintFrameTime float32 = 0.08
-
-	// Row order: S, SW, W, N, NW. E, SE, and NE mirror W, SW, and NW.
 	RowWalkDown     = 0
 	RowWalkDownLeft = 1
 	RowWalkLeft     = 2
@@ -22,22 +15,25 @@ const (
 	RowWalkUpLeft   = 4
 )
 
-// InitSprite loads the wizard texture for the player.
+// InitSprite loads the sprite texture for the player's character type.
 func (p *Player) InitSprite() {
-	p.WizardTexture = rl.LoadTexture(assets.Path("assets/sprites/wizard/wizard.png"))
+	def := GetCharacter(p.CharType)
+	p.Texture = rl.LoadTexture(assets.Path(def.SpritePath))
 	p.Initialized = true
 }
 
-// UnloadSprite unloads the wizard texture.
+// UnloadSprite unloads the player's character texture.
 func (p *Player) UnloadSprite() {
 	if p.Initialized {
-		rl.UnloadTexture(p.WizardTexture)
+		rl.UnloadTexture(p.Texture)
 		p.Initialized = false
 	}
 }
 
 // updateAnimation determines the correct sprite row and advances the frame timer.
 func (p *Player) updateAnimation(dir rl.Vector2, dt float32) {
+	def := GetCharacter(p.CharType)
+
 	isMoving := dir.X != 0 || dir.Y != 0
 	if !isMoving {
 		p.CurrentFrame = 0
@@ -49,21 +45,21 @@ func (p *Player) updateAnimation(dir rl.Vector2, dt float32) {
 	p.CurrentRow = walkRowForDirection(dir)
 	p.LastRow = p.CurrentRow
 
-	frameTime := WizardFrameTime
+	frameTime := def.FrameTime
 	if p.IsSprinting {
-		frameTime = WizardSprintFrameTime
+		frameTime = def.SprintTime
 	}
 	p.AnimTimer += dt
 	if p.AnimTimer >= frameTime {
 		p.AnimTimer -= frameTime
 		p.CurrentFrame++
-		if p.CurrentFrame >= WizardColumns {
+		if p.CurrentFrame >= def.Columns {
 			p.CurrentFrame = 0
 		}
 	}
 }
 
-// Draw renders the player as an animated sprite from the wizard sprite sheet.
+// Draw renders the player as an animated sprite from its character sprite sheet.
 func (p *Player) Draw() {
 	if !p.Initialized {
 		col := hexToColor(p.Color)
@@ -71,8 +67,10 @@ func (p *Player) Draw() {
 		return
 	}
 
-	drawWizardSprite(
-		p.WizardTexture,
+	def := GetCharacter(p.CharType)
+	drawCharacterSprite(
+		p.Texture,
+		def,
 		p.Position.X,
 		p.Position.Y,
 		p.CurrentFrame,
@@ -87,25 +85,30 @@ func DrawPlayerAt(x, y float32, color string, radius float32) {
 	rl.DrawCircleV(rl.NewVector2(x, y), radius, col)
 }
 
-func drawWizardSprite(texture rl.Texture2D, x, y float32, frame, row int, velX float32) {
-	frame = validWalkFrame(frame)
-	row = validWalkRow(row)
+// drawCharacterSprite renders a single frame from a character sprite sheet.
+func drawCharacterSprite(texture rl.Texture2D, def CharacterDef, x, y float32, frame, row int, velX float32) {
+	frame = validWalkFrame(frame, def.Columns)
+	row = validWalkRow(row, def.Rows)
+
+	fw := float32(def.FrameWidth)
+	fh := float32(def.FrameHeight)
 
 	sourceRect := rl.NewRectangle(
-		float32(frame*WizardFrameWidth),
-		float32(row*WizardFrameHeight),
-		WizardFrameWidth,
-		WizardFrameHeight,
+		float32(frame)*fw,
+		float32(row)*fh,
+		fw,
+		fh,
 	)
 	if shouldMirrorWalkRow(row, velX) {
-		sourceRect.Width = -WizardFrameWidth
+		sourceRect.Width = -fw
 	}
 
 	destRect := rl.NewRectangle(
-		x-WizardFrameWidth/2,
-		y-WizardFrameHeight/2,
-		WizardFrameWidth,
-		WizardFrameHeight,
+		x-fw/2,
+		y-fh/2,
+		fw,
+		fh,
 	)
 	rl.DrawTexturePro(texture, sourceRect, destRect, rl.NewVector2(0, 0), 0, rl.White)
 }
+
