@@ -81,6 +81,7 @@ func DrawFrame(
 		// Draw enemies
 		if network.Role == "host" && network.CurrentHost != nil {
 			network.CurrentHost.EntityManager.DrawAll()
+			network.CurrentHost.EntityManager.DrawFire()
 		} else {
 			network.RemoteEnemiesMutex.Lock()
 			for _, e := range network.RemoteEnemies {
@@ -96,6 +97,10 @@ func DrawFrame(
 				}
 			}
 			network.RemoteProjectilesMutex.Unlock()
+
+			if network.ClientFireEM != nil {
+				network.ClientFireEM.DrawFire()
+			}
 		}
 	})
 
@@ -112,6 +117,7 @@ func DrawFrame(
 
 		input.DrawJoystickVisual(*ts, joystickCenterX, joystickCenterY, baseRadius, knobRadius)
 		input.DrawAimJoystick(*aj, attackCenterX, attackCenterY, attackRadius)
+		uiSkillButton.Draw()
 	}
 
 	if !network.LocalPlayerDead {

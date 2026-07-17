@@ -4,12 +4,11 @@
 from __future__ import annotations
 
 import argparse
-import statistics
 from pathlib import Path
 
 from PIL import Image
 
-from frame_analysis import body_anchor
+from frame_analysis import body_anchor, torso_center
 
 
 def read_frames(folder: Path, frame_width: int, frame_height: int, expected_count: int) -> list[Image.Image]:
@@ -42,27 +41,44 @@ def main() -> int:
     parser.add_argument("--frame-width", required=True, type=int)
     parser.add_argument("--frame-height", required=True, type=int)
     parser.add_argument("--frames-per-direction", type=int, default=8)
-    parser.add_argument("--max-shift", type=int, default=4)
+    parser.add_argument("--max-shift", type=int, default=24)
     parser.add_argument("--body-left", type=float, default=0.30)
     parser.add_argument("--body-right", type=float, default=0.70)
+    parser.add_argument("--torso-top", type=float, default=0.25)
+    parser.add_argument("--torso-bottom", type=float, default=0.65)
     parser.add_argument("--alpha-threshold", type=int, default=16)
+    parser.add_argument("--anchor-x", type=int, help="Fixed torso pivot in target-frame pixels. Defaults to frame center.")
+    parser.add_argument("--baseline", type=int, help="Fixed foot baseline in target-frame pixels. Defaults to frame height minus 6.")
     args = parser.parse_args()
 
     directions = [item.strip().upper() for item in args.directions.split(",") if item.strip()]
-    if not directions or args.max_shift < 0 or not 0 <= args.body_left < args.body_right <= 1:
-        raise SystemExit("Provide directions, a non-negative max shift, and valid body bounds.")
+    if (
+        not directions
+        or args.max_shift < 0
+        or not 0 <= args.body_left < args.body_right <= 1
+        or not 0 <= args.torso_top < args.torso_bottom <= 1
+    ):
+        raise SystemExit("Provide directions, a non-negative max shift, and valid body and torso bounds.")
+    target_x = args.anchor_x if args.anchor_x is not None else args.frame_width // 2
+    target_y = args.baseline if args.baseline is not None else args.frame_height - 6
+    if not 0 <= target_x < args.frame_width or not 0 <= target_y < args.frame_height:
+        raise SystemExit("Anchor x and baseline must fit inside the target frame.")
 
     all_frames: dict[str, list[Image.Image]] = {}
     all_anchors: dict[str, list[tuple[float, int]]] = {}
     for direction in directions:
         frames = read_frames(args.input_root / direction, args.frame_width, args.frame_height, args.frames_per_direction)
         all_frames[direction] = frames
-        all_anchors[direction] = [body_anchor(frame, args.body_left, args.body_right, args.alpha_threshold) for frame in frames]
+        all_anchors[direction] = [
+            (
+                torso_center(frame, args.torso_top, args.torso_bottom, args.alpha_threshold),
+                body_anchor(frame, args.body_left, args.body_right, args.alpha_threshold)[1],
+            )
+            for frame in frames
+        ]
 
     shifts: dict[str, list[tuple[int, int]]] = {}
     for direction, anchors in all_anchors.items():
-        target_x = round(statistics.median(anchor[0] for anchor in anchors))
-        target_y = round(statistics.median(anchor[1] for anchor in anchors))
         shifts[direction] = [(target_x - round(x), target_y - y) for x, y in anchors]
         if any(max(abs(dx), abs(dy)) > args.max_shift for dx, dy in shifts[direction]):
             raise SystemExit(f"{direction}: anchor drift exceeds {args.max_shift}px; regenerate instead of forcing alignment.")
@@ -74,7 +90,7 @@ def main() -> int:
         output.mkdir(parents=True, exist_ok=True)
         for index, (frame, (dx, dy)) in enumerate(zip(frames, shifts[direction], strict=True)):
             shifted(frame, dx, dy).save(output / f"{index:03d}.png")
-        print(f"OK: {direction} anchors normalized with shifts {shifts[direction]}")
+        print(f"OK: {direction} anchors normalized to ({target_x}, {target_y}) with shifts {shifts[direction]}")
     return 0
 
 

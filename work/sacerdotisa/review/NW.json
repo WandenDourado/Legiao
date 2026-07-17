@@ -1,0 +1,48 @@
+{
+  "frames": [
+    "000.png",
+    "001.png",
+    "002.png",
+    "003.png",
+    "004.png",
+    "005.png",
+    "006.png",
+    "007.png"
+  ],
+  "anchors": [
+    {
+      "x": 64.0,
+      "baseline": 191
+    },
+    {
+      "x": 64.0,
+      "baseline": 191
+    },
+    {
+      "x": 63.0,
+      "baseline": 191
+    },
+    {
+      "x": 63.0,
+      "baseline": 191
+    },
+    {
+      "x": 63.0,
+      "baseline": 191
+    },
+    {
+      "x": 63.5,
+      "baseline": 191
+    },
+    {
+      "x": 63.5,
+      "baseline": 191
+    },
+    {
+      "x": 63.0,
+      "baseline": 191
+    }
+  ],
+  "baseline_spread": 0,
+  "baseline_reference": 191
+}

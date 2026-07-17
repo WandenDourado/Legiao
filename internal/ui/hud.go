@@ -130,6 +130,61 @@ func (ab *AttackButton) Draw() {
 		14, rl.White)
 }
 
+// SkillButton represents the on-screen "fireball" skill button (Android).
+// It is positioned above the attack button, sharing its visual/hit-test style.
+type SkillButton struct {
+	Position  rl.Vector2
+	Radius    float32
+	IsPressed bool
+	Color     rl.Color
+}
+
+// NewSkillButton places a fireball button directly above the attack button,
+// using the same screen-space layout as renderer.go for Android controls.
+func NewSkillButton() *SkillButton {
+	sw := float32(rl.GetScreenWidth())
+	sh := float32(rl.GetScreenHeight())
+	attackX := sw * 0.85
+	attackY := sh * 0.80
+	attackR := sh * 0.06
+	return &SkillButton{
+		Position: rl.NewVector2(attackX, attackY-2*attackR-25),
+		Radius:   attackR,
+		Color:    rl.Fade(rl.Orange, 0.7),
+	}
+}
+
+// Update returns true when the skill button is just pressed.
+func (sb *SkillButton) Update() bool {
+	mousePos := rl.GetMousePosition()
+	if rl.IsMouseButtonPressed(rl.MouseLeftButton) {
+		if rl.CheckCollisionPointCircle(mousePos, sb.Position, sb.Radius) {
+			sb.IsPressed = true
+			return true
+		}
+	}
+	if rl.IsMouseButtonReleased(rl.MouseLeftButton) {
+		sb.IsPressed = false
+	}
+	return false
+}
+
+// Draw renders the skill button with a "Q" label.
+func (sb *SkillButton) Draw() {
+	color := sb.Color
+	if sb.IsPressed {
+		color = rl.Fade(rl.Orange, 0.9)
+	}
+	rl.DrawCircleV(sb.Position, sb.Radius, color)
+	rl.DrawCircleLinesV(sb.Position, sb.Radius, rl.White)
+	text := "Q"
+	textWidth := rl.MeasureText(text, 16)
+	rl.DrawText(text,
+		int32(sb.Position.X)-textWidth/2,
+		int32(sb.Position.Y)-8,
+		16, rl.White)
+}
+
 // DrawHealthBar draws the player's health bar in the top-left corner.
 // All dimensions are derived from the current screen size so the bar
 // scales correctly on any resolution (fullscreen, windowed, etc.).

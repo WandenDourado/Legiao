@@ -5,59 +5,48 @@ description: Create and validate reference-driven 2D RPG character sprites. Use 
 
 # Create Character Sprites
 
-Generate and accept one animation direction at a time. Preserve the supplied character's identity; describe observable visual traits instead of copying a named game's exact style. Do not include any visual effects (VFX) in the sprites (e.g., fire on a staff, glowing hands, mystical auras); generate only the physical character and their props.
+Generate and validate each animation direction in isolation. Preserve the supplied character's identity; describe observable visual traits instead of copying a named game's exact style. Do not include any visual effects (VFX) in the sprites (e.g., fire on a staff, glowing hands, mystical auras); generate only the physical character and their props.
 
 ## Export Contract
 
-- Ship lossless RGBA PNGs with one frame size, stable foot anchor, and no visible magenta. Magenta is generation matte only.
-- Default to eight `128x192` walk/run frames. Generate each source cell at least 2x target size, then downsample once.
-- Keep asymmetric props on the same body side. Do not mirror a source direction until that remains true.
-- For the current Legiao character renderer, export `S,SW,W,N,NW`, eight frames per row, at `128x192`. The renderer mirrors `W/SW/NW` for `E/SE/NE`; choose an identifier and stage the sheet at `assets/sprites/<character-id>/<character-id>.png`.
-- The current renderer reads character definitions from `internal/entity/character.go`; metadata alone does not configure it. Run preflight against the target character definition before generation. For a new character, use `$install-character-sprites` after staging validation to register it.
+- Ship lossless RGBA PNGs with no visible magenta, a fully transparent one-pixel outer border, and one `128x192` frame size. Magenta is generation matte only.
+- Use eight walk frames per direction. Generate each source cell at least 2x target size, key the matte before the single downsample, and target a visible silhouette height of `80%–92%` of the target frame (`84%` preferred for front/back views).
+- Use fixed source anchors: torso center `x=64`, foot baseline `y=186`. Normalization may recenter an intact frame by at most 24 px and may never clip or rescale art; a frame that cannot move within its transparent margin must be regenerated.
+- Characters must be **mirror-safe**. Make left/right clothing, weapons, hair accessories, and silhouettes visually symmetric in the approved model sheet; adapt a one-sided reference detail by duplicating, centering, or removing it. Never generate `E`, `SE`, or `NE` source rows.
+- The Legiao sheet is exactly `S,SW,W,N,NW`, eight frames per row. The renderer mirrors `W→E`, `SW→SE`, and `NW→NE`; metadata records those mappings, fixed anchor, and the alternating left/right contact plan.
 
 ## Workflow
 
-1. Read `references/character_creation_guide.md`; write a concise bible (silhouette, palette, props, body-side asymmetries, forbidden drift). Approve a five-view model sheet before animation when only one view exists.
-2. Choose a lowercase kebab-case `<character-id>` derived from the character, then verify the active renderer contract. For an existing character, use its registered identifier; for a new character, run this after `$install-character-sprites` has added its definition:
+1. Read `references/character_creation_guide.md`. Choose a lowercase kebab-case `<character-id>` and create a concise bible: silhouette, palette, symmetric props, target scale, fixed anchors, and forbidden drift. With one reference view, first approve a five-view model sheet.
+2. Freeze the approved bible/model sheet before animation. This gate is serial: a changed identity, asymmetric detail, or scale invalidates all direction work.
+3. Plan phases. After the model gate, use an orchestrator to spawn independent workers for `S`, `SW`, `W`, `N`, and `NW` when capacity and image-generation limits permit. A worker owns one direction and an isolated `work/<character-id>/attempts/<direction>/` directory; it may regenerate only its own direction. Parallelize generation, slicing, validation, and review across ready directions. Keep model approval, final selection, sheet assembly, and final validation serial. If the image service cannot run concurrently, serialize generation but parallelize the local processing stages.
+4. Each worker generates one unguttered 2x4 grid at `1024x768` or larger. Require transparent safe margin around the body, a fixed `x=64` torso pivot, `y=186` foot baseline, and `80%–92%` visible height after export (`84%` preferred for front/back). Follow the guide's eight-pose plan. Never request a multi-direction final sheet.
+5. Slice, normalize, validate, and review every candidate before accepting it. Regenerate a rejected direction; do not force large shifts, crop, scale, or substitute another direction.
 
 ```powershell
-python skills/create-character-sprites/scripts/preflight_renderer.py --character-id <character-id> --asset assets/sprites/<character-id>/<character-id>.png --frame-width 128 --frame-height 192 --columns 8 --directions S,SW,W,N,NW
+python skills/create-character-sprites/scripts/slice_and_stitch.py work/<character-id>/attempts/S/attempt-1/grid.png --direction S --output-root work/<character-id>/attempts/S/attempt-1/sliced --frame-width 128 --frame-height 192 --minimum-source-scale 2
+python skills/create-character-sprites/scripts/normalize_frames.py --input-root work/<character-id>/attempts/S/attempt-1/sliced --output-root work/<character-id>/attempts/S/attempt-1/frames --directions S --frame-width 128 --frame-height 192 --max-shift 24 --anchor-x 64 --baseline 186
+python skills/create-character-sprites/scripts/validate_frames.py work/<character-id>/attempts/S/attempt-1/frames/S/*.png --frame-width 128 --frame-height 192 --require-alpha --require-transparent --require-clear-border --reject-magenta --magenta-threshold 140 --check-baseline --baseline-tolerance 1 --expected-baseline 186 --check-center --center-tolerance 1 --expected-center 64 --min-foreground-height-ratio 0.80 --max-foreground-height-ratio 0.92
+python skills/create-character-sprites/scripts/review_animation.py work/<character-id>/attempts/S/attempt-1/frames/S --gif work/<character-id>/review/S.gif --contact-sheet work/<character-id>/review/S.png --report work/<character-id>/review/S.json --frame-width 128 --frame-height 192
 ```
 
-3. Generate one direction as an unguttered 2 rows x 4 columns grid at `1024x768` or larger for the default export. Follow the guide's eight-pose plan; do not request a multi-direction final sheet.
-4. Slice every approved grid into staging frames, then normalize only small anchor drift. If normalization rejects a direction, regenerate it; never force clipping or compensate by scaling.
+6. The orchestrator copies only accepted frame sets into `work/<character-id>/frames/`, then assembles and validates the single sheet. For a registered character, run renderer preflight; otherwise leave the passing package for `$install-character-sprites`.
 
 ```powershell
-python skills/create-character-sprites/scripts/slice_and_stitch.py work/raw/S.png --direction S --output-root work/sliced --frame-width 128 --frame-height 192 --minimum-source-scale 2
-python skills/create-character-sprites/scripts/normalize_frames.py --input-root work/sliced --output-root work/frames --directions S,SW,W,N,NW --frame-width 128 --frame-height 192 --max-shift 4
+python skills/create-character-sprites/scripts/build_sheet.py --input-root work/<character-id>/frames --output work/<character-id>/<character-id>.png --metadata-output work/<character-id>/<character-id>.json --frame-width 128 --frame-height 192 --frames-per-direction 8 --directions S,SW,W,N,NW --anchor-x 64 --baseline 186
+python skills/create-character-sprites/scripts/validate_frames.py work/<character-id>/<character-id>.png --sheet --columns 8 --rows 5 --frame-width 128 --frame-height 192 --require-alpha --require-transparent --reject-magenta --magenta-threshold 140
+python skills/create-character-sprites/scripts/preflight_renderer.py --character-id <character-id> --asset assets/sprites/<character-id>/<character-id>.png --metadata work/<character-id>/<character-id>.json --frame-width 128 --frame-height 192 --columns 8 --directions S,SW,W,N,NW
 ```
 
-5. Validate and review each direction before proceeding. Replace `S` below for every direction; use the GIF for motion and the contact sheet to inspect the red baseline.
-
-```powershell
-python skills/create-character-sprites/scripts/validate_frames.py work/frames/S/*.png --frame-width 128 --frame-height 192 --require-alpha --require-transparent --reject-magenta --check-baseline --baseline-tolerance 2
-python skills/create-character-sprites/scripts/review_animation.py work/frames/S --gif work/review/S.gif --contact-sheet work/review/S.png --report work/review/S.json --frame-width 128 --frame-height 192
-```
-
-6. Assemble and validate staging. For an existing registered character, copy only a passing export to the path verified in step 2. For a new character, leave the passing sheet, metadata, bible, and reports in the workspace for `$install-character-sprites` to register and copy:
-
-```powershell
-python skills/create-character-sprites/scripts/build_sheet.py --input-root work/frames --output work/<character-id>.png --metadata-output work/<character-id>.json --frame-width 128 --frame-height 192 --frames-per-direction 8 --directions S,SW,W,N,NW
-python skills/create-character-sprites/scripts/validate_frames.py work/<character-id>.png --sheet --columns 8 --rows 5 --frame-width 128 --frame-height 192 --require-alpha --require-transparent --reject-magenta
-# Existing registered character only:
-Copy-Item work/<character-id>.png assets/sprites/<character-id>/<character-id>.png
-Copy-Item work/<character-id>.json assets/sprites/<character-id>/<character-id>.json
-```
-
-7. Deliver the sheet, metadata, bible, approved source reference image, and per-direction review reports. Record an accepted/rejected decision and reason for every direction. `$install-character-sprites` copies the approved reference to `assets/sprites/<character-id>/reference.png` for the selection preview.
+7. Deliver the sheet, metadata, bible, approved source reference, model sheet, per-direction GIF/contact sheet/report, and an incremental attempt manifest. Record every accepted/rejected attempt with its reason and metrics. `$install-character-sprites` copies the approved reference to `assets/sprites/<character-id>/reference.png`.
 
 ## Tools
 
-- `preflight_renderer.py`: compare the requested export with the live Legiao renderer constants and asset path.
+- `preflight_renderer.py`: compare the requested export with the live Legiao renderer constants and asset path, then open the PNG and cross-check its alpha, dimensions, and metadata contract.
 - `slice_and_stitch.py`: split a 2x4 grid, key and despill magenta, and downsample production frames once.
-- `normalize_frames.py`: correct small foot-anchor drift without clipping or resizing frames.
-- `validate_frames.py`: validate geometry, alpha, matte leakage, and body baseline.
-- `review_animation.py`: create a looped GIF, a baseline contact sheet, and an audit report.
+- `normalize_frames.py`: correct small torso/foot-anchor drift to a fixed pivot without clipping or resizing frames.
+- `validate_frames.py`: validate geometry, alpha, matte leakage, transparent borders, silhouette scale, torso center, and foot baseline; require every frame to meet the specified anchor targets.
+- `review_animation.py`: create a looped GIF, a baseline/torso contact sheet, and an audit report.
 - `build_sheet.py`: assemble direction folders and metadata.
 
 Install Pillow in the active environment before using the image scripts.

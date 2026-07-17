@@ -12,8 +12,12 @@ import (
 type EntityManager struct {
 	Enemies      map[string]*Enemy
 	Projectiles  map[string]*Projectile
+	Fireballs    map[string]*Fireball
+	FireGrounds  []*FireGround
+	Explosions   []*Explosion
 	enemiesMutex sync.RWMutex
 	projMutex    sync.RWMutex
+	fireMutex    sync.RWMutex
 	WorldBounds  world.Bounds
 }
 
@@ -22,6 +26,7 @@ func NewEntityManager() *EntityManager {
 	return &EntityManager{
 		Enemies:     make(map[string]*Enemy),
 		Projectiles: make(map[string]*Projectile),
+		Fireballs:   make(map[string]*Fireball),
 	}
 }
 
@@ -170,6 +175,12 @@ func (em *EntityManager) Clear() {
 	em.projMutex.Lock()
 	em.Projectiles = make(map[string]*Projectile)
 	em.projMutex.Unlock()
+
+	em.fireMutex.Lock()
+	em.Fireballs = make(map[string]*Fireball)
+	em.FireGrounds = nil
+	em.Explosions = nil
+	em.fireMutex.Unlock()
 }
 
 // DetectProjectileCollision checks if a projectile hit an enemy.

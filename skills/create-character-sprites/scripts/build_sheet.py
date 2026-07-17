@@ -35,12 +35,21 @@ def main() -> int:
     parser.add_argument("--frames-per-direction", type=int, required=True)
     parser.add_argument("--frame-time", type=float, default=0.12)
     parser.add_argument("--origin", default="foot-center")
+    parser.add_argument("--anchor-x", type=int, help="Foot-center x coordinate in one frame. Defaults to frame center.")
+    parser.add_argument("--baseline", type=int, help="Foot baseline y coordinate in one frame. Defaults to frame height minus 6.")
     args = parser.parse_args()
 
     input_root = Path(args.input_root)
     directions = [item.strip().upper() for item in args.directions.split(",") if item.strip()]
     output = Path(args.output)
     metadata_output = Path(args.metadata_output)
+    required_directions = ["S", "SW", "W", "N", "NW"]
+    if directions != required_directions:
+        raise ValueError(f"directions must be {','.join(required_directions)} for the shared mirrored renderer")
+    anchor_x = args.anchor_x if args.anchor_x is not None else args.frame_width // 2
+    baseline = args.baseline if args.baseline is not None else args.frame_height - 6
+    if not 0 <= anchor_x < args.frame_width or not 0 <= baseline < args.frame_height:
+        raise ValueError("anchor x and baseline must fit inside one frame")
 
     sheet = Image.new(
         "RGBA",
@@ -69,7 +78,16 @@ def main() -> int:
         "frame_width": args.frame_width,
         "frame_height": args.frame_height,
         "origin": args.origin,
+        "anchor": {"x": anchor_x, "y": baseline},
         "directions": directions,
+        "mirror_safe": True,
+        "mirrored_directions": {"E": "W", "SE": "SW", "NE": "NW"},
+        "walk_cycle": {
+            "frame_0": "left-foot contact",
+            "frame_2": "right foot passes with left planted",
+            "frame_4": "right-foot contact",
+            "frame_6": "left foot passes with right planted",
+        },
         "animations": {
             args.animation: {
                 "frames_per_direction": args.frames_per_direction,

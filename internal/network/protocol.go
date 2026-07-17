@@ -18,6 +18,8 @@ const (
 	MsgEnemyUpdate      MessageType = "enemy_update"
 	MsgProjectileUpdate MessageType = "projectile_update"
 	MsgAttack           MessageType = "attack"
+	MsgSkill            MessageType = "skill"
+	MsgFireEvent        MessageType = "fire_event"
 	MsgCombatEvent      MessageType = "combat_event"
 	MsgGameOver         MessageType = "game_over"
 	MsgRespawn          MessageType = "respawn"
@@ -92,6 +94,7 @@ type ProjectileState struct {
 	X            int    `json:"x"`
 	Y            int    `json:"y"`
 	Active       bool   `json:"active"`
+	Kind         string `json:"kind,omitempty"` // "normal" or "fire"
 }
 
 // ProjectileUpdatePayload is broadcast by host to sync projectiles.
@@ -104,6 +107,22 @@ type AttackPayload struct {
 	PlayerID string `json:"player_id"`
 	TargetX  int    `json:"target_x"` // Direction of attack
 	TargetY  int    `json:"target_y"`
+}
+
+// SkillPayload is sent by client to activate a skill (e.g., fireball).
+type SkillPayload struct {
+	PlayerID string `json:"player_id"`
+	Skill    string `json:"skill"` // "fireball"
+	TargetX  int    `json:"target_x"`
+	TargetY  int    `json:"target_y"`
+}
+
+// FireEventPayload carries fireball visual events to clients (explosion/ground fire).
+type FireEventPayload struct {
+	EventType string  `json:"event_type"` // "fire_explosion"
+	X         int     `json:"x"`
+	Y         int     `json:"y"`
+	Radius    float32 `json:"radius"`
 }
 
 // CombatEventPayload is broadcast by host for combat events.

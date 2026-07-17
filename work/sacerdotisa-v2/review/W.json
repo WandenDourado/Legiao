@@ -1,0 +1,50 @@
+{
+  "frames": [
+    "000.png",
+    "001.png",
+    "002.png",
+    "003.png",
+    "004.png",
+    "005.png",
+    "006.png",
+    "007.png"
+  ],
+  "anchors": [
+    {
+      "torso_center_x": 65.0,
+      "baseline": 186
+    },
+    {
+      "torso_center_x": 65.0,
+      "baseline": 186
+    },
+    {
+      "torso_center_x": 64.0,
+      "baseline": 187
+    },
+    {
+      "torso_center_x": 64.0,
+      "baseline": 186
+    },
+    {
+      "torso_center_x": 65.0,
+      "baseline": 188
+    },
+    {
+      "torso_center_x": 65.0,
+      "baseline": 187
+    },
+    {
+      "torso_center_x": 65.0,
+      "baseline": 187
+    },
+    {
+      "torso_center_x": 64.0,
+      "baseline": 187
+    }
+  ],
+  "baseline_spread": 2,
+  "baseline_reference": 187,
+  "torso_center_spread": 1.0,
+  "torso_center_reference": 65
+}

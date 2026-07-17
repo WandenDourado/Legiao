@@ -1,0 +1,55 @@
+{
+  "frames": [
+    "000.png",
+    "001.png",
+    "002.png",
+    "003.png",
+    "004.png",
+    "005.png",
+    "006.png",
+    "007.png"
+  ],
+  "anchors": [
+    {
+      "torso_center_x": 64.0,
+      "baseline": 186
+    },
+    {
+      "torso_center_x": 65.0,
+      "baseline": 186
+    },
+    {
+      "torso_center_x": 64.0,
+      "baseline": 186
+    },
+    {
+      "torso_center_x": 65.0,
+      "baseline": 186
+    },
+    {
+      "torso_center_x": 64.0,
+      "baseline": 186
+    },
+    {
+      "torso_center_x": 64.0,
+      "baseline": 186
+    },
+    {
+      "torso_center_x": 64.0,
+      "baseline": 186
+    },
+    {
+      "torso_center_x": 63.0,
+      "baseline": 186
+    }
+  ],
+  "baseline_spread": 0,
+  "baseline_reference": 186,
+  "torso_center_spread": 2.0,
+  "torso_center_reference": 64,
+  "gait_review": {
+    "frame_000_contact_a": "Accepted: the forward white boot is visibly on the screen-right side of the cell, with the opposite boot behind on the left.",
+    "frame_004_contact_b": "Accepted: the forward white boot is visibly on the screen-left side of the cell, with the opposite boot behind on the right.",
+    "comparison": "Accepted: frame 000 and frame 004 visibly reverse the leading foot; frames 3 and 7 retain the opposite planted support in the contact sheet."
+  }
+}

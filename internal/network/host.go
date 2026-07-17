@@ -29,6 +29,8 @@ type Host struct {
 	// World bounds for spawn positions and projectile validation
 	WorldBounds world.Bounds
 	PlayerSpawn rl.Vector2
+	// Collision rectangles (walls/obstacles) for skill projectile checks.
+	collisionRects []rl.Rectangle
 }
 
 type ClientConn struct {
@@ -183,6 +185,16 @@ func (h *Host) handleClient(c *ClientConn) {
 			}
 			h.playersMutex.Unlock()
 
+		case MsgSkill:
+			var skill SkillPayload
+			if err := json.Unmarshal(msg.Payload, &skill); err != nil {
+				log.Printf("failed to unmarshal skill payload: %v", err)
+				continue
+			}
+			if skill.Skill == "fireball" {
+				h.HandleSkill(skill.PlayerID, skill.TargetX, skill.TargetY)
+			}
+
 		default:
 			log.Printf("[Host] Unknown message type: %s", msg.Type)
 		}
@@ -207,6 +219,10 @@ func (h *Host) UpdateSimulation(dt float32) {
 
 	// Check projectile-enemy collisions
 	h.checkProjectileCollisions()
+
+	// Advance fireball skill effects (projectiles, explosions, ground fire).
+	h.EntityManager.UpdateFire(dt)
+	h.handleFireballTick(dt)
 
 	// Check enemy-player collisions (only for enemies that attacked this frame)
 	h.checkEnemyPlayerCollisions(attackedEnemies)

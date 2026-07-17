@@ -35,6 +35,7 @@ func Run(cfg Config) {
 	charType := ui.ShowMenu(playerSpawn)
 	if network.CurrentHost != nil {
 		network.CurrentHost.EntityManager.WorldBounds = bounds
+		network.CurrentHost.SetCollisionRects(collisionRects)
 	}
 
 	p := entity.NewPlayer(playerSpawn, charType)
@@ -128,6 +129,11 @@ func Run(cfg Config) {
 		// Host simulation
 		if network.Role == "host" && network.CurrentHost != nil {
 			network.CurrentHost.UpdateSimulation(dt)
+		}
+
+		// Animate client-side fire effects (explosions, ground fire).
+		if network.Role == "client" && network.ClientFireEM != nil {
+			network.ClientFireEM.UpdateFire(dt)
 		}
 
 		// Update camera

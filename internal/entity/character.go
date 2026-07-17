@@ -6,6 +6,8 @@ type CharacterType string
 const (
 	// CharWizard is the default wizard character.
 	CharWizard CharacterType = "wizard"
+	// CharSacerdotisa is the priestess character.
+	CharSacerdotisa CharacterType = "sacerdotisa"
 )
 
 // CharacterDef describes the visual properties of a playable character.
@@ -18,6 +20,7 @@ type CharacterDef struct {
 	FrameHeight        int     // Height in pixels of a single frame.
 	Columns            int     // Number of columns in the sprite sheet.
 	Rows               int     // Number of rows in the sprite sheet.
+	RenderScale        float32 // Visual scale applied without changing world collision size.
 	FrameTime          float32 // Seconds per frame during normal walk.
 	SprintTime         float32 // Seconds per frame during sprint.
 }
@@ -38,6 +41,20 @@ func init() {
 		FrameHeight:        192,
 		Columns:            8,
 		Rows:               5,
+		RenderScale:        1.0,
+		FrameTime:          0.12,
+		SprintTime:         0.08,
+	})
+	RegisterCharacter(CharacterDef{
+		Type:               CharSacerdotisa,
+		Name:               "Sacerdotisa",
+		SpritePath:         "assets/sprites/sacerdotisa/sacerdotisa.png",
+		ReferenceImagePath: "assets/sprites/sacerdotisa/reference.png",
+		FrameWidth:         128,
+		FrameHeight:        192,
+		Columns:            8,
+		Rows:               5,
+		RenderScale:        1.15,
 		FrameTime:          0.12,
 		SprintTime:         0.08,
 	})

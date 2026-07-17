@@ -45,7 +45,7 @@ Use for reference-driven character sprite work:
 - Creating character bibles, model sheets, directional animation frames, sprite sheets, and metadata.
 - Validating RPG/isometric/top-down character sprite frames before game integration.
 
-Generate and validate one direction at a time. Do not use for Android artifact generation unless the task also asks to bundle or build Android outputs.
+Approve the model sheet serially, then let isolated directional workers generate and validate canonical directions in parallel when capacity permits; assemble only after every direction passes. Do not use for Android artifact generation unless the task also asks to bundle or build Android outputs.
 
 ### install-character-sprites
 

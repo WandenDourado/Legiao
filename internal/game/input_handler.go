@@ -4,9 +4,13 @@ import (
 	"github.com/WandenDourado/Legiao/internal/entity"
 	"github.com/WandenDourado/Legiao/internal/input"
 	"github.com/WandenDourado/Legiao/internal/network"
+	"github.com/WandenDourado/Legiao/internal/ui"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
+
+// uiSkillButton is the on-screen fireball button used on Android.
+var uiSkillButton = ui.NewSkillButton()
 
 // ProcessInput handles all input for one frame and returns the movement direction vector.
 // On Android this reads the touch joystick, aim joystick, and handles sprint detection.
@@ -65,6 +69,17 @@ func ProcessInput(cfg Config, p *entity.Player, ts *input.TouchState, aj *input.
 				network.SendMessage(attackMsg)
 			}
 		}
+
+		// Skill button (fireball) — Android on-screen action above attack button.
+		if uiSkillButton.Update() {
+			aimDir := aj.AimDir
+			if aimDir.X == 0 && aimDir.Y == 0 {
+				aimDir = rl.NewVector2(0, -1)
+			}
+			targetX := p.Position.X + aimDir.X*100
+			targetY := p.Position.Y + aimDir.Y*100
+			activateFireball(p, targetX, targetY)
+		}
 	} else {
 		// Desktop sprint detection: Left Shift key
 		p.IsSprinting = rl.IsKeyDown(rl.KeyLeftShift)
@@ -113,5 +128,32 @@ func ProcessInput(cfg Config, p *entity.Player, ts *input.TouchState, aj *input.
 		}
 	}
 
+	// Desktop fireball skill (Q key) — aim at the mouse world position.
+	if rl.IsKeyPressed(rl.KeyQ) {
+		screenPos := rl.GetMousePosition()
+		mousePos := rl.GetScreenToWorld2D(screenPos, cam.Camera)
+		activateFireball(p, mousePos.X, mousePos.Y)
+	}
+
 	return dir
+}
+
+// activateFireball sends a fireball skill aimed at world target (tx,ty).
+func activateFireball(p *entity.Player, tx, ty float32) {
+	if network.Role == "host" && network.CurrentHost != nil {
+		network.CurrentHost.HandleSkill(network.LocalPlayerID, int(tx), int(ty))
+		return
+	}
+	if network.Role == "client" {
+		msg := network.Message{
+			Type: network.MsgSkill,
+			Payload: network.MustMarshal(network.SkillPayload{
+				PlayerID: network.LocalPlayerID,
+				Skill:    "fireball",
+				TargetX:  int(tx),
+				TargetY:  int(ty),
+			}),
+		}
+		network.SendMessage(msg)
+	}
 }

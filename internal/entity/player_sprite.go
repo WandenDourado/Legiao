@@ -92,6 +92,10 @@ func drawCharacterSprite(texture rl.Texture2D, def CharacterDef, x, y float32, f
 
 	fw := float32(def.FrameWidth)
 	fh := float32(def.FrameHeight)
+	scale := def.RenderScale
+	if scale <= 0 {
+		scale = 1
+	}
 
 	sourceRect := rl.NewRectangle(
 		float32(frame)*fw,
@@ -104,11 +108,10 @@ func drawCharacterSprite(texture rl.Texture2D, def CharacterDef, x, y float32, f
 	}
 
 	destRect := rl.NewRectangle(
-		x-fw/2,
-		y-fh/2,
-		fw,
-		fh,
+		x-fw*scale/2,
+		y-fh*scale/2,
+		fw*scale,
+		fh*scale,
 	)
 	rl.DrawTexturePro(texture, sourceRect, destRect, rl.NewVector2(0, 0), 0, rl.White)
 }
-

@@ -5,6 +5,10 @@ import (
 	"encoding/json"
 	"log"
 	"net"
+
+	"github.com/WandenDourado/Legiao/internal/entity"
+
+	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 type Client struct {
@@ -157,6 +161,19 @@ func (c *Client) handleMessage(msg Message) {
 			LocalPlayerDead = false
 			RespawnTimer = 0
 		}
+
+	case MsgFireEvent:
+		var fe FireEventPayload
+		if err := json.Unmarshal(msg.Payload, &fe); err != nil {
+			log.Printf("client failed to unmarshal fire event: %v", err)
+			return
+		}
+		if ClientFireEM == nil {
+			ClientFireEM = entity.NewEntityManager()
+		}
+		pos := rl.NewVector2(float32(fe.X), float32(fe.Y))
+		ClientFireEM.AddExplosion(entity.NewExplosion(pos, fe.Radius))
+		ClientFireEM.AddFireGround(entity.NewFireGround(pos))
 
 	default:
 		log.Printf("[Client] Received message type: %s", msg.Type)

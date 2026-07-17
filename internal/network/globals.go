@@ -3,6 +3,8 @@ package network
 import (
     "log"
     "sync"
+
+    "github.com/WandenDourado/Legiao/internal/entity"
 )
 
 // Global singleton instances for the current process.
@@ -34,6 +36,10 @@ var (
     GameOver      bool
     LocalPlayerDead bool
     RespawnTimer   float32
+
+    // ClientFireEM holds fire skill effects (explosions, ground fire, fireballs)
+    // received from the host for rendering on a client.
+    ClientFireEM *entity.EntityManager
 )
 
 // SendMessage sends a Message to the appropriate peer depending on the role.
