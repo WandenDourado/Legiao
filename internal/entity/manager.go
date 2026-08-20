@@ -1,8 +1,11 @@
 package entity
 
 import (
+	"sort"
 	"sync"
 
+	"github.com/WandenDourado/Legiao/internal/collision"
+	"github.com/WandenDourado/Legiao/internal/nav"
 	"github.com/WandenDourado/Legiao/internal/world"
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -12,21 +15,33 @@ import (
 type EntityManager struct {
 	Enemies      map[string]*Enemy
 	Projectiles  map[string]*Projectile
-	Fireballs    map[string]*Fireball
-	FireGrounds  []*FireGround
-	Explosions   []*Explosion
 	enemiesMutex sync.RWMutex
 	projMutex    sync.RWMutex
-	fireMutex    sync.RWMutex
 	WorldBounds  world.Bounds
+	// Solid is the loaded map's blocked space. Enemy movement is resolved
+	// against it with the same rule the player uses, so monsters cannot walk
+	// through trees, fences or houses. Nil until a map is applied, which means
+	// "no obstacles" rather than "nothing moves".
+	Solid collision.Solid
+	// Nav is the walkability mesh derived from Solid (internal/nav), built
+	// once per map load — a sibling of Solid rather than a replacement for
+	// it: Solid still resolves each individual step, Nav decides which way
+	// to route around an obstacle the step alone cannot solve. Nil until a
+	// map is applied, same as Solid.
+	Nav *nav.Grid
+	// drawBuf e o slice que DrawAll reaproveita entre quadros para montar a
+	// lista de inimigos visiveis. Ele existe para nao alocar 83 ponteiros por
+	// quadro no world_03; nunca e lido fora do passe de desenho.
+	drawBuf []*Enemy
 }
 
 // NewEntityManager creates a new entity manager with initialized maps.
+// Skill collections (fireballs, sanctuaries, ...) live in the dedicated
+// `skill` package instead, so this manager only owns enemies/projectiles.
 func NewEntityManager() *EntityManager {
 	return &EntityManager{
 		Enemies:     make(map[string]*Enemy),
 		Projectiles: make(map[string]*Projectile),
-		Fireballs:   make(map[string]*Fireball),
 	}
 }
 
@@ -117,15 +132,29 @@ func (em *EntityManager) GetAllProjectiles() []*Projectile {
 func (em *EntityManager) UpdateAll(dt float32, players []PlayerState) map[string]bool {
 	attackedEnemies := make(map[string]bool)
 
-	// Update enemies
+	// Update enemies. The active set is collected first so each enemy can
+	// steer away from the others, then a positional pass removes whatever
+	// overlap the steering could not prevent.
 	em.enemiesMutex.Lock()
+	active := make([]*Enemy, 0, len(em.Enemies))
 	for _, e := range em.Enemies {
 		if e.IsActive {
-			if e.Update(dt, players) {
-				attackedEnemies[e.ID] = true
-			}
+			active = append(active, e)
 		}
 	}
+	// Map iteration order is random, and both the steering and the overlap
+	// pass read positions that earlier entries have already changed. Sorting
+	// keeps the host simulation deterministic frame to frame instead of
+	// jittering with whatever order the map happened to yield.
+	sort.Slice(active, func(i, j int) bool { return active[i].ID < active[j].ID })
+
+	env := MoveEnv{Solid: em.Solid, Nav: em.Nav}
+	for _, e := range active {
+		if e.Update(dt, players, active, env) {
+			attackedEnemies[e.ID] = true
+		}
+	}
+	ResolveEnemyOverlap(active, em.Solid)
 	em.enemiesMutex.Unlock()
 
 	// Update projectiles and remove inactive ones
@@ -145,25 +174,76 @@ func (em *EntityManager) UpdateAll(dt float32, players []PlayerState) map[string
 }
 
 // DrawAll renders all active entities (enemies and projectiles).
-func (em *EntityManager) DrawAll() {
-	// Draw enemies
+// DrawAll desenha o que a camera mostra. view e a janela visivel em unidades
+// de mundo; uma janela de tamanho zero desliga o culling.
+//
+// Tres decisoes aqui, e todas vieram do world_03, onde a guarnicao poe 83
+// monstros em campo desde o carregamento do mapa:
+//
+//  1. Quem esta fora da tela nao e desenhado. Antes os 83 eram, sempre.
+//  2. Todos os SPRITES primeiro, todas as BARRAS depois. Intercalados, a barra
+//     (que e retangulo) quebrava o batch de textura entre um monstro e o
+//     proximo — dois flushes por inimigo em vez de um punhado por quadro.
+//  3. A ordem e por TIPO, e nao a do map. A ordem de um map em Go e aleatoria
+//     a cada iteracao, entao a textura trocava a cada inimigo E dois monstros
+//     sobrepostos piscavam entre si a cada quadro, porque quem ficava na
+//     frente mudava. Agrupar por tipo troca de textura uma vez por tipo e
+//     torna a sobreposicao estavel. (Ordenar por Y daria profundidade de
+//     verdade, mas e outra decisao: brigaria com o agrupamento por textura.)
+func (em *EntityManager) DrawAll(view rl.Rectangle) {
 	em.enemiesMutex.RLock()
+	alive := 0
 	for _, e := range em.Enemies {
-		if e.IsActive {
-			e.Draw()
-			e.DrawHealthBar()
+		if e != nil && e.IsActive {
+			alive++
 		}
 	}
+	em.drawBuf = visibleEnemies(em.Enemies, view, em.drawBuf[:0])
+	for _, e := range em.drawBuf {
+		e.Draw()
+	}
+	for _, e := range em.drawBuf {
+		e.DrawHealthBar()
+	}
+	drawn := len(em.drawBuf)
 	em.enemiesMutex.RUnlock()
 
 	// Draw projectiles
+	projectiles := 0
 	em.projMutex.RLock()
 	for _, p := range em.Projectiles {
 		if p.IsActive {
 			p.Draw()
+			projectiles++
 		}
 	}
 	em.projMutex.RUnlock()
+
+	RecordEnemyDraw(EnemyDrawCounts{Alive: alive, Drawn: drawn, Projectiles: projectiles})
+}
+
+// visibleEnemies filtra os ativos que aparecem na tela e os ordena por tipo,
+// depois por ID. O ID desempata para a ordem nao depender da iteracao do map,
+// que e aleatoria — mesma razao de UpdateAll ordenar antes de simular.
+//
+// Escreve no buffer recebido para nao alocar um slice por quadro.
+func visibleEnemies(enemies map[string]*Enemy, view rl.Rectangle, buf []*Enemy) []*Enemy {
+	for _, e := range enemies {
+		if e == nil || !e.IsActive {
+			continue
+		}
+		if !EnemyVisible(enemyDrawBoxOf(e), view) {
+			continue
+		}
+		buf = append(buf, e)
+	}
+	sort.Slice(buf, func(i, j int) bool {
+		if buf[i].Type != buf[j].Type {
+			return buf[i].Type < buf[j].Type
+		}
+		return buf[i].ID < buf[j].ID
+	})
+	return buf
 }
 
 // Clear removes all entities (for game reset).
@@ -175,12 +255,6 @@ func (em *EntityManager) Clear() {
 	em.projMutex.Lock()
 	em.Projectiles = make(map[string]*Projectile)
 	em.projMutex.Unlock()
-
-	em.fireMutex.Lock()
-	em.Fireballs = make(map[string]*Fireball)
-	em.FireGrounds = nil
-	em.Explosions = nil
-	em.fireMutex.Unlock()
 }
 
 // DetectProjectileCollision checks if a projectile hit an enemy.

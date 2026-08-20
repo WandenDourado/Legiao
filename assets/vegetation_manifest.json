@@ -1,0 +1,219 @@
+{
+  "atlas": "assets/tilesets/village_vegetation.png",
+  "pieces": {
+    "tree_canopy_oak": {
+      "source": {
+        "x": 25,
+        "y": 31,
+        "width": 354,
+        "height": 314
+      },
+      "anchor": {
+        "x": 177,
+        "y": 360
+      },
+      "role": "foreground",
+      "collision": false
+    },
+    "tree_canopy_pine": {
+      "source": {
+        "x": 424,
+        "y": 29,
+        "width": 309,
+        "height": 321
+      },
+      "anchor": {
+        "x": 154,
+        "y": 360
+      },
+      "role": "foreground",
+      "collision": false
+    },
+    "tree_trunk_oak": {
+      "source": {
+        "x": 33,
+        "y": 592,
+        "width": 140,
+        "height": 140
+      },
+      "anchor": {
+        "x": 70,
+        "y": 120
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -51,
+        "offsetY": -120,
+        "width": 100,
+        "height": 148
+      }
+    },
+    "tree_trunk_pine": {
+      "source": {
+        "x": 204,
+        "y": 592,
+        "width": 140,
+        "height": 141
+      },
+      "anchor": {
+        "x": 70,
+        "y": 120
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -50,
+        "offsetY": -120,
+        "width": 94,
+        "height": 148
+      }
+    },
+    "tree_trunk_stump": {
+      "source": {
+        "x": 370,
+        "y": 643,
+        "width": 114,
+        "height": 90
+      },
+      "anchor": {
+        "x": 57,
+        "y": 80
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -46,
+        "offsetY": -79,
+        "width": 89,
+        "height": 97
+      }
+    },
+    "bush_leafy_large": {
+      "source": {
+        "x": 22,
+        "y": 411,
+        "width": 251,
+        "height": 116
+      },
+      "anchor": {
+        "x": 126,
+        "y": 106
+      },
+      "role": "structures_back",
+      "collision": false
+    },
+    "bush_flowering_large": {
+      "source": {
+        "x": 304,
+        "y": 405,
+        "width": 252,
+        "height": 126
+      },
+      "anchor": {
+        "x": 126,
+        "y": 116
+      },
+      "role": "structures_back",
+      "collision": false
+    },
+    "bush_round_lime": {
+      "source": {
+        "x": 583,
+        "y": 438,
+        "width": 97,
+        "height": 95
+      },
+      "anchor": {
+        "x": 48,
+        "y": 85
+      },
+      "role": "structures_back",
+      "collision": false
+    },
+    "bush_round_teal": {
+      "source": {
+        "x": 693,
+        "y": 436,
+        "width": 97,
+        "height": 92
+      },
+      "anchor": {
+        "x": 48,
+        "y": 82
+      },
+      "role": "structures_back",
+      "collision": false
+    },
+    "bush_round_flowering": {
+      "source": {
+        "x": 804,
+        "y": 432,
+        "width": 96,
+        "height": 102
+      },
+      "anchor": {
+        "x": 48,
+        "y": 92
+      },
+      "role": "structures_back",
+      "collision": false
+    },
+    "bush_round_dark": {
+      "source": {
+        "x": 912,
+        "y": 434,
+        "width": 94,
+        "height": 96
+      },
+      "anchor": {
+        "x": 47,
+        "y": 86
+      },
+      "role": "structures_back",
+      "collision": false
+    },
+    "flower_white": {
+      "source": {
+        "x": 525,
+        "y": 661,
+        "width": 75,
+        "height": 64
+      },
+      "anchor": {
+        "x": 38,
+        "y": 60
+      },
+      "role": "ground_detail",
+      "collision": false
+    },
+    "flower_yellow": {
+      "source": {
+        "x": 622,
+        "y": 661,
+        "width": 85,
+        "height": 66
+      },
+      "anchor": {
+        "x": 43,
+        "y": 62
+      },
+      "role": "ground_detail",
+      "collision": false
+    },
+    "grass_tuft": {
+      "source": {
+        "x": 923,
+        "y": 668,
+        "width": 72,
+        "height": 58
+      },
+      "anchor": {
+        "x": 36,
+        "y": 55
+      },
+      "role": "ground_detail",
+      "collision": false
+    }
+  }
+}

@@ -1,8 +1,0 @@
-br.wandendourado.legiao:drawable/vr_icon = 0x7f010005
-br.wandendourado.legiao:drawable/icon = 0x7f010002
-br.wandendourado.legiao:drawable/splashscreen_portrait = 0x7f010004
-br.wandendourado.legiao:drawable/downloadimagev = 0x7f010001
-br.wandendourado.legiao:drawable/vr_icon_background = 0x7f010006
-br.wandendourado.legiao:drawable/splashscreen_landscape = 0x7f010003
-br.wandendourado.legiao:string/app_name = 0x7f020000
-br.wandendourado.legiao:drawable/downloadimageh = 0x7f010000

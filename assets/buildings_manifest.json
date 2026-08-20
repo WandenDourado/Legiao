@@ -1,0 +1,113 @@
+{
+  "atlas": "assets/tilesets/village_buildings.png",
+  "pieces": {
+    "house_small_base": {
+      "source": {
+        "x": 130,
+        "y": 356,
+        "width": 316,
+        "height": 192
+      },
+      "anchor": {
+        "x": 158,
+        "y": 192
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -158,
+        "offsetY": -192,
+        "width": 308,
+        "height": 192
+      },
+      "clipOk": true
+    },
+    "house_small_roof": {
+      "source": {
+        "x": 130,
+        "y": 121,
+        "width": 316,
+        "height": 235
+      },
+      "anchor": {
+        "x": 158,
+        "y": 427
+      },
+      "role": "foreground",
+      "collision": false,
+      "clipOk": true
+    },
+    "house_medium_base": {
+      "source": {
+        "x": 662,
+        "y": 380,
+        "width": 476,
+        "height": 192
+      },
+      "anchor": {
+        "x": 238,
+        "y": 192
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -238,
+        "offsetY": -192,
+        "width": 471,
+        "height": 192
+      },
+      "clipOk": true
+    },
+    "house_medium_roof": {
+      "source": {
+        "x": 662,
+        "y": 38,
+        "width": 476,
+        "height": 342
+      },
+      "anchor": {
+        "x": 238,
+        "y": 534
+      },
+      "role": "foreground",
+      "collision": false,
+      "clipOk": true
+    },
+    "house_large_base": {
+      "source": {
+        "x": 215,
+        "y": 986,
+        "width": 823,
+        "height": 192
+      },
+      "anchor": {
+        "x": 411,
+        "y": 192
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -409,
+        "offsetY": -192,
+        "width": 813,
+        "height": 192
+      },
+      "clipOk": true
+    },
+    "house_large_roof": {
+      "source": {
+        "x": 215,
+        "y": 623,
+        "width": 823,
+        "height": 363
+      },
+      "anchor": {
+        "x": 411,
+        "y": 555
+      },
+      "role": "foreground",
+      "collision": false,
+      "clipOk": true
+    }
+  }
+}

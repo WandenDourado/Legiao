@@ -1,0 +1,30 @@
+{
+  "image": "wolf.png",
+  "mode": "radial",
+  "frame_width": 256,
+  "frame_height": 256,
+  "origin": "center",
+  "anchor": {
+    "x": 128,
+    "y": 128
+  },
+  "front": "up",
+  "rotation": "runtime",
+  "inscribed_radius": 128,
+  "measured_max_radius": 102.6,
+  "fit_mode": "uniform",
+  "animations": {
+    "run": {
+      "frames": 8,
+      "frame_time_seconds": 0.07,
+      "loop": true
+    }
+  },
+  "notes": [
+    "Radial mode: one top-down view rotated at runtime toward the velocity vector.",
+    "The sprite's front points to the top of the frame; rotation is atan2(vy,vx)+90 degrees.",
+    "Geometry was normalized by scripts/normalize_radial.py, not requested from the image generator, which ignores numeric geometry instructions.",
+    "Ciclo em duas meias-passadas alternando a perna de guia; guia fixa le como manqueira.",
+    "Frames a 256 px para que o runtime reduza em vez de ampliar (RenderScale 0.9 = 230 px em tela)."
+  ]
+}

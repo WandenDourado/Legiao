@@ -1,0 +1,62 @@
+{
+  "map": "assets/maps/world_06.json",
+  "scripts": [
+    {
+      "id": "world_06_abertura",
+      "trigger": "on_map_start",
+      "lines": [
+        {
+          "speaker": "",
+          "portrait": "",
+          "text": "O corredor se estende reto até uma porta fechada, ao longe. Diante dela, duas formas de pedra aguardam, viradas para o grupo."
+        },
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "Aquilo não são estátuas. Sinto o calor daqui."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Fiquem atrás do meu escudo enquanto puderem. É a última porta antes do fim."
+        },
+        {
+          "speaker": "Arqueiro",
+          "portrait": "arqueiro",
+          "text": "Última porta ou última fase, o corredor é longo demais para correr sem plano."
+        }
+      ]
+    },
+    {
+      "id": "world_06_climax",
+      "trigger": "on_last_stand",
+      "lines": [
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "O fogo não para! Nem o escudo, nem a santidade da Sacerdotisa bastam contra os dois ao mesmo tempo!"
+        },
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "Estamos parados na metade do corredor. Se ficarmos, viramos cinzas aqui mesmo."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Então não vamos ficar. Cubram os olhos — eu abro o caminho até a porta."
+        },
+        {
+          "speaker": "",
+          "portrait": "",
+          "text": "Um brilho branco consome o escudo da Paladina e a ergue do chão. Ela avança pelo corredor como um raio contra a pedra."
+        },
+        {
+          "speaker": "",
+          "portrait": "",
+          "text": "Os dois canhões desmoronam em fogo e destroços. No silêncio que sobra, a porta do fim do corredor se abre."
+        }
+      ]
+    }
+  ]
+}

@@ -28,12 +28,18 @@
 
 :COMPILE
         @echo compiling for platform %FL% and architecture %GOARCH%
-        @set CGO_CFLAGS="-I%ANDROID_SYSROOT%\usr\include -I%ANDROID_SYSROOT%\usr\include\%TRIPLE% --sysroot=%ANDROID_SYSROOT% -D__ANDROID_API__=%ANDROID_API%"
+        @REM NOTE: do NOT pass -D__ANDROID_API__ here. The NDK/clang already
+        @REM defines __ANDROID_API__ from the sysroot minSdk, and redefining
+        @REM it triggers -Werror,-Wmacro-redefined and the build silently
+        @REM fails (leaving the old .so in place).
+        @set CGO_CFLAGS="-I%ANDROID_SYSROOT%\usr\include -I%ANDROID_SYSROOT%\usr\include\%TRIPLE% --sysroot=%ANDROID_SYSROOT%"
         @set CGO_LDFLAGS="-L%ANDROID_SYSROOT%\usr\lib\%TRIPLE%\%ANDROID_API% -L%ANDROID_TOOLCHAIN%\%TRIPLE%\lib --sysroot=%ANDROID_SYSROOT%"
         @set CGO_ENABLED=1
         @set GOOS=android
         @set GOARCH=%GOARCH%
-        @go build -buildmode=c-shared -ldflags="-s -w -extldflags=-Wl,-soname,lib%LIBRARY_NAME%.so,-z,max-page-size=0x4000" -o=android/libs/%FL%/lib%LIBRARY_NAME%.so
+        @REM -a forces a full rebuild (CGO build cache otherwise keeps stale
+        @REM .so files even after source changes, silently shipping old code).
+        @go build -a -buildmode=c-shared -ldflags="-s -w -extldflags=-Wl,-soname,lib%LIBRARY_NAME%.so,-z,max-page-size=0x4000" -o=android/libs/%FL%/lib%LIBRARY_NAME%.so
 @EXIT /B
 
 :BUILDALL

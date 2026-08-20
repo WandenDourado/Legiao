@@ -19,6 +19,12 @@ const (
 func (p *Player) InitSprite() {
 	def := GetCharacter(p.CharType)
 	p.Texture = rl.LoadTexture(assets.Path(def.SpritePath))
+	// Character frames are 128x192 drawn at 1.15x, so they are magnified too.
+	// Bilinear does not remove the magnification, but it does stop it from
+	// looking like hard pixel blocks.
+	if p.Texture.ID != 0 {
+		ApplySpriteFilter(p.Texture)
+	}
 	p.Initialized = true
 }
 
@@ -68,6 +74,12 @@ func (p *Player) Draw() {
 	}
 
 	def := GetCharacter(p.CharType)
+	// A corpse is the same sprite drawn through the grayscale shader, frozen
+	// on the frame and facing the direction it died in.
+	if p.IsDead {
+		BeginDeathTint()
+		defer EndDeathTint()
+	}
 	drawCharacterSprite(
 		p.Texture,
 		def,

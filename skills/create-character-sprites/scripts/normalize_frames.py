@@ -24,12 +24,23 @@ def read_frames(folder: Path, frame_width: int, frame_height: int, expected_coun
     return frames
 
 
-def shifted(frame: Image.Image, dx: int, dy: int) -> Image.Image:
-    bbox = frame.getchannel("A").getbbox()
+def shifted(frame: Image.Image, dx: int, dy: int, alpha_limit: int = 16) -> Image.Image:
+    """Translate a frame, refusing only if VISIBLE art (alpha >= alpha_limit) would
+    clip. Near-invisible feather pixels crop silently — treating them as art caused
+    spurious 'would clip' refusals on supersampled frames."""
+    alpha = frame.getchannel("A")
+    mask = alpha.point(lambda value: 255 if value >= alpha_limit else 0)
+    bbox = mask.getbbox()
     if bbox and (bbox[0] + dx < 0 or bbox[1] + dy < 0 or bbox[2] + dx > frame.width or bbox[3] + dy > frame.height):
         raise ValueError("alignment would clip visible art; regenerate this direction with more padding")
+    if dx >= 0 and dy >= 0:
+        result = Image.new("RGBA", frame.size)
+        result.alpha_composite(frame, (dx, dy))
+        return result
+    # Negative offsets: crop the (invisible) overhang first, then composite.
+    crop = frame.crop((max(0, -dx), max(0, -dy), frame.width, frame.height))
     result = Image.new("RGBA", frame.size)
-    result.alpha_composite(frame, (dx, dy))
+    result.alpha_composite(crop, (max(0, dx), max(0, dy)))
     return result
 
 
@@ -64,33 +75,41 @@ def main() -> int:
     if not 0 <= target_x < args.frame_width or not 0 <= target_y < args.frame_height:
         raise SystemExit("Anchor x and baseline must fit inside the target frame.")
 
-    all_frames: dict[str, list[Image.Image]] = {}
-    all_anchors: dict[str, list[tuple[float, int]]] = {}
+    # Anchors measured in a fixed x-band are not translation-invariant: a lateral
+    # shift moves different art into the measuring band, leaving a residual error.
+    # Iterate measure->shift until convergence so callers never need a manual
+    # second pass. Cumulative shift stays bounded by --max-shift.
     for direction in directions:
         frames = read_frames(args.input_root / direction, args.frame_width, args.frame_height, args.frames_per_direction)
-        all_frames[direction] = frames
-        all_anchors[direction] = [
-            (
-                torso_center(frame, args.torso_top, args.torso_bottom, args.alpha_threshold),
-                body_anchor(frame, args.body_left, args.body_right, args.alpha_threshold)[1],
-            )
-            for frame in frames
-        ]
+        totals = [(0, 0)] * len(frames)
+        for _pass in range(4):
+            anchors = [
+                (
+                    torso_center(frame, args.torso_top, args.torso_bottom, args.alpha_threshold),
+                    body_anchor(frame, args.body_left, args.body_right, args.alpha_threshold)[1],
+                )
+                for frame in frames
+            ]
+            deltas = [(target_x - round(x), target_y - y) for x, y in anchors]
+            if all(dx == 0 and dy == 0 for dx, dy in deltas):
+                break
+            totals = [(tx + dx, ty + dy) for (tx, ty), (dx, dy) in zip(totals, deltas, strict=True)]
+            if any(max(abs(tx), abs(ty)) > args.max_shift for tx, ty in totals):
+                raise SystemExit(
+                    f"{direction}: anchor drift exceeds {args.max_shift}px. Do NOT regenerate yet: an undersized set "
+                    f"sitting high in its cells drifts this much benignly — run diagnose_direction; scale_fit "
+                    f"re-anchors without shift limits, then re-run this normalization on its output."
+                )
+            frames = [
+                shifted(frame, dx, dy, args.alpha_threshold)
+                for frame, (dx, dy) in zip(frames, deltas, strict=True)
+            ]
 
-    shifts: dict[str, list[tuple[int, int]]] = {}
-    for direction, anchors in all_anchors.items():
-        shifts[direction] = [(target_x - round(x), target_y - y) for x, y in anchors]
-        if any(max(abs(dx), abs(dy)) > args.max_shift for dx, dy in shifts[direction]):
-            raise SystemExit(f"{direction}: anchor drift exceeds {args.max_shift}px; regenerate instead of forcing alignment.")
-        for frame, (dx, dy) in zip(all_frames[direction], shifts[direction], strict=True):
-            shifted(frame, dx, dy)
-
-    for direction, frames in all_frames.items():
         output = args.output_root / direction
         output.mkdir(parents=True, exist_ok=True)
-        for index, (frame, (dx, dy)) in enumerate(zip(frames, shifts[direction], strict=True)):
-            shifted(frame, dx, dy).save(output / f"{index:03d}.png")
-        print(f"OK: {direction} anchors normalized to ({target_x}, {target_y}) with shifts {shifts[direction]}")
+        for index, frame in enumerate(frames):
+            frame.save(output / f"{index:03d}.png")
+        print(f"OK: {direction} anchors normalized to ({target_x}, {target_y}) with total shifts {totals}")
     return 0
 
 

@@ -14,7 +14,9 @@ Keep this file short. Put package maps in `project_structure.md` and feature beh
 | `ui` | Menus and HUD drawing. |
 | `assets` | Platform-aware asset path resolution. |
 | `tilemap` | Tiled map parsing, tileset loading, map rendering, collision extraction. |
+| `collision` | The single movement-vs-obstacle rule (footprint, sliding, detour) shared by every walking entity. |
 | `world` | World bounds derived from map data. |
+| `nav` | The route layer between deciding WHERE an agent goes and what a single step lets it do: a walkability mesh built from `collision.Solid`, A* + string-pulled paths, and a per-agent `Follower`. Pure — imports only `collision`, `world`, `rl.Vector2`; never `network`, `game` or `entity`. |
 
 ## Hard Rules
 

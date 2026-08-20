@@ -1,0 +1,62 @@
+{
+  "map": "assets/maps/world_02.json",
+  "scripts": [
+    {
+      "id": "world_02_abertura",
+      "trigger": "on_map_start",
+      "lines": [
+        {
+          "speaker": "Arqueiro",
+          "portrait": "arqueiro",
+          "text": "Pelos deuses da floresta... olhem mais a frente, existe um grande desmatamento, além de uma energia sombria."
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Parece que estamos entrando em território da Imperatriz das Trevas. Ela profanou essa floresta."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Seguiremos."
+        }
+      ]
+    },
+    {
+      "id": "world_02_climax",
+      "trigger": "on_last_stand",
+      "lines": [
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "Eles são muitos!! Estamos em desvantagem."
+        },
+        {
+          "speaker": "Arqueiro",
+          "portrait": "arqueiro",
+          "text": "Devemos recuar?"
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Isso não será necessário."
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Eu venho aprimorando essa magia há um tempo..."
+        },
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "Isso é.... magia proibida..."
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Ergam-se."
+        }
+      ]
+    }
+  ]
+}

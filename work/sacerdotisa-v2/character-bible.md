@@ -14,7 +14,7 @@
 | Direction | Decision | Reason | Report |
 |---|---|---|---|
 | S | accepted | Attempt 5; final rekey and normalization. Exact pivot/baseline, 85.9-87.0% height. | `review/S-final-pass2.json` |
-| SW | accepted | Attempt 5; visual gait review confirmed opposite contacts. Exact pivot/baseline after final pass. | `review/SW-final-pass2.json` |
+| SW | accepted | Attempt 5; visual gait review confirmed opposite contacts. Exact pivot/baseline after final pass. **Correção 2026-08-03: frames `000`–`003` estavam espelhados (lote 1 invertido) e foram desespelhados; `004`–`007` são os corretos. Ver `attempt-manifest.md` — inclui a métrica calibrada que decide qual metade preservar.** | `review/SW-batch1-unflip-structural.json` |
 | W | accepted | Attempt 5; second bounded normalization removed the final 1-2px anchor drift. | `review/W-final-pass2.json` |
 | N | accepted | Attempt 2; attempt 1 exceeded the 24px safe-shift limit. Exact pivot/baseline. | `review/N-final-pass2.json` |
 | NW | accepted | Attempt 1; rekeyed to remove a one-pixel matte residue, then normalized. | `review/NW-final-pass2.json` |

@@ -1,0 +1,133 @@
+{
+  "atlas": "assets/tilesets/forest_pine.png",
+  "pieces": {
+    "pine_canopy_a": {
+      "source": {
+        "x": 6,
+        "y": 6,
+        "width": 308,
+        "height": 602
+      },
+      "anchor": {
+        "x": 154,
+        "y": 700
+      },
+      "role": "foreground",
+      "collision": false,
+      "clipOk": true
+    },
+    "pine_trunk_a": {
+      "source": {
+        "x": 6,
+        "y": 614,
+        "width": 308,
+        "height": 142
+      },
+      "anchor": {
+        "x": 154,
+        "y": 142
+      },
+      "role": "structures_back",
+      "collision": true,
+      "clipOk": true,
+      "collisionFootprint": {
+        "offsetX": -48,
+        "offsetY": -44,
+        "width": 96,
+        "height": 52
+      }
+    },
+    "pine_canopy_b": {
+      "source": {
+        "x": 6,
+        "y": 762,
+        "width": 312,
+        "height": 531
+      },
+      "anchor": {
+        "x": 156,
+        "y": 629
+      },
+      "role": "foreground",
+      "collision": false,
+      "clipOk": true
+    },
+    "pine_trunk_b": {
+      "source": {
+        "x": 6,
+        "y": 1299,
+        "width": 308,
+        "height": 142
+      },
+      "anchor": {
+        "x": 156,
+        "y": 142
+      },
+      "role": "structures_back",
+      "collision": true,
+      "clipOk": true,
+      "collisionFootprint": {
+        "offsetX": -48,
+        "offsetY": -44,
+        "width": 96,
+        "height": 52
+      }
+    },
+    "pine_canopy_c": {
+      "source": {
+        "x": 6,
+        "y": 1447,
+        "width": 322,
+        "height": 433
+      },
+      "anchor": {
+        "x": 161,
+        "y": 531
+      },
+      "role": "foreground",
+      "collision": false,
+      "clipOk": true
+    },
+    "pine_trunk_c": {
+      "source": {
+        "x": 6,
+        "y": 1886,
+        "width": 322,
+        "height": 142
+      },
+      "anchor": {
+        "x": 161,
+        "y": 142
+      },
+      "role": "structures_back",
+      "collision": true,
+      "clipOk": true,
+      "collisionFootprint": {
+        "offsetX": -48,
+        "offsetY": -44,
+        "width": 96,
+        "height": 52
+      }
+    },
+    "pine_stump": {
+      "source": {
+        "x": 6,
+        "y": 2034,
+        "width": 220,
+        "height": 199
+      },
+      "anchor": {
+        "x": 110,
+        "y": 199
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -55,
+        "offsetY": -60,
+        "width": 110,
+        "height": 60
+      }
+    }
+  }
+}

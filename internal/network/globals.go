@@ -4,7 +4,7 @@ import (
     "log"
     "sync"
 
-    "github.com/WandenDourado/Legiao/internal/entity"
+    "github.com/WandenDourado/Legiao/internal/skill"
 )
 
 // Global singleton instances for the current process.
@@ -18,6 +18,11 @@ var (
     Role string
     // LocalPlayerID stores the ID of the local player (set on join)
     LocalPlayerID string
+    // LocalPlayerColor and LocalPlayerCharacter are cached at the original
+    // join so a reconnect (reconnect.go) can resend the exact same identity
+    // the host is expecting instead of asking the player to pick again.
+    LocalPlayerColor     string
+    LocalPlayerCharacter string
     // ServerAddress stores the IP:port being used (host's listen address or client's connected address)
     ServerAddress string
     // RemotePlayers is the shared map of all players, updated by network layer
@@ -35,11 +40,29 @@ var (
     // NEW: Game state flags
     GameOver      bool
     LocalPlayerDead bool
-    RespawnTimer   float32
+    // LocalPlayerInPortal mirrors the host's PlayerState.InPortal for the
+    // local player (game.SyncLocalPlayer). ProcessInput freezes on it the
+    // same way it freezes on GameOver, and the renderer stops drawing the
+    // local player while it is true — see host_portal_presence.go.
+    LocalPlayerInPortal bool
+    // LocalRespawnIn is how many seconds are left before the local player is
+    // revived. The host counts it down and ships it in PlayerState; this is
+    // only the mirror the HUD reads.
+    LocalRespawnIn float32
+    // TestMode is on when the local player pressed F2: no skill cooldowns and
+    // no attack-speed cap. The host applies it per player, so this flag is
+    // just what the local machine believes and draws.
+    TestMode bool
 
-    // ClientFireEM holds fire skill effects (explosions, ground fire, fireballs)
-    // received from the host for rendering on a client.
-    ClientFireEM *entity.EntityManager
+    // CurrentWave is the latest horde state received from (or produced by) the
+    // host. Read by the HUD on every frame, written by the network layer.
+    CurrentWave      WaveState
+    CurrentWaveMutex sync.Mutex
+
+    // ClientSkills holds skill visuals (fireballs, explosions, ground fire,
+    // sanctuaries) received from the host for rendering on a client. Healing
+    // itself is synced via combat events, so this manager is visuals-only.
+    ClientSkills *skill.Manager
 )
 
 // SendMessage sends a Message to the appropriate peer depending on the role.
@@ -86,6 +109,38 @@ func RemovePlayerState(playerID string) {
     RemotePlayersMutex.Lock()
     defer RemotePlayersMutex.Unlock()
     delete(RemotePlayers, playerID)
+}
+
+// pruneRemotePlayersLocked removes from RemotePlayers any ID not present in
+// current (the host's authoritative player list just broadcast). Called by
+// the host role only, with RemotePlayersMutex already held. Without this, a
+// player removed from h.players (tickAbsence, a bot taken over) lingers in
+// RemotePlayers forever, since BroadcastStateUpdate/BroadcastRoster only ever
+// write entries, never delete them.
+func pruneRemotePlayersLocked(current []PlayerState) {
+    live := make(map[string]bool, len(current))
+    for _, p := range current {
+        live[p.PlayerID] = true
+    }
+    for id := range RemotePlayers {
+        if !live[id] {
+            delete(RemotePlayers, id)
+        }
+    }
+}
+
+// SetWaveState stores the latest horde state.
+func SetWaveState(w WaveState) {
+    CurrentWaveMutex.Lock()
+    defer CurrentWaveMutex.Unlock()
+    CurrentWave = w
+}
+
+// GetWaveState returns a copy of the latest horde state.
+func GetWaveState() WaveState {
+    CurrentWaveMutex.Lock()
+    defer CurrentWaveMutex.Unlock()
+    return CurrentWave
 }
 
 // GetAllEnemies returns a copy of all known enemies (safe for reading)

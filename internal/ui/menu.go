@@ -5,6 +5,8 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/WandenDourado/Legiao/internal/entity"
@@ -12,14 +14,64 @@ import (
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
+// localIdentityOnce guards the ONE player ID this process ever uses.
+//
+// generatePlayerID used to run on every call to startHost/connectToHost, so
+// a client that lost its connection and reconnected would show up as a
+// brand-new player — the old body would stay parked in the field forever,
+// and the reconnecting player would lose whatever position, health and
+// cooldowns it had. The host recognizes a reconnect by PlayerID
+// (host_rejoin.go), so the ID has to survive the reconnect to mean anything.
+var (
+	localIdentityOnce sync.Once
+	localPlayerID     string
+)
+
+// ensureLocalPlayerID returns the same ID for the lifetime of this process,
+// generating it once. Known, accepted limit: if the OS kills the app, this is
+// a new process and a new session — there is no disk persistence, and none is
+// wanted here.
+func ensureLocalPlayerID() string {
+	localIdentityOnce.Do(func() {
+		localPlayerID = generatePlayerID()
+	})
+	return localPlayerID
+}
+
+// hitPad is the extra hit area (in pixels) added around each menu button so
+// small drawn rectangles are still easy to tap on touch screens. It scales
+// with screen height because a fixed pixel pad is tiny on high-DPI phones.
+func hitPad() float32 {
+	sh := float32(rl.GetScreenHeight())
+	return max(sh*0.035, 18)
+}
+
+// hit returns true if the point is inside rect OR within hitPad pixels of it.
+// The drawn rectangle is unchanged; only the clickable area is enlarged.
+func hit(rect rl.Rectangle, point rl.Vector2) bool {
+	pad := hitPad()
+	expanded := rl.NewRectangle(
+		rect.X-pad,
+		rect.Y-pad,
+		rect.Width+2*pad,
+		rect.Height+2*pad,
+	)
+	return rl.CheckCollisionPointRec(point, expanded)
+}
+
 // ShowMenu renders the start menu where the player can host or join a game.
 func ShowMenu(playerSpawn rl.Vector2) entity.CharacterType {
 	selected := false
 	joinMode := false
-	manualMode := false
-	manualIP := ""
 	refreshTimer := 0
 	scanning := false
+
+	// Read and consume ONCE: a client that exhausted the reconnect window
+	// (network/reconnect.go) lands back here instead of being left in limbo,
+	// and the player deserves to know why they are looking at the menu again
+	// instead of the match they were just in.
+	disconnected := network.GaveUp()
+	network.ClearGaveUp()
 
 	var chosenChar entity.CharacterType
 
@@ -28,13 +80,12 @@ func ShowMenu(playerSpawn rl.Vector2) entity.CharacterType {
 		rl.ClearBackground(rl.RayWhite)
 
 		if joinMode {
-			if manualMode {
-				drawManualInput(&manualIP, &selected, &chosenChar)
-			} else {
-				drawDiscoveryView(&selected, &manualMode, &manualIP, &refreshTimer, &scanning, &chosenChar)
-			}
+			drawDiscoveryView(&selected, &joinMode, &refreshTimer, &scanning, &chosenChar)
 		} else {
 			drawMainMenu(&selected, &joinMode, playerSpawn, &chosenChar)
+			if disconnected {
+				drawDisconnectedNotice()
+			}
 		}
 
 		rl.EndDrawing()
@@ -47,36 +98,62 @@ func ShowMenu(playerSpawn rl.Vector2) entity.CharacterType {
 	return chosenChar
 }
 
-// drawMainMenu draws the host/join selection screen
+// drawMainMenu draws the host/join selection screen. Buttons are sized and
+// positioned proportionally to the screen so the clickable area (hit) always
+// matches the drawn rectangle, even on large / high-DPI displays.
 func drawMainMenu(selected *bool, joinMode *bool, playerSpawn rl.Vector2, chosenChar *entity.CharacterType) {
-	hostRect := rl.NewRectangle(200, 150, 200, 50)
-	joinRect := rl.NewRectangle(200, 250, 200, 50)
+	sw := float32(rl.GetScreenWidth())
+	sh := float32(rl.GetScreenHeight())
+
+	btnW := sw * 0.5
+	btnH := max(sh*0.09, 56)
+	btnX := (sw - btnW) / 2
+	hostRect := rl.NewRectangle(btnX, sh*0.4, btnW, btnH)
+	joinRect := rl.NewRectangle(btnX, sh*0.4+btnH*1.4, btnW, btnH)
+
+	fontSize := int32(max(sh*0.035, 22))
 
 	if rl.IsMouseButtonPressed(rl.MouseLeftButton) {
 		mouse := rl.GetMousePosition()
-		if rl.CheckCollisionPointRec(mouse, hostRect) {
-			charType := ShowCharacterSelect()
-			*chosenChar = charType
-			startHost(selected, playerSpawn, string(charType))
-		} else if rl.CheckCollisionPointRec(mouse, joinRect) {
+		if hit(hostRect, mouse) {
+			// A cancelled character select drops back to this menu instead of
+			// opening a host nobody asked for.
+			charType, confirmed := ShowCharacterSelect()
+			if confirmed {
+				*chosenChar = charType
+				startHost(selected, playerSpawn, string(charType))
+			}
+		} else if hit(joinRect, mouse) {
 			*joinMode = true
 		}
 	}
 
 	rl.DrawRectangleRec(hostRect, rl.LightGray)
 	rl.DrawRectangleRec(joinRect, rl.LightGray)
-	rl.DrawText("Host Game (Wi-Fi)", int32(hostRect.X+10), int32(hostRect.Y+15), 20, rl.Black)
-	rl.DrawText("Join Game (Wi-Fi)", int32(joinRect.X+10), int32(joinRect.Y+15), 20, rl.Black)
+	hostLabel := "Host Game (Wi-Fi)"
+	joinLabel := "Join Game (Wi-Fi)"
+	rl.DrawText(hostLabel, int32(hostRect.X+(hostRect.Width-float32(rl.MeasureText(hostLabel, fontSize)))/2),
+		int32(hostRect.Y+(hostRect.Height-float32(fontSize))/2), fontSize, rl.Black)
+	rl.DrawText(joinLabel, int32(joinRect.X+(joinRect.Width-float32(rl.MeasureText(joinLabel, fontSize)))/2),
+		int32(joinRect.Y+(joinRect.Height-float32(fontSize))/2), fontSize, rl.Black)
 }
 
-// drawDiscoveryView shows discovered hosts with options to scan/enter manually
-func drawDiscoveryView(selected *bool, manualMode *bool, manualIP *string, refreshTimer *int, scanning *bool, chosenChar *entity.CharacterType) {
+// drawDiscoveryView lists the hosts found on the local network. Discovery is
+// automatic (UDP listener, UDP query and TCP scan all run on entry), so the
+// only control here is Back.
+func drawDiscoveryView(selected *bool, joinMode *bool, refreshTimer *int, scanning *bool, chosenChar *entity.CharacterType) {
+	sw := float32(rl.GetScreenWidth())
+	sh := float32(rl.GetScreenHeight())
+
 	// Start TCP scan when entering discovery view (more reliable for Android/Desktop)
 	if !*scanning {
 		*scanning = true
 		// Clear previous results
 		network.ClearDiscoveredHosts()
-		// Start TCP scan of local network
+		// Listen for host UDP broadcasts (LEGION_HOST) so the client can
+		// find a host without relying on the query/response or TCP scan paths.
+		go network.StartDiscoveryListener()
+		// Start TCP scan of local network as fallback
 		go network.StartTCPScan(9000)
 		// Also start UDP query sender as backup
 		go network.StartQuerySender(9000)
@@ -90,42 +167,45 @@ func drawDiscoveryView(selected *bool, manualMode *bool, manualIP *string, refre
 	if len(hosts) == 0 {
 		rl.DrawText("Searching for hosts...", 80, 120, 20, rl.Gray)
 		// Show scanning animation
-		dots := "."
-		for i := 0; i < (*refreshTimer/30)%3; i++ {
-			dots += "."
-		}
-		rl.DrawText(dots, 280, 120, 20, rl.Gray)
+		dots := strings.Repeat(".", 1+(*refreshTimer/30)%3)
+		rl.DrawText(dots, int32(sw*0.45), int32(sh*0.13), int32(max(sh*0.025, 16)), rl.Gray)
 	} else {
-		rl.DrawText(fmt.Sprintf("Found %d host(s):", len(hosts)), 80, 110, 18, rl.DarkGray)
+		rl.DrawText(fmt.Sprintf("Found %d host(s):", len(hosts)), int32(sw*0.1), int32(sh*0.11), int32(max(sh*0.025, 16)), rl.DarkGray)
 		for i, host := range hosts {
-			hostRect := rl.NewRectangle(80, float32(140+i*40), 340, 30)
+			hostH := max(sh*0.07, 44)
+			hostRect := rl.NewRectangle(sw*0.1, sh*0.16+float32(i)*hostH*1.25, sw*0.8, hostH)
 			rl.DrawRectangleRec(hostRect, rl.LightGray)
 			rl.DrawRectangleLinesEx(hostRect, 2, rl.DarkGray)
-			rl.DrawText(host, int32(hostRect.X+5), int32(hostRect.Y+5), 18, rl.Black)
+			hostFont := int32(max(sh*0.025, 16))
+			rl.DrawText(host, int32(hostRect.X+10), int32(hostRect.Y+(hostRect.Height-float32(hostFont))/2), hostFont, rl.Black)
 		}
 	}
 
-	// Buttons
-	scanRect := rl.NewRectangle(80, 340, 120, 30)
-	manualRect := rl.NewRectangle(210, 340, 120, 30)
-	backRect := rl.NewRectangle(340, 340, 80, 30)
+	// Back button (proportional to screen height so the hit area matches the
+	// drawn rectangle and stays comfortable to tap).
+	btnH := max(sh*0.06, 46)
+	btnY := sh * 0.72
+	backW := sw * 0.3
+	backRect := rl.NewRectangle((sw-backW)/2, btnY, backW, btnH)
 
-	rl.DrawRectangleRec(scanRect, rl.LightGray)
-	rl.DrawRectangleRec(manualRect, rl.LightGray)
 	rl.DrawRectangleRec(backRect, rl.LightGray)
 
-	rl.DrawText("Scan TCP", int32(scanRect.X+10), int32(scanRect.Y+5), 20, rl.Black)
-	rl.DrawText("Manual IP", int32(manualRect.X+10), int32(manualRect.Y+5), 20, rl.Black)
-	rl.DrawText("Back", int32(backRect.X+10), int32(backRect.Y+5), 20, rl.Black)
+	btnFont := int32(max(sh*0.028, 18))
+	rl.DrawText("Back", int32(backRect.X+(backRect.Width-float32(rl.MeasureText("Back", btnFont)))/2),
+		int32(backRect.Y+(backRect.Height-float32(btnFont))/2), btnFont, rl.Black)
 
 	if rl.IsMouseButtonPressed(rl.MouseLeftButton) {
 		mouse := rl.GetMousePosition()
 
 		// Check if a host was clicked
 		for i, host := range hosts {
-			hostRect := rl.NewRectangle(80, float32(140+i*40), 340, 30)
-			if rl.CheckCollisionPointRec(mouse, hostRect) {
-				charType := ShowCharacterSelect()
+			hostH := max(sh*0.07, 44)
+			hostRect := rl.NewRectangle(sw*0.1, sh*0.16+float32(i)*hostH*1.25, sw*0.8, hostH)
+			if hit(hostRect, mouse) {
+				charType, confirmed := ShowCharacterSelect()
+				if !confirmed {
+					break
+				}
 				*chosenChar = charType
 				connectToHost(host, string(charType))
 				*selected = true
@@ -133,74 +213,15 @@ func drawDiscoveryView(selected *bool, manualMode *bool, manualIP *string, refre
 			}
 		}
 
-		if !*selected {
-			if rl.CheckCollisionPointRec(mouse, scanRect) {
-				// Start TCP scan as fallback
-				log.Println("[Menu] Starting TCP scan of local network...")
-				network.ClearDiscoveredHosts()
-				go network.StartTCPScan(9000)
-				*scanning = true
-			} else if rl.CheckCollisionPointRec(mouse, manualRect) {
-				*manualMode = true
-			} else if rl.CheckCollisionPointRec(mouse, backRect) {
-				*manualMode = false
-			}
-		}
-	}
-}
-
-// drawManualInput shows manual IP input field
-func drawManualInput(manualIP *string, selected *bool, chosenChar *entity.CharacterType) {
-	rl.DrawText("Enter Host IP Address:", 80, 80, 20, rl.Black)
-	rl.DrawText("Port 9000 will be used automatically", 80, 105, 16, rl.DarkGray)
-
-	// IP input field
-	ipRect := rl.NewRectangle(80, 140, 300, 30)
-	rl.DrawRectangleRec(ipRect, rl.White)
-	rl.DrawRectangleLinesEx(ipRect, 2, rl.Black)
-
-	// Show entered IP with blinking cursor
-	displayText := *manualIP
-	if (time.Now().UnixNano()/500000000)%2 == 0 {
-		displayText += "_"
-	}
-	rl.DrawText(displayText, int32(ipRect.X+5), int32(ipRect.Y+5), 20, rl.Black)
-
-	// Capture keyboard input
-	key := rl.GetCharPressed()
-	for key > 0 {
-		if key >= 32 && key <= 126 {
-			*manualIP += string(rune(key))
-		}
-		key = rl.GetCharPressed()
-	}
-	if rl.IsKeyPressed(rl.KeyBackspace) && len(*manualIP) > 0 {
-		*manualIP = (*manualIP)[:len(*manualIP)-1]
-	}
-
-	// Buttons
-	connectRect := rl.NewRectangle(80, 190, 100, 30)
-	backRect := rl.NewRectangle(190, 190, 100, 30)
-
-	rl.DrawRectangleRec(connectRect, rl.LightGray)
-	rl.DrawRectangleRec(backRect, rl.LightGray)
-
-	rl.DrawText("Connect", int32(connectRect.X+10), int32(connectRect.Y+5), 20, rl.Black)
-	rl.DrawText("Back", int32(backRect.X+10), int32(backRect.Y+5), 20, rl.Black)
-
-	if rl.IsMouseButtonPressed(rl.MouseLeftButton) {
-		mouse := rl.GetMousePosition()
-		if rl.CheckCollisionPointRec(mouse, connectRect) {
-			ip := *manualIP
-			if ip == "" {
-				ip = "127.0.0.1"
-			}
-			charType := ShowCharacterSelect()
-			*chosenChar = charType
-			connectToHost(ip + ":9000", string(charType))
-			*selected = true
-		} else if rl.CheckCollisionPointRec(mouse, backRect) {
-			*manualIP = ""
+		if !*selected && hit(backRect, mouse) {
+			// Leaving the list must also tear down discovery, otherwise the
+			// scanners keep running behind the main menu and a later Join
+			// starts a second set of them.
+			log.Println("[Menu] Leaving discovery view")
+			network.StopDiscovery()
+			network.ClearDiscoveredHosts()
+			*scanning = false
+			*joinMode = false
 		}
 	}
 }
@@ -209,8 +230,10 @@ func drawManualInput(manualIP *string, selected *bool, chosenChar *entity.Charac
 func startHost(selected *bool, playerSpawn rl.Vector2, charType string) {
 	log.Println("[Menu] Host selected")
 	network.Role = "host"
-	network.LocalPlayerID = generatePlayerID()
+	network.LocalPlayerID = ensureLocalPlayerID()
 	color := entity.PresetColors[rand.Intn(len(entity.PresetColors))]
+	network.LocalPlayerColor = color
+	network.LocalPlayerCharacter = charType
 	log.Printf("[Menu] Host ID: %s, Color: %s", network.LocalPlayerID, color)
 
 	network.UpdatePlayerState(network.PlayerState{
@@ -237,13 +260,13 @@ func startHost(selected *bool, playerSpawn rl.Vector2, charType string) {
 	stopResponder := make(chan struct{})
 	go network.StartQueryResponder(9000, stopResponder)
 
-	network.CurrentHost.BroadcastStateUpdate()
+	network.CurrentHost.BroadcastRoster()
 	*selected = true
 }
 
 func connectToHost(addr string, charType string) {
 	network.Role = "client"
-	playerID := generatePlayerID()
+	playerID := ensureLocalPlayerID()
 	network.LocalPlayerID = playerID
 	network.ServerAddress = addr
 	go func() {
@@ -254,6 +277,10 @@ func connectToHost(addr string, charType string) {
 		}
 		network.CurrentClient = c
 		color := entity.PresetColors[rand.Intn(len(entity.PresetColors))]
+		// Cached so a later reconnect (network/reconnect.go) can resend the
+		// exact same identity instead of asking the player to pick again.
+		network.LocalPlayerColor = color
+		network.LocalPlayerCharacter = charType
 		joinMsg := network.Message{
 			Type: network.MsgJoin,
 			Payload: network.MustMarshal(network.JoinPayload{
@@ -264,6 +291,19 @@ func connectToHost(addr string, charType string) {
 		}
 		network.SendMessage(joinMsg)
 	}()
+}
+
+// drawDisconnectedNotice explains why the player is looking at the menu
+// again instead of the match they were just in: reconnecting is a state the
+// player understood ("Reconectando...", reconnect_overlay.go), but not
+// hearing about giving up would just look like the app quietly kicked them.
+func drawDisconnectedNotice() {
+	sh := float32(rl.GetScreenHeight())
+	sw := float32(rl.GetScreenWidth())
+	msg := "Nao foi possivel reconectar ao host. A partida foi encerrada."
+	size := int32(max(sh*0.03, 18))
+	width := rl.MeasureText(msg, size)
+	rl.DrawText(msg, int32(sw/2)-width/2, int32(sh*0.28), size, rl.Maroon)
 }
 
 func generatePlayerID() string {

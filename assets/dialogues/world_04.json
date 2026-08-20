@@ -1,0 +1,28 @@
+{
+  "map": "assets/maps/world_04.json",
+  "scripts": [
+    {
+      "id": "world_04_abertura",
+      "trigger": "on_map_start",
+      "lines": [
+        {"speaker": "", "portrait": "", "text": "O portão se fecha atrás do grupo. O saguão do castelo respira um frio de pedra e água."},
+        {"speaker": "Arqueiro", "portrait": "arqueiro", "text": "Não cheguem perto dos córregos. Há algo nos observando de cada margem."}
+      ]
+    },
+    {
+      "id": "world_04_climax",
+      "trigger": "on_last_stand",
+      "lines": [
+        {"speaker": "Arqueiro", "portrait": "arqueiro", "text": "As sentinelas estão fora do alcance... então vou levar a luz até elas."},
+        {"speaker": "", "portrait": "", "text": "Duas flechas celestiais rasgam o saguão e alcançam as ilhas no meio da água."}
+      ]
+    },
+    {
+      "id": "world_04_saida",
+      "trigger": "on_waves_cleared",
+      "lines": [
+        {"speaker": "", "portrait": "", "text": "Com as sentinelas destruídas, a grande escadaria volta a ficar silenciosa."}
+      ]
+    }
+  ]
+}

@@ -16,5 +16,8 @@ func (h *Host) UpdatePlayerState(state PlayerState) {
 		p.VelY = state.VelY
 	}
 	h.playersMutex.Unlock()
-	h.BroadcastStateUpdate()
+	// NAO transmite daqui, pelo mesmo motivo que o handler de MsgInput nao
+	// transmite: o laco do jogo chama isto A CADA QUADRO para o jogador do
+	// proprio host, entao um broadcast aqui publicaria a 60 Hz e anularia por
+	// completo a taxa de snapshot (broadcast_rate.go). Quem publica e o tique.
 }

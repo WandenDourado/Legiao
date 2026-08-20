@@ -2,6 +2,13 @@ package entity
 
 import rl "github.com/gen2brain/raylib-go/raylib"
 
+// WalkRowFor is walkRowForDirection exported for callers outside the
+// package that animate a character without a *Player — a bot's PlayerState
+// has no Player to call updateAnimation on.
+func WalkRowFor(dir rl.Vector2) int {
+	return walkRowForDirection(dir)
+}
+
 func walkRowForDirection(dir rl.Vector2) int {
 	absX := abs32(dir.X)
 	absY := abs32(dir.Y)

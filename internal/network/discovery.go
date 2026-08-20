@@ -22,10 +22,20 @@ const (
 
 var (
 	// discoveredHosts stores IPs found via discovery (client-side)
-	discoveredHosts   []string
-	discoveredMutex   sync.Mutex
-	discoveryRunning  bool
-	discoveryStopChan chan struct{}
+	discoveredHosts []string
+	discoveredMutex sync.Mutex
+
+	// Per-mechanism run/stop state so the listener, query sender, and TCP scan
+	// can run concurrently. A single shared flag previously let only the first
+	// scheduled goroutine start, silently disabling the other two.
+	listenerRunning  bool
+	listenerStopChan chan struct{}
+
+	queryRunning  bool
+	queryStopChan chan struct{}
+
+	scanRunning  bool
+	scanStopChan chan struct{}
 
 	// queryConn is the UDP socket for sending queries and receiving responses
 	queryConn *net.UDPConn
@@ -72,23 +82,23 @@ func StartDiscoveryBroadcaster(port int, stopChan chan struct{}) {
 
 // StartDiscoveryListener listens for UDP broadcast announcements from hosts.
 func StartDiscoveryListener() {
-	if discoveryRunning {
+	if listenerRunning {
 		return
 	}
-	discoveryRunning = true
-	discoveryStopChan = make(chan struct{})
+	listenerRunning = true
+	listenerStopChan = make(chan struct{})
 
 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", DiscoveryPort))
 	if err != nil {
 		log.Printf("[Discovery] Failed to resolve listen address: %v", err)
-		discoveryRunning = false
+		listenerRunning = false
 		return
 	}
 
 	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {
 		log.Printf("[Discovery] Failed to listen on discovery port: %v", err)
-		discoveryRunning = false
+		listenerRunning = false
 		return
 	}
 
@@ -100,7 +110,7 @@ func StartDiscoveryListener() {
 
 		for {
 			select {
-			case <-discoveryStopChan:
+			case <-listenerStopChan:
 				log.Printf("[Discovery] Stopped listening")
 				return
 			default:
@@ -128,24 +138,24 @@ func StartDiscoveryListener() {
 // StartQuerySender sends UDP query packets to discover hosts.
 // Runs in a goroutine to avoid blocking.
 func StartQuerySender(gamePort int) {
-	if discoveryRunning {
+	if queryRunning {
 		return
 	}
-	discoveryRunning = true
-	discoveryStopChan = make(chan struct{})
+	queryRunning = true
+	queryStopChan = make(chan struct{})
 
 	// Create a UDP socket for receiving responses
 	addr, err := net.ResolveUDPAddr("udp", ":0")
 	if err != nil {
 		log.Printf("[Discovery] Failed to resolve query address: %v", err)
-		discoveryRunning = false
+		queryRunning = false
 		return
 	}
 
 	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {
 		log.Printf("[Discovery] Failed to create query socket: %v", err)
-		discoveryRunning = false
+		queryRunning = false
 		return
 	}
 	queryConn = conn
@@ -182,7 +192,7 @@ func StartQuerySender(gamePort int) {
 				if err != nil {
 					log.Printf("[Discovery] Query send error: %v", err)
 				}
-			case <-discoveryStopChan:
+			case <-queryStopChan:
 				log.Printf("[Discovery] Stopped query sender")
 				return
 			}
@@ -196,7 +206,7 @@ func receiveQueryResponses(conn *net.UDPConn) {
 
 	for {
 		select {
-		case <-discoveryStopChan:
+		case <-queryStopChan:
 			return
 		default:
 			conn.SetReadDeadline(time.Now().Add(QueryTimeout))
@@ -282,23 +292,31 @@ func StartQueryResponder(gamePort int, stopChan chan struct{}) {
 
 // StartTCPScan scans the local subnet for hosts running on the game port.
 func StartTCPScan(gamePort int) {
-	if discoveryRunning {
+	if scanRunning {
 		return
 	}
-	discoveryRunning = true
-	discoveryStopChan = make(chan struct{})
+	scanRunning = true
+	scanStopChan = make(chan struct{})
 
 	log.Printf("[Discovery] Starting TCP scan for hosts on port %d", gamePort)
 
 	go func() {
 		defer func() {
-			discoveryRunning = false
+			scanRunning = false
 		}()
 
 		localIP := getOutboundIP()
 		if localIP == "127.0.0.1" {
-			log.Printf("[Discovery] Cannot determine local subnet, skipping TCP scan")
-			return
+			// Outbound probe failed (no default route / restricted data).
+			// Fall back to the first non-loopback interface address so the
+			// scan can still run on Android without mobile data.
+			if fallback := firstLANIP(); fallback != "" {
+				localIP = fallback
+				log.Printf("[Discovery] Outbound probe failed, using interface IP %s", localIP)
+			} else {
+				log.Printf("[Discovery] Cannot determine local subnet, skipping TCP scan")
+				return
+			}
 		}
 
 		ipParts := strings.Split(localIP, ".")
@@ -315,7 +333,7 @@ func StartTCPScan(gamePort int) {
 		stopped := false
 		for i := 1; i <= 254 && !stopped; i++ {
 			select {
-			case <-discoveryStopChan:
+			case <-scanStopChan:
 				stopped = true
 				continue
 			default:
@@ -361,6 +379,41 @@ func getOutboundIP() string {
 	return localAddr.IP.String()
 }
 
+// firstLANIP returns the first non-loopback IPv4 address found on any network
+// interface. Used as a fallback when the outbound probe (getOutboundIP) fails
+// so the TCP scan can still run.
+func firstLANIP() string {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip == nil || ip.IsLoopback() {
+				continue
+			}
+			if ip4 := ip.To4(); ip4 != nil {
+				return ip4.String()
+			}
+		}
+	}
+	return ""
+}
+
 // addDiscoveredHost adds a host to the discovered list (avoiding duplicates).
 func addDiscoveredHost(hostInfo string) {
 	discoveredMutex.Lock()
@@ -393,14 +446,25 @@ func ClearDiscoveredHosts() {
 
 // StopDiscovery stops all discovery mechanisms.
 func StopDiscovery() {
-	if discoveryStopChan != nil {
-		close(discoveryStopChan)
-		discoveryRunning = false
+	if listenerStopChan != nil {
+		close(listenerStopChan)
+		listenerStopChan = nil
+	}
+	if queryStopChan != nil {
+		close(queryStopChan)
+		queryStopChan = nil
 		if queryConn != nil {
 			queryConn.Close()
 			queryConn = nil
 		}
 	}
+	if scanStopChan != nil {
+		close(scanStopChan)
+		scanStopChan = nil
+	}
+	listenerRunning = false
+	queryRunning = false
+	scanRunning = false
 	// Also stop query responder if running
 	if queryResponderRunning {
 		queryResponderRunning = false

@@ -1,61 +1,315 @@
-01/05/2026 14:50 - Implemented Wi-Fi multiplayer networking (host/join UI, player colors, documentation).
-01/05/2026 16:30 - Fixed multiplayer synchronization: host now maintains authoritative state, clients process state updates correctly, players render with colors, absolute position sync replaces broken delta movement, new clients receive current state on connect.
-01/05/2026 19:25 - Final fix: Host now properly registers itself in authoritative state via StartHost(), BroadcastStateUpdate() confirmed working, clients can now see host and all connected players with correct positions and colors.
-01/05/2026 20:45 - Cross-platform networking fix: Changed client connection from hardcoded 127.0.0.1 to user-input IP address in join menu. Added IP input dialog in menu.go. Updated documentation for cross-platform play.
-03/05/2026 10:30 - Automatic host discovery via UDP broadcast: Clients no longer need to type the host IP. Host broadcasts on UDP port 9001, clients auto-discover and show a list. Added network/discovery.go with StartDiscoveryBroadcaster() and StartDiscoveryListener(). Updated menu.go to show discovered hosts.
-03/05/2026 11:15 - Fixed Android client discovery: Added CHANGE_WIFI_MULTICAST_STATE permission to AndroidManifest.xml. Implemented hybrid discovery: UDP broadcast (Desktop), TCP scan fallback (Android), and manual IP backup. Updated menu.go with 3-mode join screen (auto/manual/scan). Added StartTCPScan() to discovery.go.
-04/05/2026 10:30 - Fixed Android crash: Removed Java code (MulticastLock) that was causing ClassNotFoundException. Fixed StartQuerySender() ticker bug - moved ticker inside goroutine to prevent premature stop. Updated AndroidManifest.xml to hasCode="false". Verified desktop and Android builds working.
-04/05/2026 10:30 - Fixed Android crash: Removed Java code (MulticastLock) that was causing ClassNotFoundException. Fixed StartQuerySender() ticker bug - moved ticker inside goroutine to prevent premature stop. Updated AndroidManifest.xml to hasCode="false". Verified desktop and Android builds working.
-04/05/2026 15:00 - Implemented enemy spawning system with AI (blood red #8B0000 enemies), health bars, combat mechanics (attack button + projectiles), game over/respawn logic (15s respawn with 15% health). Added HUD elements (health bar, attack button). Extended network protocol with enemy/projectile sync, combat events, and game state messages. Host now runs authoritative simulation for enemies and projectiles. Updated game loop with 4-phase structure (input, local update, host simulation, render).
-04/05/2026 16:30 - Correção de bugs: (1) Agora é possível andar com teclado (WASD) e atirar com mouse/joystick simultaneamente; (2) Inimigo só causa dano uma vez por segundo (AttackCooldown=1s) em vez de causar Game Over instantâneo; (3) Melhorada descoberta de hosts - TCP scan inicia automaticamente ao abrir menu de join, aumentando compatibilidade com Android.
-04/05/2026 17:30 - Correção de bugs (parte 2): (1) Barra de vida agora atualiza corretamente no cliente quando jogador leva dano (sync via RemotePlayers); (2) Botão de ataque no Android corrigido - agora usa IsMouseButtonDown permitindo toque contínuo, resolvendo conflito com joystick virtual.
-10/05/2026 14:00 - Refactor: Extracted responsibilities from loop.go into dedicated files (input_handler.go, renderer.go, message.go, controls_android.go, controls_desktop.go). Fixed missing entity. prefix on RespawnDelay/RespawnHealthPercent references. Rewrote coding_patterns.md (conventions only, no structure docs). Created project_structure.md from actual filesystem. Rewrote documentation_rules.md as AI agent entry point.
-10/05/2026 15:30 - Camera system and 5x map expansion: Added rl.Camera2D that follows the player with rigid tracking and edge clamping. World bounds calculated at runtime (5× screen size) via internal/world/bounds.go — no compile-time map constants. Player movement clamped to world bounds. DrawFrame wraps world entities in BeginMode2D/EndMode2D; HUD and touch controls remain in screen space. Added grid background and map boundary visualization. Created doc/camera.md, updated project_structure.md and documentation_rules.md.
-10/05/2026 16:00 - Fixed desktop mouse click attacks after camera introduction: rl.GetMousePosition() returns screen-space coordinates but the attack system expects world-space. Added cam Camera2DState parameter to ProcessInput and converted mouse position via rl.GetScreenToWorld2D(screenPos, cam.Camera) before passing to HandleAttack/SendMessage. Updated doc/camera.md with mouse coordinate conversion rule.
-10/05/2026 16:30 - Fixed projectiles only firing within old pre-camera screen area: Projectile.Update() bounds check used hardcoded ScreenWidth/ScreenHeight (1280x720) instead of world bounds, destroying any projectile aimed outside the old screen rectangle. Host.getRandomSpawnPosition() and system/spawn.go getRandomSpawnPosition() also hardcoded 1280x720 for enemy spawn positions. Replaced all three with world.Bounds — added WorldBounds field to Host and EntityManager, passed bounds through Projectile.Update(), and wired bounds from loop.go into the host entity manager.
-17/07/2026 12:00 - Added "Bola de Fogo" (Fireball) skill, fully procedural (no sprites — rl.DrawCircleGradient + additive blending + particle system). Desktop: Q fires toward mouse. Android: new on-screen skill button above the attack button. Authoritative host sim: entity.Fireball spawns, on impact (enemy/obstacle) it explodes (one-shot particles) and leaves a ground fire zone (5s, 20 DPS, FireGroundDamagePerSec=20) damaging enemies and players inside. Files: entity/particle.go, entity/fireball.go, entity/explosion.go, entity/fire_ground.go, entity/fireball_manager.go; network/host_fireball.go (HandleSkill, handleFireballTick), MsgSkill/MsgFireEvent protocol + client render path (network.ClientFireEM). Constants centralized in entity (FireballSpeed, FireballExplosionRadius/Damage, FireGroundDamagePerSec).
-17/07/2026 13:30 - Fireball tuning pass: fireball radius 10x (14->140), ground-fire area 10x (55->550) and explosion radius 10x (70->700); added FireballRange (900) so the projectile explodes automatically at max range even with no enemy collision (tracked via Fireball.Origin/Traveled in Update).
-17/07/2026 14:00 - Fireball bug fixes: (1) fireball at max range was silently removed by EntityManager.UpdateFire before StepFireballs could explode it — split visuals (AdvanceVisual) from life/death (Update) so only StepFireballs owns removal+explosion+ground fire, so it now explodes/creates the burning area even with no enemy hit; (2) fire no longer damages players (self or allies) — removed applyAreaPlayerDamage from handleFireballTick, leaving fire damage to monsters only (entity.applyEnemyAreaDamage).
-10/05/2026 16:30 - Audited DrawFrame BeginMode2D/EndMode2D boundary: Confirmed all world-space draws (grid, map boundary, players, enemies, projectiles) are inside BeginMode2D and all screen-space draws (health bar, player count, server address, respawn timer, game over, Android controls) are outside. Structure is correct. Updated doc/camera.md with explicit per-function audit table and hardcoded screen dimension removal documentation.
-10/05/2026 17:00 - Fixed projectiles not firing at all: WorldBounds was assigned to host entity manager BEFORE ShowMenu(), but network.CurrentHost is created inside ShowMenu(). The if-check saw nil and skipped the assignment, leaving WorldBounds at zero value (0,0). Every projectile was immediately destroyed on first Update() because all positions fall outside a (0,0)-(0,0) world. Fixed by moving the bounds assignment to after ShowMenu() returns. Added initialization order warning to doc/camera.md.
-10/05/2026 17:00 - Fixed health bar not rendering: DrawHealthBar used hardcoded pixel dimensions (200×20 bar, font size 20) designed for 1280×720. In fullscreen at native monitor resolution, this bar was effectively invisible. Replaced all hardcoded values with screen-proportional dimensions: barWidth = sw*0.20, fontSize = max(sw*0.015, 14). Added "Screen-relative UI" rule to coding_patterns.md.
-11/05/2026 18:00 - Tilemap rendering fix and loop.go refactor:
-  - Fixed map not rendering: replaced fragmented BeginMode2D/EndMode2D blocks (one per layer draw) with a single `DrawWithCamera` call that renders bottom layers, entities, and top layers inside ONE camera block.
-  - Fixed camera not following player: caused by the same fragmented blocks — entity draws happened outside any camera transform. Now all world draws are inside the single block.
-  - Extracted `resolveCollision` from loop.go into `internal/game/collision.go`.
-  - Extracted inline tilemap loading into `loadMap()` helper in loop.go.
-  - Added `rl.IsTextureValid()` check in `MapRenderer.Load()` with warning logs for failed texture loads.
-  - Updated `doc/project_structure.md` with `internal/tilemap/` package.
-  - Updated `doc/camera.md` DrawFrame audit to reflect `DrawWithCamera` pipeline.
-  - All files under 150-line limit.
-11/05/2026 19:00 - Fixed tileset texture loading and world bounds:
-  - Fixed .tsx image path resolution: image source in .tsx is relative to the .tsx file directory, but tilemap.go resolved it relative to the JSON map directory (maps/). Added tsxDir from the loaded .tsx path so e.g. title_set.png resolves to Downloads/title_set.png instead of maps/title_set.png.
-  - Changed world bounds from screen-size multiplier (5× screen) to map-derived pixel dimensions via world.NewBoundsFromMap(). For world_01.json (30x20 tiles at 16x16px) bounds are now 480x320.
-  - Updated loadMap() to return bounds as a third value; removed old world.NewBounds() call from loop.go.
-  - Updated doc/camera.md: bounds now from TiledMap pixel dimensions, not screen multiplier.
-11/05/2026 22:30 - Map replaced with 64×64 tiles and layer name fix:
-  - Replaced world_01.json with world_01.tmj: 30×20 grid at 64×64px tiles = 1920×1280 pixel world. Combined tileset (ground + objects in single title_set.png). TiledMap loader handles .tmj identically to .json.
-  - Fixed layer name mismatch in renderer.go: DrawWithCamera used "objects" and "objetcs_top" but the map only has "ground" and "objetcs". Changed to ("objetcs", "objetcs") so ground renders below entities and objetcs renders above them. Entities were previously hidden behind the objetcs layer.
-  - World bounds auto-derived as 1920×1280 via world.NewBoundsFromMap(30, 20, 64, 64). Player spawn at (640, 360) is within bounds.
-14/05/2026 - Fixed camera shake issue: Removed lerp smoothing from camera system that was causing oscillation/shaking when clamped to world bounds. Camera now follows player position directly each frame with rigid tracking as intended, per camera.md specifications. Updated internal/game/camera.go to remove CameraSmoothFactor constant and lerp logic.
-14/05/2026 - Camera follow issue: Re-investigated camera trembling. Current camera implementation in internal/game/camera.go already uses direct player follow and no lerp smoothing. The previous changelog entry on 14/05/2026 correctly stated that lerp was removed. The trembling persists, indicating a different root cause beyond lerp. No code changes were made to internal/game/camera.go in this session, as it already matches the desired direct follow behavior.
-09/06/2026 - Added portable multi-agent skill structure for Android builds: created `AGENTS.md` as the repository-level skill discovery and MCP/safety entry point; added `skills/legiao-android-build/` with `SKILL.md`, examples, templates, and resources covering debug APK and release AAB workflows; added `mcp/legiao-android-build/` compatibility notes; updated `AGENT.md` and `doc/project_structure.md` to reference the new multi-agent skill structure.
-09/06/2026 - Optimized multi-agent skill discovery docs for token efficiency: shortened `AGENTS.md` to a compact skill index with activation, prerequisites, MCP, safety, and priority only; moved build procedure details exclusively to `skills/legiao-android-build/SKILL.md`; shortened the `AGENT.md` pointer to `AGENTS.md`.
-14/05/2026 - Fixed Android crash after tilemap introduction: App stopped launching on Android (process exited cleanly with code 1). Three root causes: (1) os.ReadFile cannot read APK-bundled assets on Android — tilemap.go and tsx.go used Go's os.ReadFile which reads from filesystem, but APK assets are inside the zip, not on disk. Replaced with rl.OpenAsset() via platform-tagged filereader_desktop.go/filereader_android.go. (2) Map files were in maps/ at project root but Android build only copies assets/ into APK. (3) Tileset .tsx source path used ../../../../Downloads/title_set.tsx. Fix: created filereader_*.go build-tag wrappers, copied maps to assets/maps/, changed tsx source to ../tilesets/title_set.tsx, updated loadMap path, added filepath.Clean(). Verified: full build cycle, app launches and stays running (PID alive via adb, window active via dumpsys). Files: internal/tilemap/filereader_desktop.go, internal/tilemap/filereader_android.go, internal/tilemap/tilemap.go, internal/tilemap/tsx.go, maps/world_01.tmj, maps/world_01.json, assets/maps/world_01.tmj, assets/maps/world_01.json, internal/game/loop.go, doc/android_support.md.
-02/07/2026 - Fixed multiplayer remote sprite/action sync: MsgInput now carries player animation frame/row, sprint flag, and velocity; host stores and rebroadcasts full player snapshots; remote players render with the wizard sprite sheet instead of only circles; clients now process projectile snapshots; host broadcasts empty enemy/projectile snapshots to clear stale remote actions. Files: internal/network/protocol.go, internal/game/loop.go, internal/network/host.go, internal/network/host_player_state.go, internal/network/client.go, internal/network/client_projectiles.go, internal/entity/player_remote.go, internal/game/renderer.go, doc/network.md, doc/networking_fix.md, doc/project_structure.md.
-02/07/2026 - Adjusted enemy spawn locations so monsters no longer appear too close to players: host spawn now samples edge positions 180px outside the map and avoids candidates within 520px of alive players, falling back to the farthest sampled point when needed. Moved host spawn helpers to internal/network/host_spawn.go and matched the auxiliary SpawnSystem edge offset. Files: internal/network/host.go, internal/network/host_spawn.go, internal/system/spawn.go, doc/camera.md, doc/project_structure.md.
-02/07/2026 - Reorganized documentation for token efficiency: consolidated agent instructions into AGENTS.md and removed AGENT.md; added doc/README.md; rewrote source-of-truth docs to be shorter and current; merged obsolete fix journals into android.md, controls.md, network.md, camera.md, and tilemap.md; removed documentation_rules.md, android_support.md, mobile_input.md, networking_fix.md, udp_discovery.md, and running_android.md. Files: AGENTS.md, doc/README.md, doc/android.md, doc/camera.md, doc/coding_patterns.md, doc/controls.md, doc/network.md, doc/overview.md, doc/project_structure.md, doc/running_desktop.md, doc/tilemap.md, doc/changelog.md.
-02/07/2026 - Moved authoritative player start/respawn positions away from the monster edge-spawn area: local player creation, host registration, joining clients, menu state, and respawn now share entity.InitialPlayerSpawn(bounds), which uses the center of the map-derived world bounds. Files: internal/game/loop.go, internal/entity/player.go, internal/entity/player_spawn.go, internal/network/host.go, internal/ui/menu.go, doc/camera.md, doc/changelog.md.
-03/07/2026 - Added `skills/create-character-sprites/` for reference-driven character sprite production: includes one-direction-at-a-time generation workflow, art direction notes for isometric/top-down RPG sprites, validation checklist, metadata format, and Python helpers to validate frames and assemble sprite sheets. Files: AGENTS.md, skills/create-character-sprites/, doc/project_structure.md, doc/changelog.md.
-03/07/2026 - Adjusted `skills/create-character-sprites/` to treat current wizard dimensions as legacy compatibility only and prefer market-oriented sprite production defaults such as 128x192 or 96x128 frame boxes. Files: skills/create-character-sprites/, doc/changelog.md.
-13/07/2026 - Updated `skills/create-character-sprites/` wizard pipeline to require 5 directional rows (`S`, `SW`, `W`, `N`, `NW`), 8 walk frames per direction, and inert staff crystals with no aura/glow/particles unless explicitly requested. Files: skills/create-character-sprites/, doc/changelog.md.
-13/07/2026 - Updated player sprite rendering to consume the `create-character-sprites` wizard output: 128x192 frames, 8 columns, 5 directional rows (`S`, `SW`, `W`, `N`, `NW`), with `E`, `SE`, and `NE` mirrored from the west-facing rows for local and remote players. Files: internal/entity/player.go, internal/entity/player_sprite.go, internal/entity/player_sprite_direction.go, internal/entity/player_remote.go, internal/entity/colors.go, doc/changelog.md.
-2026-07-03 - Added blue wizard walk sprite production bible and first-direction asset workspace.
-2026-07-03 - Adjusted create-character-sprites skill and game codebase to support 5-row sprite sheets (adding NW diagonal walk direction).
-15/07/2026 - Hardened `create-character-sprites` into a compact, verifiable production pipeline: it now slices each 2x4 AI grid into RGBA direction frames with magenta-key removal, validates alpha/transparency/matte leakage, and documents the exact five-row wizard export contract. Files: skills/create-character-sprites/, doc/changelog.md.
-15/07/2026 - Added renderer preflight, despill/matte-range validation, bounded foot-anchor normalization, baseline checks, and GIF/contact-sheet animation review to `create-character-sprites`; the guide now includes an explicit eight-pose walk plan. Files: skills/create-character-sprites/, doc/changelog.md.
-- Added character selection screen in the menu and generalized sprite rendering logic to support multiple characters via a new CharacterDef registry.
-16/07/2026 - Made `create-character-sprites` character-agnostic and added `skills/install-character-sprites/` to validate, register, and expose generated sprite sheets in the existing Legiao character selection.
-16/07/2026 - Character selection now renders each character's saved creation reference from `assets/sprites/<character-id>/reference.png`, falling back to the south-facing sprite frame for legacy entries.
-17/07/2026 - Installed the selectable Sacerdotisa character (`sacerdotisa`) with its validated five-row walk sheet and character-select reference asset.
-17/07/2026 - Hardened character-sprite production with true magenta keying, transparent-border/scale/pivot validation, mirror-safe five-row metadata, and phase-based parallel workers; added per-character render scale so detailed sprites can display larger without changing collision size.
+# Changelog
+
+## 2026-08-20 — Trava de uma via da arena (mapa 5) agora vale para bots
+
+`arena_gate.go` corrigia a posição só do jogador local; bots voltavam ao
+corredor porque ninguém aplicava a regra a um corpo que só o host move.
+`network.SetArenaLock` publica a zona por quadro (padrão de
+`SetPartyPortals`), `botRuntime.arenaLocked` aplica o mesmo clamp por bot no
+host, e `Intent.Dest` ao sul da soleira é projetado de volta, descartando a
+rota velha. De brinde, `resolveBotMove` para de dar passe livre a um bot
+encravado num footprint que acabou de religar (o portão de saída,
+`SetFootprintsEnabledOverlapping`): empurra para a célula livre mais próxima
+antes de resolver o passo, em vez de deixá-lo atravessar parede. Ver
+`doc/tilemap.md` "Arena de mão única".
+
+## 2026-08-20 — Recarga da Rajada de Flechas: 1,5 s -> 6 s
+
+A Q do Arqueiro recarregava quatro vezes mais rapido que a Bola de Fogo, que e
+a habilidade equivalente do Mago. Com o bot jogando a classe ficou evidente: a
+rajada saia quase sem intervalo, porque a recarga quase sempre permitia.
+`skill.ArrowVolleyCooldown` passa a 6.0, a mesma regua de `FireballCooldown`.
+Vale para humano e bot — o portao e o mesmo (`Host.beginSkillCooldown`).
+Tabela de recargas em `doc/combat_rules.md` atualizada.
+
+## 2026-08-20 — Navegacao de bots e monstros (fases 1-5)
+
+Bots empurrando arvore a caminho do portal, monstros socando a cerca do
+mapa 3: os dois decidiam sem mapa, so "esta caixa colide aqui?". Ver
+`doc/plan_navegacao_bots_monstros.md`.
+
+- **Fase 1**: `internal/network/host_bot_move.go` trocou `collision.Resolve`
+  por `collision.ResolveDetour` com direcao comprometida (`botRuntime.detourDir`)
+  — o remendo imediato, sem malha.
+- **Fase 2**: pacote novo `internal/nav` (puro — so `collision`, `world`,
+  `rl.Vector2`): malha de 32px derivada da colisao, A* octil sem cortar
+  quina, suavizacao por linha de visao, `Follower` por agente, orcamento de
+  8 buscas/quadro compartilhado.
+- **Fase 3**: bots navegam pela malha. `bot.Intent` trocou `Move rl.Vector2`
+  por `Dest`/`HasDest`/`Push` — o cerebro diz PARA ONDE, `host_bot_tick.go`
+  (via `nav.Follower`) decide POR ONDE. `EntityManager.Nav *nav.Grid`, irmao
+  de `Solid`.
+- **Fase 4**: monstros so consultam a malha quando `Enemy.moveTowardTarget`
+  detecta, por uma JANELA de distancia real (nao o `collision.Progressed`
+  por passo — esse continua contando como "progresso" um monstro deslizando
+  ao longo de uma face sem se aproximar do alvo de verdade), que a
+  distancia ao alvo nao encolheu por `FoeStuckBefore` (0,4s). Investe direto
+  por padrao, como antes; contorna so quando bater prova que o rumo direto
+  nao funciona.
+- **Fase 5**: `Host.RebuildNavArea` reconstroi so a area do portao da arena
+  quando ele abre/fecha (`game/arena_gate.go`), em vez da malha inteira.
+  Overlay de depuracao **F4**: malha (livre/bloqueada) e rota de cada bot e
+  monstro (`game/nav_debug.go`).
+- `nav.Follower` reancora no waypoint mais distante ainda visivel antes de
+  pagar por um replan inteiro, para sobreviver a um empurrao de
+  `ResolveEnemyOverlap` sem perder a rota.
+- Testes novos: `internal/nav` (caminho existe/nao existe, sem cortar
+  quina, `RebuildArea`, `NearestWalkable`, orcamento, benchmarks de
+  `Build`/`FindPath` na escala do `world_05`); `internal/entity` (monstro
+  atras de barricada em L, matilha de 20 atravessando um vao distante,
+  monstro em campo aberto nunca consulta a malha); `internal/network`
+  (bot contornando arvore, bot usando a malha quando o vao esta longe,
+  `RebuildNavArea` seguindo o portao).
+
+## 2026-08-20 — A matilha do `world_02` nao acaba antes do climax
+
+Relato do Gui: no mapa 2 os jogadores estavam ELIMINANDO a ultima horda antes
+do climax comecar. A corrida terminava, o mapa ficava limpo e a cena do
+Necromante nunca tocava — a fase liberava o portal sem entregar a suprema.
+
+- `world02Waves`, horda 3 ("a matilha"): `Endless: true`. Mesmo contrato do
+  climax do mapa 3 e da horda 5 do mapa 5 — enquanto `LastStandDone()` for
+  falso, a composicao volta inteira para a fila cada vez que esvazia. Depois do
+  resgate a reposicao para, o que sobrou em campo fica finito, e matar o ultimo
+  conclui a corrida e libera o portal.
+- A composicao (12 slime + 84 lobo) deixa de ser um TOTAL e passa a ser a
+  mistura de reposicao. `MaxConcurrent` 42 continua sendo o teto de pressao: o
+  ritmo nao muda, o fim e que nao chega.
+- `TestClimaxWaveWaitsForTheRescue` (novo, `wave_runs_test.go`): para todo mapa
+  com janela `ClimaxWindowWaveIndex`, a horda declarada em `FromWave` tem de
+  ser a ultima da corrida E tem de se repor. Uma horda finita maior parece a
+  mesma coisa e nao e — este e o teste que reprova a proxima tentativa de
+  "subir a dificuldade" trocando `Endless` por numero.
+- `TestWorld02HasTwoWaves` -> `TestWorld02HasThreeWaves`: o teste ainda cobrava
+  duas hordas, de antes de a horda 2 (desgaste) existir.
+
+## 2026-08-20 — Travessia de portal: quem entra some e espera
+
+- Corrigida a travessia de portal com bots no grupo: um bot entrando e
+  saindo do retângulo o tempo todo impedia "todos dentro ao mesmo tempo" de
+  ficar verdadeiro. Agora quem pisa na zona do portal (humano ou bot) some
+  da tela e congela até o grupo inteiro estar dentro, liberando o retângulo
+  para os demais. Novo `PlayerState.InPortal` (estado de tique, como
+  `IsDead`), decidido pelo host em `Host.tickPortalPresence`
+  (`internal/network/host_portal_presence.go`) contra os retângulos que
+  `game.UpdatePortal` publica via `Host.SetPartyPortals`
+  (`internal/network/host_bot_portal.go`, que trocou de guardar só o centro
+  para guardar os retângulos inteiros). `tickBots` pula por inteiro quem
+  está `InPortal`; o humano local congela via `network.LocalPlayerInPortal`
+  em `game.ProcessInput`, com ESC/botão SAIR (`game/portal_cancel.go`,
+  `ui/portal_wait.go`) para cancelar. `bot.SeekPortal` parou de usar
+  separação entre aliados — o portal só existe com a fase já limpa, então
+  não há golpe em área para evitar ali, e a separação era o que empurrava os
+  bots para fora do mesmo retângulo pequeno. `InPortal` é limpo em
+  `PlaceEveryoneAtSpawn` e `ResetStage`. Ver `doc/network.md`,
+  `doc/tilemap.md` e `doc/plan_bots_de_classe.md` §5/§14.
+
+## 2026-08-20 — IA da Sacerdotisa (bot): cura primeiro, ataca depois
+
+- `internal/bot/sacerdotisa.go` reescrito: a mira agora prioriza a reta que
+  atravessa o aliado mais ferido dentro do alcance do tiro (`boltRange`),
+  recusa a reta quando um monstro bloqueia o caminho (ataca o bloqueador
+  em vez disso) e só cai para o alvo mais ameaçador quando ninguém precisa
+  de cura. `backLine` subiu para 420 e ganhou `panicLine` (fuga imediata) e
+  `calmRadius` (sem monstro por perto = janela de recuperação: aproxima dos
+  feridos e atira até encher todos, ou lança Santuário em si mesma se for a
+  ferida). O gatilho do Santuário agora conta ela mesma na soma de feridos e
+  exige proximidade do aglomerado antes de lançar. Ver
+  `doc/plan_bots_de_classe.md` §5.
+
+## 2026-08-20 — Reconexao do cliente: correcao de bugs de compilacao/integracao
+
+- Fechado o gap entre `internal/network/host_absence.go`/`host_rejoin.go`/
+  `reconnect.go` (escritos por outro agente) e o resto da base: adicionados
+  `PlayerState.Absent`/`absentSince`, `TravelPayload.Reconnect` e
+  `ClientConn.superseded` (`protocol.go`, `host.go`), sem os quais o pacote
+  `internal/network` nao compilava. `handleClient` (`host.go`) agora delega
+  `MsgJoin` a `Host.handleJoin` (antes ainda recriava o `PlayerState` do zero
+  a cada join, ignorando o codigo de reconexao) e marca ausencia em vez de
+  apagar o slot no defer, checando `superseded`. `checkGameOver` passou a
+  ignorar jogadores ausentes dos dois lados (nem segura, nem decide sozinho).
+  `game/dialogue.go`'s `partyIsFalling` trocou `GetAllPlayers` por
+  `PresentPlayers`. `UpdateSimulation` ganhou a chamada a `tickAbsence`.
+  Reescritos `Client` (mutex unico para troca de conexao e escrita,
+  `readLoop(conn)` capaz de distinguir erro da conexao ATUAL de uma conexao
+  ja substituida) e criado `keepalive.go` para `setKeepAlive`, ambos exigidos
+  por `reconnect.go` mas nunca implementados. `internal/entity/enemy_manifest_test.go`
+  corrigido para comparar com `reflect.DeepEqual` (struct com slice nao
+  compara com `!=`), bloqueava `go test ./...` do modulo inteiro.
+- `go build ./...` e `go vet ./...` limpos. Os seis testes exigidos pela
+  tarefa de reconexao passam. Falhas remanescentes em `go test ./...`
+  (`internal/game`, `internal/network`, `internal/entity`) sao de outras
+  frentes inacabadas — `world_02.json` invalido, balanceamento de hordas/
+  canhoes/sentinelas do `world_07`, `PlayOrder` da Senhora das Trevas — e
+  fora do escopo desta correcao.
+
+## 2026-08-19 — Barra de vida do aliado no espaco de mundo
+
+- `internal/entity/player_health_bar.go`: `DrawAllyHealthBar` desenha a vida
+  de cada jogador remoto acima do proprio quadro (geometria de `CharacterDef`,
+  nao a do monstro). Mesmos limiares de cor do inimigo (0.5/0.25), paleta mais
+  clara/suave para nao confundir aliado com alvo; 5px de altura, fundo e borda
+  que a barra do monstro nao tem. Chamada em `internal/game/renderer.go`, no
+  laco de `allPlayers`, pulando jogador morto.
+
+## 2026-08-20 — Senhora das Trevas (chefe final do world_05)
+
+- **Arte**: seis folhas em `assets/sprites/enemies/senhora_das_trevas/`
+  (`idle` 8q, `idle_scan`, `cast_loop`, `cast_release`, `attack_windup`,
+  `attack_strike`, 4q cada), 38,8 MB de VRAM, `RenderScale 1.0` — as folhas
+  foram montadas no tamanho de tela, entao o runtime nao reamostra nada.
+  Manifesto emitido por `work/enemy-sprites/senhora-das-trevas/montar_folhas.py`.
+- **Reproducao de animacao** (`internal/entity/enemy_anim_playback.go`): dois
+  conceitos novos no `EnemyAnimDef`. `PlayOrder` separa PASSO de COLUNA, para
+  que uma animacao possa tocar quadros fora de ordem — o `idle_scan` usa
+  (0,1,2,3,2,1) e nao paga pelos quadros do retorno. `OneShot` marca o ciclo que
+  toca uma vez e trava no ultimo quadro. Os dois tem zero value compativel com
+  todo inimigo anterior, que por isso nao mudou.
+- **Maquina de estados de chefe** (`internal/entity/enemy_boss_anim.go`):
+  `enemyAnimFor` decide por velocidade e a chefe tem `Speed 0` — ficaria em idle
+  para sempre. A maquina nova decide por tempo e intencao, com a janela de
+  desvio (`attack_windup`) sendo um LACO com duracao propria em vez de um quadro
+  segurado.
+- **Avanco visual**: o `idle_scan` desloca o DESENHO em ate 46 px e nunca
+  `Position` nem a hitbox. O ciclo de patas foi desenhado no lugar, seguindo
+  `enemy_creation_guide.md` §7.
+- Testes: `internal/entity/senhora_manifest_test.go` amarra a `EnemyDef` ao
+  manifesto e reprova se um `PlayOrder` apontar para coluna inexistente.
+
+## 2026-08-20 — `world_07`, a arena da Senhora das Trevas (passo 1 de 6)
+
+- **Mapa**: `assets/maps/world_07.json`, 40x30 celulas (5120x3840). Sala fechada
+  de castelo: `dark_flagstone` no miolo, `siege_gravel` e `bare_soil` desfazendo
+  o piso na borda (mesma pilha, entao a transicao nao e pintada). Muralha de
+  `fortress_wall` no perimetro, dois portoes fechados a leste e oeste, quatro
+  braseiros. Miolo deliberadamente VAZIO — a auditoria avisa 6 blocos 8x8 sem
+  detalhe e isso e o desenho: e o espaco de desvio dos espinhoes.
+- Auditoria: 100% do piso alcancavel a pe, nenhuma janela 3x3 poluida.
+- **Registro**: `campaignMaps` (setima fase), `waveRuns` (`world07Waves`),
+  `climaxWindows` (janela na horda 1 — a fase inteira e o climax) e
+  `sentryPosts` (dez postos, dos cantos para o meio das paredes).
+- **A horda**: uma so, `Endless`, `Ambush`, 10 slime + 10 lobo + 8 orc, leva
+  inteira a cada 70 s pelos dois portoes (5/5/4 de cada lado), teto de 34 vivos.
+  As gargulas entram por `Sentries`, nao pela composicao — Speed 0 exige posto.
+
+Falta (passos 2 a 6 de `doc/plan_world07_arena.md`): nascer a chefe no
+`boss_anchor`, a barra de chefe, os tres relogios (`host_boss.go`), os espinhoes,
+a nevoa com as isencoes de Area Angelical / Avatar, e o fim da corrida por morte
+da chefe (`EndsWithBoss`).
+
+### Ajuste (mesma data): o kit e de CASTELO, e as gargulas vao para as extremidades
+
+- O grupo ainda esta dentro do castelo, entao o salao usa o mesmo kit do
+  `world_04`/`world_05`: chao de `castle_stone` (14) com `castle_blocks` (11) na
+  faixa do perimetro e `castle_carpet` (13) num tapete que sai da entrada sul e
+  abre no estrado da chefe — numa sala vazia de 5120x3840 o tapete e a unica
+  coisa que diz para onde olhar, e ele aponta para ela. Pecas do
+  `castle_manifest`: paredes com estandarte, dois portoes, duas fileiras de
+  colunas, duas estatuas ladeando o estrado, quatro braseiros.
+- **`paint_terrain.py` nao conhece os materiais de castelo** (as opcoes de
+  `--type` param no 10), entao o chao e escrito direto pelo
+  `work/tiled-map-world07/build_world07.py`. Os quatro materiais formam a
+  TERCEIRA pilha (`terrain_mask.go`) com `edgeWidth` 0,01: eles quase nao
+  desbotam um no outro, que e o certo para chao construido — o tapete tem borda
+  reta, nao serrilhada.
+- **Corrigido `render_map.py`**: o `TERRAIN_TEXTURE` parava no material 10, e o
+  sintoma era um mapa de castelo renderizando com o chao PRETO. O motor sempre
+  soube desenhar 11-14; era so a ferramenta que nao.
+- **Postos de sentinela nas extremidades.** A gargula tem `Speed 0`: onde nasce
+  e onde fica. Os dez postos passaram para as paredes leste e oeste, acima e
+  abaixo de cada portao, guardando a boca por onde a horda entra. A ordem
+  alterna os lados, entao cada horda arma uma a oeste e uma a leste.
+
+### Passo 2 de 6: a chefe nasce e ganha barra propria
+
+- `internal/network/bosses.go`: tabela `bossOfMap` (so o `world_07`), `InstallBoss`
+  na ancora `boss_anchor` do mapa, `RestoreBoss` no reinicio de fase e
+  `updateBossState`, publicado uma vez por quadro. Mesma forma de `waveRuns`,
+  `garrisons` e `sentryPosts` — a FASE declara e o resto so le.
+- `internal/network/boss_state.go`: `BossState` publicado pelo host e lido pelo
+  HUD, igual ao `WaveState`. Host e cliente desenham a mesma barra sem nenhum dos
+  dois ir procurar a criatura no EntityManager.
+- `internal/ui/boss_bar.go`: barra no HUD, em espaco de TELA (regra do
+  `doc/camera.md`), com o nome acima, moldura de ouro envelhecido e marcas a
+  cada 25% — 400 de vida sem subdivisao nao da sensacao de progresso.
+- A barra flutuante da chefe foi suprimida: duas barras para a mesma criatura e
+  ruido, e com trinta inimigos em campo a flutuante e uma entre trinta.
+- `RestoreBoss` entrou no `host_reset.go` pelo motivo CONTRARIO ao das gargulas:
+  sem repor a chefe, a segunda tentativa nao ficaria mais facil, ficaria
+  impossivel de terminar — a corrida daquele mapa so para quando ela cai.
+- **Marcadores da horda renomeados para `enemy_spawn_gate_*`.** Eram
+  `climax_spawn_*`, que e a porta de `StartClimax` (a emboscada roteirizada do
+  mapa 3). `StartWaveRun` monta a corrida a partir de `enemy_spawn_*`, e um mapa
+  sem nenhum simplesmente nao roda horda: a arena teria ficado silenciosa.
+
+### Passos 3 a 6 de 6: os tres relogios, os espinhoes, a nevoa e o fim da fase
+
+- `internal/network/host_boss.go`: espinhao a cada 15 s, nevoa a cada 60 s,
+  primeiro compasso aos 6 s. Nao cabiam em `AttackCooldown`, que e UM numero.
+  Os tres se alinham a cada 420 s (MMC de 60 e 70, e 15 divide os dois) — e isso
+  fica, porque da a uma luta longa uma onda em vez de uma parede.
+- `internal/skill/boss_thorn.go`: a marca no chao PULSA (perigo) e o anel FECHA
+  (quanto falta) — duas informacoes distintas de proposito. `ThornTelegraph` e
+  2,0 s e nao um numero solto: sao os 1,8 s do laco `attack_windup` mais os
+  0,21 s ate o terceiro quadro do `attack_strike`. A posicao e uma FOTO tirada
+  no instante em que ela levanta os bracos, e o espinho nao segue ninguem: um
+  espinho que perseguisse tiraria do desvio a condicao de decisao.
+- `internal/skill/boss_fog.go`: 30/s, ~4 s para matar. Cobre os limites do
+  MUNDO e nao a zona `arena` do mapa — se dependesse da zona, um mapa novo com
+  chefe e sem ela teria uma conjuracao que nao machuca ninguem, em silencio.
+- `internal/skill/angelic_contains.go`: `AngelicContains(ponto)`, que e a
+  pergunta que a nevoa faz. `HasAngelic(id)` responde "a Sacerdotisa TEM altar",
+  e quem se salva e quem esta EM CIMA dele — inclusive quem nao o conjurou.
+- `WaveDef.EndsWithBoss`: `Endless` so conhecia uma saida, o resgate do mapa 3.
+  A arena tem outra. Ela para a REPOSICAO e nao a horda: o que esta em campo
+  continua vivo, porque matar os trinta no instante da morte da chefe some com
+  a limpeza final, que e o momento em que a vitoria assenta.
+
+**Lacuna conhecida: nada disto e replicado.** Num cliente a chefe fica em idle e
+nem a marca do espinhao nem a nevoa aparecem — o dano chega pelos eventos de
+combate, mas sem aviso. Fechar exige o `Anim` da chefe no protocolo e dois
+eventos novos. E o que falta antes de a fase ser jogavel em rede.
+
+### Fechamento: o portal e o acumulo das gargulas
+
+- **O `world_06` ja esperava esta fase.** O portal dele chama-se
+  `portal_para_o_chefe` e o `target_map` estava provisorio, apontando para o
+  `world_01` — a campanha voltava ao comeco em vez de chegar na arena. Agora
+  aponta para o `world_07`.
+- **Gargulas por relogio, nao por `WaveDef.Sentries`.** Aquele campo e por
+  HORDA, e a arena tem uma horda so, infinita: `Sentries: 2` arma duas no comeco
+  e para para sempre. O acumulo virou um terceiro contador em `host_boss.go`,
+  com o mesmo periodo da leva (70 s), de modo que cada cerco novo chega com uma
+  torre nova em cada portao. Comeca em um ciclo cheio porque a primeira dupla ja
+  veio da propria horda — armar mais duas nos primeiros segundos poria quatro
+  torres em campo antes de o grupo ter visto uma. Teto: os dez postos.
+
+### Correcoes do primeiro teste em jogo
+
+1. **A chefe "perseguia" o jogador — e nao era perseguicao, era EMPURRAO.**
+   `moveTowardTarget` com `Speed 0` nao move nada, mas `ResolveEnemyOverlap`
+   dividia a correcao de sobreposicao MEIO A MEIO. Com trinta inimigos entrando
+   nela, a chefe era arrastada para fora da ancora. Agora quem tem `Speed 0` nao
+   e empurrado: o corpo movel absorve a correcao inteira. Vale para a gargula
+   tambem, que sofria do mesmo em menor escala.
+2. **Ritmo das animacoes.** A causa nao era o numero de desenhos, era o TEMPO
+   por pose: quatro quadros a 0,07 s davam 0,28 s para o golpe inteiro, e o
+   agachamento ficava 70 ms na tela. `PlayOrder` sustenta a pose sem gerar arte:
+   o `attack_strike` virou `[0,0,1,2,2,2,2,3]` a 0,10 s, com o agachamento
+   ocupando QUATRO dos oito passos. Nos LACOS repetir quadro e matematicamente
+   igual a dobrar o `FrameTime`, entao neles o ajuste foi so no tempo.
+   **Isto sustenta a pose, nao cria intermediarios** — se ainda ficar duro entre
+   uma pose e outra, ai sim e geracao de quadros novos.
+3. **Aviso de PERIGO.** A danca e o telegrafo desenhado na propria chefe, e ela
+   acontece do outro lado de uma arena de 5120 px: um grupo segurando um portao
+   nao ve a chefe. O aviso vai para o HUD com moldura vermelha na borda da tela
+   (visao periferica, sem tapar o campo de jogo) e o piscar ACELERA conforme o
+   tempo acaba — a frequencia e a segunda informacao.
+4. **O espinhao redesenhado.** A marca tinha um pulso e um anel; pulso diz
+   "perigo" e nao diz quando, e a marca ficava identica do primeiro ao ultimo
+   instante, o que ensina o jogador a ignora-la. Agora sao quatro camadas: poca
+   escura (ONDE, no raio exato do dano), anel que fecha (QUANTO FALTA),
+   rachaduras que crescem do centro (vem DE BAIXO) e as pontas espiando nos
+   ultimos 25% (O QUE vem). A urgencia sobe ao quadrado do tempo. O espinho
+   virou um tufo de sete lascas de alturas diferentes, deterministicas por
+   indice — sorteadas, elas piscariam entre quadros.

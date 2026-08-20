@@ -10,9 +10,14 @@ Read only the document that matches the task. `AGENTS.md` is the required agent 
 | Coding rules and ownership | `coding_patterns.md` |
 | Android build and APK assets | `android.md` |
 | Input controls, sprint, aim | `controls.md` |
+| Cadencia de ataque, cooldown, morte, game over | `combat_rules.md` |
 | Multiplayer, discovery, sync | `network.md` |
+| Custo de render/VRAM/banda e plano de otimizacao | `performance.md` |
+| Diálogo narrativo e pausa de cena | `dialogue.md` |
 | Camera and world bounds | `camera.md` |
 | Tilemap loading/rendering/collision | `tilemap.md` |
+| Village tileset module contracts | `tileset_spec.md` |
+| Visual style for new assets (palette, luz, escala) | `art_style.md` |
 | Desktop build/run | `running_desktop.md` |
 | Game scope | `overview.md` |
 

@@ -27,10 +27,18 @@ Single entry point for AI agents. Read this file first. Do not read every doc by
 | Code style, package ownership, file split decisions | `doc/coding_patterns.md` |
 | Android build, APK/AAB, APK assets | `doc/android.md` |
 | Input, joystick, aim, sprint | `doc/controls.md` |
+| Cadencia de ataque, cooldown, morte/revive, game over, modo teste | `doc/combat_rules.md` |
 | Multiplayer, host/client, discovery, combat/projectile sync | `doc/network.md` |
+| Diálogo/narrativa, roteiro de mapa, pausa de cena | `doc/dialogue.md` |
 | Camera, map bounds, world-space rendering | `doc/camera.md` |
 | Tiled maps, tilesets, collision layers | `doc/tilemap.md` |
+| Colisão de movimento (jogador, monstros, obstáculos) | `doc/tilemap.md` (seção "Quem respeita a colisão") |
+| Estilo visual para gerar assets novos | `doc/art_style.md` (bioma sombrio: seção 11) |
+| Criar/redesenhar mapa (zonas, bioma, densidade) | `skills/create-tiled-map/SKILL.md` |
+| Gerar/integrar arte de cenário (atlas, manifesto, keying) | `skills/create-tiled-assets/SKILL.md` |
+| Progressão da campanha, ultimate por fase, cena de resgate | `doc/combat_rules.md` |
 | Desktop build/run | `doc/running_desktop.md` |
+| Desempenho: custo de render, VRAM, banda de rede, otimizacao | `doc/performance.md` |
 | Product scope or feature intent | `doc/overview.md` |
 
 `doc/changelog.md` is history, not prerequisite reading. Use it only when investigating regressions or appending a new entry.
@@ -47,6 +55,27 @@ Use for reference-driven character sprite work:
 
 Approve the model sheet serially, then let isolated directional workers generate and validate canonical directions in parallel when capacity permits; assemble only after every direction passes. Do not use for Android artifact generation unless the task also asks to bundle or build Android outputs.
 
+### create-tiled-assets
+
+Skill file: `skills/create-tiled-assets/SKILL.md`
+
+Use para arte de cenário: atlas, manifesto medido, keying do matte, footprint de
+colisão e integração no mapa. Companheira da `create-tiled-map`, que decide
+*onde as coisas ficam*; esta decide *como elas existem*.
+
+Este ambiente não gera imagem: o entregável é o **prompt**, e a integração
+recomeça quando o usuário devolve o PNG.
+
+### create-character-abilities
+
+Skill file: `skills/create-character-abilities/SKILL.md`
+
+Use for character ability/spell (magia) work:
+- Implementing a new spell for a character (projectiles, auras, shields, heals, area effects) end to end: skill/ability/network layers.
+- Improving the procedural visuals of an existing spell (raylib primitives, particles, blend modes, animation timing — never image assets).
+
+Do not use for character sprite/art generation or installation, or Android builds.
+
 ### install-character-sprites
 
 Skill file: `skills/install-character-sprites/SKILL.md`
@@ -55,7 +84,10 @@ Use to add a validated output from `create-character-sprites` to Legiao as a sel
 
 ### legiao-android-build
 
-Skill file: `skills/legiao-android-build/SKILL.md`
+Skill file: `.claude/skills/legiao-android-build/SKILL.md`
+
+(Also kept at `skills/legiao-android-build/SKILL.md`. The OpenClaude-discovered
+location is `.claude/skills/`.)
 
 Use only for Android artifact work:
 - Building debug APKs or release AABs.

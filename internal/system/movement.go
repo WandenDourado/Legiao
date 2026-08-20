@@ -15,21 +15,25 @@ func UpdateEnemyMovement(em *entity.EntityManager, players map[string]network.Pl
 	entityPlayers := make([]entity.PlayerState, 0, len(players))
 	for _, p := range players {
 		entityPlayers = append(entityPlayers, entity.PlayerState{
-			PlayerID: p.PlayerID,
-			X:        p.X,
-			Y:        p.Y,
-			Color:    p.Color,
-			Health:   p.Health,
+			PlayerID:  p.PlayerID,
+			X:         p.X,
+			Y:         p.Y,
+			Color:     p.Color,
+			Health:    p.Health,
 			MaxHealth: p.MaxHealth,
-			IsDead:   p.IsDead,
+			IsDead:    p.IsDead,
 		})
 	}
 
+	// Separation needs the full active set, which GetAllEnemies already
+	// returns, so it is passed straight through.
+	env := entity.MoveEnv{Solid: em.Solid, Nav: em.Nav}
 	for _, e := range enemies {
 		if e.IsActive {
-			e.Update(0.016, entityPlayers) // Approximate 60fps dt
+			e.Update(0.016, entityPlayers, enemies, env) // Approximate 60fps dt
 		}
 	}
+	entity.ResolveEnemyOverlap(enemies, em.Solid)
 }
 
 // MoveEnemiesTowardTarget moves all active enemies toward the nearest player.
@@ -50,6 +54,6 @@ func MoveEnemiesTowardTarget(em *entity.EntityManager, players []entity.PlayerSt
 
 		// Move toward target
 		targetPos := rl.NewVector2(float32(nearest.X), float32(nearest.Y))
-		e.MoveTowardTarget(targetPos, 0.016) // Approximate 60fps dt
+		e.MoveTowardTarget(targetPos, 0.016, entity.MoveEnv{Solid: em.Solid, Nav: em.Nav}) // Approximate 60fps dt
 	}
 }

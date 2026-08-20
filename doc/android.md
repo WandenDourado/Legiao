@@ -13,10 +13,30 @@ Use this doc for Android build, APK packaging, manifest, NDK, and APK asset acce
 
 From `cmd/android/build/`:
 
-```powershell
+```cmd
 .\androidcompile.bat
 .\gradlew.bat assembleDebug
 ```
+
+> These are Windows batch files — they run **only under `cmd.exe`**, not in a
+> bash/PowerShell wrapper that issues `cmd /c "call ..."` (that path is
+> unreliable here). From PowerShell, invoke `cmd /c` explicitly:
+> `& cmd /c '.\gradlew.bat assembleDebug'`.
+
+> **Trap — corrupted `gradle-wrapper.jar`:** the checked-in
+> `gradle/wrapper/gradle-wrapper.jar` can lose its manifest (git may have
+> normalized the binary), failing with `no main manifest attribute, in
+> gradle\wrapper\gradle-wrapper.jar` and no other output. When `gradlew.bat`
+> silently does nothing, run Gradle **directly** from the cached distribution:
+>
+> ```powershell
+> $g = Get-ChildItem "$env:USERPROFILE\.gradle\wrapper\dists\gradle-*-all\*\gradle-*\bin\gradle.bat" | Select-Object -First 1
+> & cmd /c "$g assembleDebug"
+> ```
+>
+> This repo pins Gradle 8.9. Requires JDK 17+ (JDK 21 at
+> `C:\Program Files\Java\jdk-21`); the JDK 8 on PATH will fail — ensure
+> `JAVA_HOME` points at a valid JDK.
 
 Debug APK output:
 

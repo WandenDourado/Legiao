@@ -5,9 +5,31 @@ from __future__ import annotations
 
 import argparse
 import glob
+import json
 import struct
 import sys
 from pathlib import Path
+
+# Maps a failure message to a category and how to resolve it. "regen" defects need
+# a fresh image; "repair" defects are salvageable without any generation call by
+# auto_repair (matte/border), normalize_frames (anchor), or scale_fit (silhouette
+# scale). Keywords are stable substrings of the messages below.
+_REGEN_KEYWORDS = ("got", "alpha channel", "visible transparency")
+_REPAIR_KEYWORDS = (
+    "magenta", "frame border", "baseline", "torso center", "torso-center",
+    "spread", "differs from expected", "foreground height", "matte-blend",
+)
+# Weight of each cosmetic penalty when computing the acceptability score.
+_PENALTY_WEIGHTS = {"repair": 0.05, "regen": 0.5}
+
+
+def classify_failure(message: str) -> str:
+    lowered = message.lower()
+    if any(keyword in lowered for keyword in _REGEN_KEYWORDS):
+        return "regen"
+    if any(keyword in lowered for keyword in _REPAIR_KEYWORDS):
+        return "repair"
+    return "regen"
 
 try:
     from PIL import Image
@@ -51,6 +73,8 @@ def main() -> int:
     parser.add_argument("--require-alpha", action="store_true")
     parser.add_argument("--require-transparent", action="store_true")
     parser.add_argument("--reject-magenta", action="store_true")
+    parser.add_argument("--max-edge-spill", type=int, default=40,
+                        help="With --reject-magenta: max semi-transparent pink matte-blend edge pixels per frame.")
     parser.add_argument("--magenta-threshold", type=int, default=96)
     parser.add_argument("--alpha-threshold", type=int, default=16)
     parser.add_argument("--check-baseline", action="store_true")
@@ -68,6 +92,11 @@ def main() -> int:
     parser.add_argument("--border-alpha-limit", type=int, default=4)
     parser.add_argument("--min-foreground-height-ratio", type=float)
     parser.add_argument("--max-foreground-height-ratio", type=float)
+    parser.add_argument("--score", action="store_true",
+                        help="Emit a 0-1 acceptability score and an accept/repair/regen recommendation.")
+    parser.add_argument("--acceptance-threshold", type=float, default=0.85,
+                        help="Score at or above this with only cosmetic issues is accepted as-is.")
+    parser.add_argument("--score-report", type=Path, help="Optional JSON path for the score summary.")
     args = parser.parse_args()
 
     needs_pillow = (
@@ -136,12 +165,22 @@ def main() -> int:
             if Image is None:
                 width, height = png_size(path)
                 mode = None
+                edge_spill = 0
             else:
                 with Image.open(path) as source:
                     width, height, mode = source.width, source.height, source.mode
                     rgba = source.convert("RGBA")
                     has_transparency = rgba.getchannel("A").getextrema()[0] < 255
                     matte_pixels = visible_magenta_pixels(rgba, args.magenta_threshold, args.alpha_threshold)
+                    # Pink matte-blend edge halo: semi-transparent pixels still carrying
+                    # unmixed magenta (r and b both well above g). Invisible to the plain
+                    # magenta-distance check but renders as an outline over any real
+                    # background. Repairable by auto_repair's unmix pass.
+                    edge_spill = 0
+                    if args.reject_magenta:
+                        spill_data = rgba.get_flattened_data() if hasattr(rgba, "get_flattened_data") else rgba.getdata()
+                        edge_spill = sum(1 for r, g, b, a in spill_data
+                                         if 0 < a < 255 and r > g + 30 and b > g + 30)
                     baseline = body_anchor(rgba, args.body_left, args.body_right, args.alpha_threshold) if (args.check_baseline or args.expected_baseline is not None) else None
                     center = torso_center(rgba, args.torso_top, args.torso_bottom, args.alpha_threshold) if (args.check_center or args.expected_center is not None) else None
                     foreground = foreground_bbox(rgba, args.alpha_threshold) if (
@@ -156,6 +195,9 @@ def main() -> int:
                 failures.append(f"{path}: expected visible transparency")
             if args.reject_magenta and matte_pixels:
                 failures.append(f"{path}: found {matte_pixels} visible magenta-matte pixels")
+            spill_limit = args.max_edge_spill * (args.rows * args.columns if args.sheet else 1)
+            if args.reject_magenta and edge_spill > spill_limit:
+                failures.append(f"{path}: found {edge_spill} pink matte-blend edge pixels (limit {spill_limit})")
             if args.require_clear_border and border_pixels:
                 failures.append(f"{path}: found {border_pixels} non-transparent pixels in the {args.border_pixels}px frame border")
             if baseline is not None:
@@ -201,6 +243,37 @@ def main() -> int:
                 failures.append(
                     f"{path}: torso center {value:.1f}px differs from expected {args.expected_center}px by more than {args.center_tolerance}px"
                 )
+
+    if args.score:
+        categorized = [(classify_failure(message), message) for message in failures]
+        penalty = sum(_PENALTY_WEIGHTS[category] for category, _ in categorized)
+        score = max(0.0, 1.0 - penalty)
+        has_regen = any(category == "regen" for category, _ in categorized)
+        has_repair = any(category == "repair" for category, _ in categorized)
+        # Silhouette-scale misses are NEVER absorbed by a high score: only cosmetic
+        # residue (matte fringe / border pixels / small drift) may be accepted-as-is.
+        # A frame outside the height band always routes through scale_fit/diagnose.
+        has_scale = any("foreground height" in message for _, message in categorized)
+        if has_regen:
+            recommendation = "regen"
+        elif has_scale or (has_repair and score < args.acceptance_threshold):
+            recommendation = "repair"
+        else:
+            recommendation = "accept"
+        summary = {
+            "files": len(paths),
+            "score": round(score, 3),
+            "acceptance_threshold": args.acceptance_threshold,
+            "recommendation": recommendation,
+            "failures": [{"category": category, "message": message} for category, message in categorized],
+        }
+        text = json.dumps(summary, indent=2)
+        if args.score_report:
+            args.score_report.parent.mkdir(parents=True, exist_ok=True)
+            args.score_report.write_text(text + "\n", encoding="utf-8")
+        print(text)
+        # accept -> 0, repair -> 3 (salvage then re-check), regen -> 1.
+        return {"accept": 0, "repair": 3, "regen": 1}[recommendation]
 
     if failures:
         print("Validation failed:")

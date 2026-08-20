@@ -10,7 +10,7 @@ World size comes from the loaded Tiled map:
 bounds := world.NewBoundsFromMap(tm.Width, tm.Height, tm.TileWidth, tm.TileHeight)
 ```
 
-For the current 30x20 map with 64px tiles, bounds are `1920x1280`.
+For the current village map (60x45 tiles at 128px), bounds are `7680x5760`.
 
 Do not use screen constants for world logic.
 
@@ -77,9 +77,11 @@ Assigning bounds before menu creation leaves host bounds at zero and projectiles
 
 ## Player Spawn
 
-`entity.InitialPlayerSpawn(bounds)` is the shared default spawn for local and authoritative network player state.
+`player_spawn` in the loaded Tiled map is the shared spawn for local and
+authoritative network player state.
 
-- Current spawn: the center of the map-derived `world.Bounds` (`960, 640` on the current `1920x1280` map).
+- Current spawn: the map object, with the center of map-derived
+  `world.Bounds` retained only as a malformed-map fallback.
 - Host registration, joining clients, and respawn use this same position.
 
 ## Enemy Spawn Distance

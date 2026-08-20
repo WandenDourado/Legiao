@@ -1,0 +1,77 @@
+{
+  "map": "assets/maps/world_03.json",
+  "scripts": [
+    {
+      "id": "world_03_abertura",
+      "trigger": "on_map_start",
+      "lines": [
+        {
+          "speaker": "Arqueiro",
+          "portrait": "arqueiro",
+          "text": "A mata continua, mas alguém andou por aqui antes de nós. Olhem os tocos: isso foi machado, não tempestade."
+        },
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "Derrubaram a floresta para enxergar quem chega. Estão esperando visita."
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Não é uma horda solta como a da mata. Aquilo caçava. Isto aqui guarda."
+        },
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "Então o que eles guardam é o que a gente veio buscar."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Subam a trilha. E não passem de uma barricada sem olhar atrás dela."
+        }
+      ]
+    },
+    {
+      "id": "world_03_climax",
+      "trigger": "on_last_stand",
+      "lines": [
+        {
+          "speaker": "Arqueiro",
+          "portrait": "arqueiro",
+          "text": "O portão não abriu... eles vieram de cima da muralha!"
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Estamos encurralados contra a pedra. Não há para onde recuar."
+        },
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "Sacerdotisa, se você tem alguma coisa guardada, é agora!"
+        },
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "Eu não tenho para onde nos levar."
+        },
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "Mas eu posso fazer deste chão o nosso."
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Ela vai consagrar a esplanada. Em terra profanada."
+        },
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "Fiquem dentro da luz."
+        }
+      ]
+    }
+  ]
+}

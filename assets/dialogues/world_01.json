@@ -1,0 +1,57 @@
+{
+  "map": "assets/maps/world_01.json",
+  "scripts": [
+    {
+      "id": "world_01_abertura",
+      "trigger": "on_map_start",
+      "lines": [
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Ouvi relatos que essa vila vem enfrentando problemas com monstros."
+        },
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "Certamente isso deve ser trabalho da Senhora das Trevas. Sua influência vem se espalhando cada vez mais."
+        },
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "Pela glória dos deuses, precisamos proteger essa vila."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Devemos proteger essa vila. Investiguem cada perímetro e aniquilem qualquer monstro que aparecer em seu caminho."
+        }
+      ]
+    },
+    {
+      "id": "world_01_hordas_limpas",
+      "trigger": "on_waves_cleared",
+      "lines": [
+        {
+          "speaker": "Arqueiro",
+          "portrait": "arqueiro",
+          "text": "Esse foi o último."
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Sinto uma energia sombria vindo do Norte."
+        },
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "Relatórios indicam que nessa direção tem maior atuação da Senhora das Trevas. Precisamos ter cuidado."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Seguiremos para o Norte."
+        }
+      ]
+    }
+  ]
+}

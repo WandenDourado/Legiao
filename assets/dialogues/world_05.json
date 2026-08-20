@@ -1,0 +1,57 @@
+{
+  "map": "assets/maps/world_05.json",
+  "scripts": [
+    {
+      "id": "world_05_abertura",
+      "trigger": "on_map_start",
+      "lines": [
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Estamos no covil da Senhora das Trevas. A atmosfera é densa."
+        },
+        {
+          "speaker": "Arqueiro",
+          "portrait": "arqueiro",
+          "text": "Eu sinto milhares de olhos sobre nós nas sombras."
+        },
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "Que a luz nos proteja. Não podemos recuar agora."
+        }
+      ]
+    },
+    {
+      "id": "world_05_climax",
+      "trigger": "on_last_stand",
+      "lines": [
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "São muitos! Nós não vamos conseguir segurar todos!"
+        },
+        {
+          "speaker": "Arqueiro",
+          "portrait": "arqueiro",
+          "text": "As sombras não param de surgir, é o nosso fim..."
+        },
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "Não hoje. Afastem-se!"
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Você vai canalizar todo esse poder? É loucura!"
+        },
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "É o único jeito de limpar esse salão. Que os céus caiam sobre eles!"
+        }
+      ]
+    }
+  ]
+}

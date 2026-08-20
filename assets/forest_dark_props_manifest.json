@@ -1,0 +1,369 @@
+{
+  "atlas": "assets/tilesets/forest_dark_props.png",
+  "pieces": {
+    "dead_trunk_a": {
+      "source": {
+        "x": 4,
+        "y": 4,
+        "width": 230,
+        "height": 368
+      },
+      "anchor": {
+        "x": 115,
+        "y": 368
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -52,
+        "offsetY": -110,
+        "width": 103,
+        "height": 110
+      }
+    },
+    "dead_crown_a": {
+      "source": {
+        "x": 238,
+        "y": 4,
+        "width": 257,
+        "height": 180
+      },
+      "anchor": {
+        "x": 128,
+        "y": 503
+      },
+      "role": "foreground",
+      "collision": false
+    },
+    "dead_stump_hollow": {
+      "source": {
+        "x": 499,
+        "y": 4,
+        "width": 274,
+        "height": 227
+      },
+      "anchor": {
+        "x": 137,
+        "y": 227
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -62,
+        "offsetY": -68,
+        "width": 123,
+        "height": 68
+      }
+    },
+    "dead_crown_b": {
+      "source": {
+        "x": 777,
+        "y": 4,
+        "width": 373,
+        "height": 186
+      },
+      "anchor": {
+        "x": 186,
+        "y": 509
+      },
+      "role": "foreground",
+      "collision": false
+    },
+    "dead_crown_c": {
+      "source": {
+        "x": 1154,
+        "y": 4,
+        "width": 332,
+        "height": 175
+      },
+      "anchor": {
+        "x": 166,
+        "y": 498
+      },
+      "role": "foreground",
+      "collision": false
+    },
+    "dead_branch_curved": {
+      "source": {
+        "x": 1490,
+        "y": 4,
+        "width": 356,
+        "height": 172
+      },
+      "anchor": {
+        "x": 178,
+        "y": 172
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -110,
+        "offsetY": -48,
+        "width": 288,
+        "height": 48
+      }
+    },
+    "dead_stump_split": {
+      "source": {
+        "x": 4,
+        "y": 376,
+        "width": 282,
+        "height": 177
+      },
+      "anchor": {
+        "x": 141,
+        "y": 177
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -63,
+        "offsetY": -53,
+        "width": 126,
+        "height": 53
+      }
+    },
+    "fallen_log": {
+      "source": {
+        "x": 290,
+        "y": 376,
+        "width": 432,
+        "height": 129
+      },
+      "anchor": {
+        "x": 216,
+        "y": 129
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -208,
+        "offsetY": -121,
+        "width": 416,
+        "height": 121
+      }
+    },
+    "wolf_bones": {
+      "source": {
+        "x": 726,
+        "y": 376,
+        "width": 295,
+        "height": 135
+      },
+      "anchor": {
+        "x": 147,
+        "y": 135
+      },
+      "role": "ground_detail",
+      "collision": false
+    },
+    "rune_stone": {
+      "source": {
+        "x": 1025,
+        "y": 376,
+        "width": 186,
+        "height": 252
+      },
+      "anchor": {
+        "x": 93,
+        "y": 252
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -42,
+        "offsetY": -75,
+        "width": 83,
+        "height": 75
+      }
+    },
+    "thorn_bush_small": {
+      "source": {
+        "x": 1215,
+        "y": 376,
+        "width": 283,
+        "height": 155
+      },
+      "anchor": {
+        "x": 141,
+        "y": 155
+      },
+      "role": "structures_back",
+      "collision": false
+    },
+    "thorn_bush_large": {
+      "source": {
+        "x": 1502,
+        "y": 376,
+        "width": 472,
+        "height": 202
+      },
+      "anchor": {
+        "x": 236,
+        "y": 202
+      },
+      "role": "structures_back",
+      "collision": false
+    },
+    "standing_stone_1": {
+      "source": {
+        "x": 4,
+        "y": 632,
+        "width": 160,
+        "height": 186
+      },
+      "anchor": {
+        "x": 80,
+        "y": 186
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -36,
+        "offsetY": -55,
+        "width": 72,
+        "height": 55
+      }
+    },
+    "standing_stone_2": {
+      "source": {
+        "x": 168,
+        "y": 632,
+        "width": 197,
+        "height": 74
+      },
+      "anchor": {
+        "x": 98,
+        "y": 74
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -44,
+        "offsetY": -48,
+        "width": 88,
+        "height": 48
+      }
+    },
+    "standing_stone_3": {
+      "source": {
+        "x": 369,
+        "y": 632,
+        "width": 183,
+        "height": 203
+      },
+      "anchor": {
+        "x": 91,
+        "y": 203
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -41,
+        "offsetY": -60,
+        "width": 82,
+        "height": 60
+      }
+    },
+    "standing_stone_4": {
+      "source": {
+        "x": 556,
+        "y": 632,
+        "width": 183,
+        "height": 198
+      },
+      "anchor": {
+        "x": 91,
+        "y": 198
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -41,
+        "offsetY": -59,
+        "width": 82,
+        "height": 59
+      }
+    },
+    "standing_stone_5": {
+      "source": {
+        "x": 743,
+        "y": 632,
+        "width": 150,
+        "height": 124
+      },
+      "anchor": {
+        "x": 75,
+        "y": 124
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -34,
+        "offsetY": -48,
+        "width": 67,
+        "height": 48
+      }
+    },
+    "standing_stone_6": {
+      "source": {
+        "x": 897,
+        "y": 632,
+        "width": 128,
+        "height": 95
+      },
+      "anchor": {
+        "x": 64,
+        "y": 95
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -32,
+        "offsetY": -48,
+        "width": 64,
+        "height": 48
+      }
+    },
+    "standing_stone_7": {
+      "source": {
+        "x": 1029,
+        "y": 632,
+        "width": 236,
+        "height": 226
+      },
+      "anchor": {
+        "x": 118,
+        "y": 226
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -53,
+        "offsetY": -67,
+        "width": 106,
+        "height": 67
+      }
+    },
+    "standing_stone_8": {
+      "source": {
+        "x": 1269,
+        "y": 632,
+        "width": 166,
+        "height": 93
+      },
+      "anchor": {
+        "x": 83,
+        "y": 93
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -37,
+        "offsetY": -48,
+        "width": 74,
+        "height": 48
+      }
+    }
+  }
+}
