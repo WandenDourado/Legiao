@@ -13,14 +13,15 @@ const fireballBlastRadius = 160.0
 // allies, but it should not be wasted on a lone straggler), and calling
 // Chuva de Meteoros once the field is a horde.
 type magoBrain struct {
-	targetID string
-	decideIn float32
+	targetID   string
+	decideIn   float32
+	retreating bool
 }
 
 func (b *magoBrain) Think(v View) Intent {
 	if b.decideIn <= 0 {
 		b.decideIn = decideEvery
-		if foe, ok := nearestFoe(v.Self.Pos, v.Foes); ok {
+		if foe, ok := nearestFoe(v.Self.Pos, engageableFoes(v)); ok {
 			b.targetID = foe.ID
 		} else {
 			b.targetID = ""
@@ -29,10 +30,15 @@ func (b *magoBrain) Think(v View) Intent {
 		b.decideIn -= v.Dt
 	}
 	target, hasTarget := findFoe(v.Foes, b.targetID)
+	retreating := retreatHysteresis(&b.retreating, healthFrac(v.Self), retreatUnder, rejoinAbove)
 
 	intent := Intent{}
 
-	dest := v.PartyCentre
+	dest := followDest(v)
+	usingTravel := false
+	if td, ok := travelDest(v); ok {
+		dest, usingTravel = td, true
+	}
 	if hasTarget {
 		dist := rl.Vector2Distance(v.Self.Pos, target.Pos)
 		switch {
@@ -44,14 +50,16 @@ func (b *magoBrain) Think(v View) Intent {
 		default:
 			dest = v.Self.Pos
 		}
-	} else if !withinFollowRadius(v.Self.Pos, v.PartyCentre) {
-		dest = v.PartyCentre
-	} else {
-		dest = v.Self.Pos
+		usingTravel = false
 	}
-	moveTo(&intent, v.Self.Pos, dest, v.Allies)
+	if retreating {
+		nearest, hasNearest := nearestFoe(v.Self.Pos, v.Foes)
+		dest = retreatDest(v, nearest.Pos, hasNearest)
+		usingTravel = false
+	}
+	finishMove(&intent, v, dest, usingTravel)
 
-	if hasTarget {
+	if hasTarget && rl.Vector2Distance(v.Self.Pos, target.Pos) <= magoAttackRange {
 		aim := target.Pos
 		intent.Attack = &aim
 	}

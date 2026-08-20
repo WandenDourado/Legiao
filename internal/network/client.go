@@ -463,7 +463,7 @@ func (c *Client) handleMessage(msg Message) {
 			if p, ok := sentryOrbTarget(so.TargetID); ok {
 				target = p
 			}
-			skill.SpawnSentryOrb(false, so.OrbID, "", so.TargetID, pos, target)
+			skill.SpawnSentryOrb(false, so.OrbID, "", so.TargetID, pos, target, so.TTL)
 		case "impact":
 			// AddSentryBurstAt antes do Remove: o estouro tem que aparecer
 			// mesmo se o "cast" desta esfera se perdeu no caminho.

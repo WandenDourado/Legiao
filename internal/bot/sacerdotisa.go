@@ -12,7 +12,9 @@ import rl "github.com/gen2brain/raylib-go/raylib"
 // off immediately from anything inside panicLine. When nothing is near
 // (calmRadius), she spends the peace topping the party off instead of
 // standing idle.
-type sacerdotisaBrain struct{}
+type sacerdotisaBrain struct {
+	retreating bool
+}
 
 func (b *sacerdotisaBrain) Think(v View) Intent {
 	var intent Intent
@@ -22,7 +24,8 @@ func (b *sacerdotisaBrain) Think(v View) Intent {
 		wounded, hasWounded := mostWoundedAlly(v.Allies)
 		intent = b.recover(v, hasWounded, wounded)
 	} else {
-		nearest, hasNearest := nearestFoe(v.Self.Pos, v.Foes)
+		nearby := engageableFoes(v)
+		nearest, hasNearest := nearestFoe(v.Self.Pos, nearby)
 		wounded, hasWounded := mostWoundedAlly(v.Allies)
 		inRange := hasWounded && rl.Vector2Distance(v.Self.Pos, wounded) <= boltRange
 		var blocker Foe
@@ -54,12 +57,22 @@ func (b *sacerdotisaBrain) Think(v View) Intent {
 
 		default:
 			// Nobody in reach needs healing (or nobody is wounded at all):
-			// fall back to the party's usual threat targeting.
-			if target, ok := mostThreateningFoe(v.Self, v.Allies, v.Foes); ok {
+			// fall back to the party's usual threat targeting — but only if
+			// it is close enough to actually hit (plan §A5): the bolt
+			// travels boltRange before it expires on its own.
+			if target, ok := mostThreateningFoe(v.Self, v.Allies, nearby); ok &&
+				rl.Vector2Distance(v.Self.Pos, target.Pos) <= boltRange {
 				aim := leadTarget(target, 0.25)
 				intent.Attack = &aim
 			}
 			b.combatMove(&intent, v, nearest, hasNearest)
+		}
+
+		retreating := retreatHysteresis(&b.retreating, healthFrac(v.Self), retreatUnder, rejoinAbove)
+		if retreating {
+			// Still fires while falling back (plan §A4) — the attack set
+			// above is untouched, only the destination changes.
+			moveTo(&intent, v.Self.Pos, retreatDest(v, nearest.Pos, hasNearest), v.Allies)
 		}
 	}
 
@@ -81,9 +94,11 @@ func (b *sacerdotisaBrain) lineUpMove(intent *Intent, v View, wounded rl.Vector2
 		flee(intent, v.Self.Pos, nearest.Pos)
 		return
 	}
-	threatRef := v.PartyCentre
+	threatRef := v.Self.Pos
 	if hasNearest {
 		threatRef = nearest.Pos
+	} else if v.HasHumans {
+		threatRef = v.HumanCentre
 	}
 	dest := wounded
 	if behind := direction(threatRef, wounded); behind.X != 0 || behind.Y != 0 {
@@ -97,8 +112,12 @@ func (b *sacerdotisaBrain) lineUpMove(intent *Intent, v View, wounded rl.Vector2
 // backLine, otherwise hold (or catch up with the party if nothing is near).
 func (b *sacerdotisaBrain) combatMove(intent *Intent, v View, nearest Foe, hasNearest bool) {
 	if !hasNearest {
-		if !withinFollowRadius(v.Self.Pos, v.PartyCentre) {
-			moveTo(intent, v.Self.Pos, v.PartyCentre, v.Allies)
+		if td, ok := travelDest(v); ok {
+			intent.Dest, intent.HasDest = td, true
+			return
+		}
+		if dest := followDest(v); dest != v.Self.Pos {
+			moveTo(intent, v.Self.Pos, dest, v.Allies)
 		}
 		return
 	}
@@ -121,8 +140,12 @@ func (b *sacerdotisaBrain) combatMove(intent *Intent, v View, nearest Foe, hasNe
 func (b *sacerdotisaBrain) recover(v View, hasWounded bool, wounded rl.Vector2) Intent {
 	var intent Intent
 	if !hasWounded {
-		if !withinFollowRadius(v.Self.Pos, v.PartyCentre) {
-			moveTo(&intent, v.Self.Pos, v.PartyCentre, v.Allies)
+		if td, ok := travelDest(v); ok {
+			intent.Dest, intent.HasDest = td, true
+			return intent
+		}
+		if dest := followDest(v); dest != v.Self.Pos {
+			moveTo(&intent, v.Self.Pos, dest, v.Allies)
 		}
 		return intent
 	}

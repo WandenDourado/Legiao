@@ -234,8 +234,36 @@ seria um segundo conjunto de regras para divergir no primeiro conserto.
   `EntityManager.Solid`).
 - **Separação entre aliados.** Cinco personagens no mesmo pixel viram um borrão
   e morrem do mesmo golpe em área. Isto não é enfeite.
-- **Seguir o grupo**: passou de `followRadius` do centro dos humanos vivos,
-  volta.
+- **Seguir o grupo, mas o líder é humano.** O destino de "seguir" nunca é a
+  média de todos os vivos (`PartyCentre`) — um bot adiantado puxaria a própria
+  referência de avanço junto com ele, e o resto seguiria o centro que
+  acabou de andar. É `HumanCentre`, a média só dos humanos vivos; sem humano
+  vivo, o bot segura posição e luta em vez de escolher um novo líder entre os
+  bots. E o ponto não é o `HumanCentre` cru: é `formationPost`, o posto da
+  classe relativo a ele na direção do avanço (`View.AdvanceDir`, a
+  velocidade média dos humanos suavizada, mantida quando o grupo para) —
+  Paladina 160px à frente, Arqueiro/Mago 250px atrás em lados opostos,
+  Necromante 250px atrás mais afastado, Sacerdotisa 350px atrás. Só sai
+  do posto passado `followRadius` de distância dele. Ver
+  `doc/plan_avanco_bots_e_gargula.md` §A2/§A3.
+- **Um inimigo fora de `engageRadius` (900px) do bot OU do `HumanCentre` não
+  existe para a decisão.** `engageableFoes` filtra antes de qualquer escolha
+  de alvo — é a diferença entre "há um monstro no mapa" e "há um monstro no
+  meu caminho", e é o que impede o bot de atravessar o mapa 3 até o clímax
+  ignorando a guarnição pelo caminho.
+- **Recuo com histerese abaixo de 35% de vida, só volta a engajar acima de
+  60%** (`retreatHysteresis`) — sem a folga entre os dois limiares, um único
+  golpe cruzando a linha faz o bot vibrar entre lutar e fugir. Recuando, o
+  destino é o posto de formação empurrado 300px mais para trás, na direção
+  oposta ao inimigo mais próximo (`retreatDest`). Arqueiro, Mago, Necromante e
+  Sacerdotisa continuam atirando enquanto recuam — só a Paladina para de
+  golpear, e só recua abaixo de 25% E com o Escudo já gasto (senão a linha da
+  frente abandonaria o grupo na primeira queda de vida em vez de tentar
+  mitigar primeiro).
+- **Ataque básico só sai dentro do alcance real do próprio projétil**
+  (`arqueiroAttackRange`, `magoAttackRange`, `necromanteAttackRange`, e
+  `boltRange` da Sacerdotisa) — sem isso o Arqueiro gastava a cadência em
+  flechas que expiravam a caminho de um alvo a mais de 1120px.
 - **Porta do portal**: quando o host declara um portal ativo, o destino do bot
   é o retângulo alvo (`bot.SeekPortal`, sem separação — ver abaixo). Sem isso a
   porta nunca abre — porque o bot conta.
@@ -295,8 +323,19 @@ quando há morto para reerguer, ou três aliados abaixo de 35%.
 **Arqueiro — dano de longe, sem parar.** Mantém a distância máxima útil e kita.
 Alvo: o que ameaça o aliado mais frágil; empatados, o mais ferido — rematar vale
 mais que espalhar dano. Saraivada quando três ou mais inimigos couberem no
-leque. Flechas Celestiais contra chefe e sentinela, que é onde elas decidem
-alguma coisa.
+leque. Flechas Celestiais contra chefe (`target.IsBoss`) na seleção normal de
+alvo, e contra sentinela por uma regra à parte, acima de tudo o mais: suprema
+pronta **e** sentinela viva vira a decisão do quadro inteiro
+(`arqueiroBrain.huntSentry`) — aproxima até a distância útil da própria
+suprema (`skill.CelestialRange` menos uma margem, para o tiro não expirar no
+caminho) e então mira o `HitCentre`, preferindo uma segunda sentinela alinhada
+atrás da primeira (uma ativação, duas torres). Nenhuma outra classe, nem o
+próprio Arqueiro fora dessa regra, pode gastar cadência numa sentinela:
+`IsSentry` sai de toda seleção de alvo comum (`nearestFoe`,
+`mostThreateningFoe`, `clusterCentre`, `countFoesWithin`, `foeBlocksLine`,
+`foeBeyondAlly`, `anyFoeWithin`) — o host já recusa esse dano de qualquer jeito
+(`checkProjectileCollisions`/`checkEnemyPlayerCollisions`), então acertar seria
+gastar recarga em nada. Ver `doc/plan_avanco_bots_e_gargula.md` §B4.
 
 **Mago — dano em área.** Meia distância. A Bola de Fogo vai no ponto que cobre
 mais monstros dentro do raio de explosão (uma varredura sobre os inimigos, não

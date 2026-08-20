@@ -1,5 +1,91 @@
 # Changelog
 
+## 2026-08-20 — Bots atravessavam o mapa 3 sem lutar: o atalho do portal desligava o cerebro
+
+`tickOneBot` pulava `rt.brain.Think(view)` inteiro sempre que o portal estava
+ativo, assumindo que o campo estaria vazio nesse ponto — falso para
+`world_03`, mapa de guarnicao sem `enemy_spawn_*`, cujo portal fica aberto
+desde o primeiro quadro com a guarnicao inteira em campo. O atalho caiu: o
+cerebro roda sempre, e o portal virou um destino que ele mesmo escolhe via
+`travelDest` (`internal/bot/steering.go`), so quando nao ha inimigo engajavel
+por perto **e** um humano ja esta na porta ou perto dela
+(`HumansAtPortal`/`PortalEscortRadius`) — sem essa segunda trava o bot
+marcharia sozinho no instante em que o portal de um mapa sem hordas abre.
+`finishMove` zera o `Push` so quando o portal vence a cadeia de destino
+(alvo engajado > recuo > `travelDest` > formacao); atacar continua
+funcionando normalmente enquanto o bot caminha ate a porta. Ver
+`doc/plan_avanco_bots_e_gargula.md` §A2 (causa 4) e `doc/tilemap.md`
+("Portal trancado pelas hordas").
+
+## 2026-08-20 — Fase B2/B4: sentinela visivel na View do bot, so o Arqueiro a mata
+
+A gargula era descartada na montagem da `View` do bot (`buildBotView`), entao
+nenhum bot jamais a via. Agora ela entra em `Foes` com `IsSentry: true` e
+`HitCentre` (o ponto de acerto real, nao os pes). Toda funcao de selecao de
+alvo comum do pacote `bot` (`nearestFoe`, `mostThreateningFoe`,
+`clusterCentre`, `countFoesWithin`, `foeBlocksLine`, `foeBeyondAlly`,
+`anyFoeWithin`) passou a pular `IsSentry` — nenhum bot gasta cadencia numa
+estatua invulneravel. So o Arqueiro enxerga: com a suprema pronta e uma
+sentinela viva, `huntSentry` vira a prioridade do quadro inteiro, aproxima ate
+o alcance util da propria suprema (`View.UltimateRange`, que so a Rede
+preenche para o Arqueiro) e mira o `HitCentre`, preferindo uma segunda
+sentinela alinhada atras da primeira. `EnemiesLeft` passou a excluir
+sentinelas — sao postos fixos, nao horda. Ver
+`doc/plan_avanco_bots_e_gargula.md` §B2/§B4.
+
+## 2026-08-20 — Fase B1: gargula de alcance global, esfera com TTL por distancia
+
+`entity.SentryGlobalRange` (16000, maior que a diagonal do maior mapa)
+substitui os 1900 fixos da gargula — o alcance so decide quem ela pode
+escolher como alvo, o dano continua so chegando quando a esfera encosta. Sem
+isso o TTL fixo de 9s nunca bastaria para uma esfera lancada do outro lado do
+mapa: agora `network.sentryOrbTTLFor` calcula pela distancia
+(`dist/velocidade*1,5 + 2s`, teto de 40s) e o TTL viaja no evento de rede
+("cast") para o cliente nao podar a esfera antes da hora. `skill.SentryHasLiveOrb`
+impede uma segunda esfera da MESMA sentinela enquanto a primeira ainda esta no
+ar — sem isso, cadencia de 1,35s contra ate 40s de voo empilharia uma dezena
+delas perseguindo o mesmo jogador. Ver `doc/plan_avanco_bots_e_gargula.md`
+§B1/§B2.
+
+## 2026-08-20 — Fase A3: recuo com histerese e alcance util do ataque basico
+
+`retreatHysteresis` entra em recuo abaixo de 35% de vida e so volta a engajar
+acima de 60% (Paladina: 25%, e so depois de Escudo gasto —
+`paladinaRetreatHysteresis`), evitando o vaivem de um unico golpe cruzando o
+limiar. Recuando, o destino e o posto de formacao empurrado 300px para tras
+na direcao oposta ao inimigo mais proximo (`retreatDest`); Arqueiro, Mago,
+Necromante e Sacerdotisa continuam atirando enquanto recuam, Paladina para de
+golpear. De brinde (§A5): cada classe ganhou o alcance util do proprio
+projetil (`arqueiroAttackRange` 1120, `magoAttackRange` 840,
+`necromanteAttackRange` 800, Sacerdotisa reaproveitando `boltRange`) — o
+ataque basico so sai dentro dele, em vez de gastar a cadencia numa flecha ou
+bola de fogo que expira no caminho. Ver `doc/plan_avanco_bots_e_gargula.md`
+§A4/§A5.
+
+## 2026-08-20 — Fase A2: raio de engajamento e formacao por classe
+
+Bots escolhiam alvo no mapa inteiro (`mostThreateningFoe`/`nearestFoe` sem
+limite) e marchavam ate ele ignorando tudo pelo caminho. `engageableFoes`
+(`internal/bot/steering.go`) filtra o alvo para dentro de `engageRadius`
+(900px) do bot OU do `HumanCentre` — fora disso o inimigo simplesmente nao
+existe para a decisao. `formationPost` da a cada classe um posto relativo ao
+`HumanCentre` na direcao do avanco (`View.AdvanceDir`, media suavizada da
+velocidade dos humanos vivos, calculada uma vez por quadro em
+`Host.updateAdvanceDir` e mantida quando o grupo para). `followDest` passou a
+usar o posto de formacao em vez do centro cru. Ver
+`doc/plan_avanco_bots_e_gargula.md` §A2/§A3 (R2, R3).
+
+## 2026-08-20 — Fase A1: `HumanCentre` tira o bot da propria referencia de avanco
+
+Bots seguiam `PartyCentre`, a media de TODOS os vivos — bots inclusive. Um bot
+que se adiantava puxava o centro consigo, e o resto seguia o centro que tinha
+acabado de andar: um erro individual virava marcha do esquadrao (mapa 3, bots
+atravessando ate o climax). `View` ganha `HumanCentre`/`HasHumans`, calculados
+so a partir de jogadores humanos vivos; todo destino de "seguir o grupo" nos
+cinco cerebros passa a usar isso (`followDest`, `internal/bot/steering.go`).
+Sem humano vivo, o bot segura posicao em vez de escolher um novo lider entre
+os bots. Ver `doc/plan_avanco_bots_e_gargula.md` §A1.
+
 ## 2026-08-20 — Trava de uma via da arena (mapa 5) agora vale para bots
 
 `arena_gate.go` corrigia a posição só do jogador local; bots voltavam ao

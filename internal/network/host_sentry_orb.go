@@ -31,12 +31,19 @@ import (
 func (h *Host) handleSentryOrbTick(dt float32, attackedEnemies map[string]bool) {
 	targets := h.livingPlayerPositions()
 
-	// 1. Cada sentinela pronta lanca uma esfera no jogador com MENOS VIDA.
+	// 1. Cada sentinela pronta lanca uma esfera no jogador com MENOS VIDA —
+	// uma por vez (doc/plan_avanco_bots_e_gargula.md §B2): com alcance
+	// global e uma esfera lenta (SentryOrbSpeed 300), a cadencia normal de
+	// AttackCooldown sozinha empilharia uma dezena de esferas perseguindo o
+	// mesmo jogador antes da primeira chegar.
 	for _, e := range h.EntityManager.GetAllEnemies() {
 		if e.Type != entity.EnemyTypeCastleSentry || !e.IsActive {
 			continue
 		}
 		if !attackedEnemies[e.ID] {
+			continue
+		}
+		if skill.SentryHasLiveOrb(true, e.ID) {
 			continue
 		}
 		targetID, targetPos, ok := h.weakestPlayerInRange(e)
@@ -46,15 +53,16 @@ func (h *Host) handleSentryOrbTick(dt float32, attackedEnemies map[string]bool) 
 		// Sai do peito da criatura, e nao dos pes: Position e a ancora no chao
 		// (FootLine), entao lancar dali faria a esfera nascer no pedestal.
 		origin := e.HitCenter()
-		id := skill.SpawnSentryOrb(true, "", e.ID, targetID, origin, targetPos)
-		h.broadcastSentryOrb("cast", id, targetID, origin)
+		ttl := sentryOrbTTLFor(origin, targetPos)
+		id := skill.SpawnSentryOrb(true, "", e.ID, targetID, origin, targetPos, ttl)
+		h.broadcastSentryOrb("cast", id, targetID, origin, ttl)
 	}
 
 	// 2. Avanca as esferas e resolve o que elas encostam.
 	for _, id := range skill.StepSentryOrbs(dt, targets) {
 		// Expirou por tempo: some sem estouro, porque nao acertou nada.
 		skill.RemoveSentryOrb(true, id, false)
-		h.broadcastSentryOrb("expire", id, "", rl.Vector2{})
+		h.broadcastSentryOrb("expire", id, "", rl.Vector2{}, 0)
 	}
 	h.resolveSentryOrbHits()
 	skill.UpdateSentryBursts(true, dt)
@@ -123,7 +131,7 @@ func (h *Host) resolveSentryOrbHits() {
 			continue
 		}
 		skill.RemoveSentryOrb(true, o.ID, true)
-		h.broadcastSentryOrb("impact", o.ID, "", o.Position)
+		h.broadcastSentryOrb("impact", o.ID, "", o.Position, 0)
 		h.applySentryOrbDamage(playerID)
 	}
 }
@@ -187,6 +195,24 @@ func (h *Host) applySentryOrbDamage(playerID string) {
 	h.broadcastCombatEvent("damage", playerID, "player", dmg, "")
 }
 
+// sentryOrbTTLFor is how long an orb launched from origin toward target
+// should live: enough to reach almost anywhere across a map this size, with
+// slack for the target moving and for the turn-rate-limited chase
+// (skill.SentryOrbTurnRate) catching up. The 1.5x and +2s are the plan's
+// own numbers (doc/plan_avanco_bots_e_gargula.md §B2); SentryOrbMaxTTL caps
+// a wildly out-of-range shot from lingering forever. The slowness is
+// DELIBERATE (skill/sentry_orb.go's own comment already defends it): from
+// far away the orb becomes a slow, visible inevitability crossing the
+// screen — that reads as dread, not as a bug.
+func sentryOrbTTLFor(origin, target rl.Vector2) float32 {
+	dist := rl.Vector2Distance(origin, target)
+	ttl := dist/skill.SentryOrbSpeed*1.5 + 2
+	if ttl > skill.SentryOrbMaxTTL {
+		ttl = skill.SentryOrbMaxTTL
+	}
+	return ttl
+}
+
 // broadcastSentryOrb replica um evento de esfera aos clientes.
 //
 // Padrao de sincronia mais barato que funciona (ver a skill): UM evento de
@@ -195,13 +221,19 @@ func (h *Host) applySentryOrbDamage(playerID string) {
 // origem + direcao como a bola de fogo, porque a trajetoria depende de para
 // onde o alvo correu; e nao vale um array novo no snapshot, porque o visual
 // nao precisa ser exato - vida e morte continuam vindo dos eventos do host.
-func (h *Host) broadcastSentryOrb(event, orbID, targetID string, pos rl.Vector2) {
+//
+// ttl so importa no evento "cast": sem ele o cliente criaria a esfera com o
+// SentryOrbTTL padrao (9s) e a podaria antes de uma esfera de alcance global
+// completar a viagem real, sumindo da tela sem o evento de impacto nunca ter
+// chegado.
+func (h *Host) broadcastSentryOrb(event, orbID, targetID string, pos rl.Vector2, ttl float32) {
 	payload := SentryOrbPayload{
 		EventType: event,
 		OrbID:     orbID,
 		TargetID:  targetID,
 		X:         int(pos.X),
 		Y:         int(pos.Y),
+		TTL:       ttl,
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {

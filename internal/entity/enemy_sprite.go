@@ -47,6 +47,17 @@ const (
 	EnemyModeFixed EnemySpriteMode = "fixed"
 )
 
+// SentryGlobalRange is the castle sentry's AttackRange: bigger than the
+// diagonal of the largest map (world_05, 8192x11520, diagonal ~14100), so
+// the gargoyle can always pick a target no matter where the party stands
+// (doc/plan_avanco_bots_e_gargula.md §B1).
+//
+// Deliberately NOT math.MaxFloat32: IsInAttackRange/DetectEnemyPlayerCollision
+// both compute `dist <= e.AttackRange+e.Radius`, and MaxFloat32+anything
+// overflows to +Inf. A large, explained number is more honest than an
+// infinity that only works by accident.
+const SentryGlobalRange float32 = 16000
+
 // EnemyAnim names one animation of an enemy.
 type EnemyAnim string
 
@@ -308,6 +319,12 @@ func init() {
 	// e asa). Sem ele o circulo de acerto ficaria na altura das garras e as
 	// flechas celestes do Arqueiro, o unico projetil que pode toca-la, passariam
 	// por cima do bicho inteiro.
+	//
+	// AttackRange e SentryGlobalRange: a sentinela alcanca o mapa inteiro
+	// (doc/plan_avanco_bots_e_gargula.md §B1). Isto so decide QUEM ela pode
+	// escolher como alvo (weakestPlayerInRange, host_sentry_orb.go) — o dano
+	// so chega quando a esfera de fato encosta, e o cadenciamento real e o
+	// AttackCooldown, nao o alcance.
 	RegisterEnemy(EnemyDef{
 		Type: EnemyTypeCastleSentry, Name: "Sentinela do Corrego",
 		Mode:        EnemyModeFixed,
@@ -327,7 +344,7 @@ func init() {
 		},
 
 		Radius: 58, HitOffsetY: -67, HitRadius: 78,
-		Health: 40, Speed: 0, AttackDamage: 14, AttackRange: 1900,
+		Health: 40, Speed: 0, AttackDamage: 14, AttackRange: SentryGlobalRange,
 		AttackCooldown: 1.35, Color: "#6B287A",
 	})
 
@@ -359,45 +376,45 @@ func init() {
 		RenderScale: 1.0,
 		Anims: map[EnemyAnim]EnemyAnimDef{
 			AnimIdle: {
-				SpritePath:  "assets/sprites/enemies/senhora_das_trevas/idle.png",
-				FrameWidth:  610, FrameHeight: 590, Columns: 8,
-				FrameTime:   0.16, FootLine: 578,
+				SpritePath: "assets/sprites/enemies/senhora_das_trevas/idle.png",
+				FrameWidth: 610, FrameHeight: 590, Columns: 8,
+				FrameTime: 0.16, FootLine: 578,
 			},
 			// PlayOrder em vai-e-vem: ela vira o torso ate o extremo e volta
 			// desfazendo o caminho. Os quadros da volta sao os da ida tocados ao
 			// contrario, entao a arte tem 4 e a animacao tem 6.
 			AnimIdleScan: {
-				SpritePath:  "assets/sprites/enemies/senhora_das_trevas/idle_scan.png",
-				FrameWidth:  596, FrameHeight: 568, Columns: 4,
-				FrameTime:   0.16, FootLine: 556,
-				OneShot:     true,
-				PlayOrder:   []int{0, 0, 1, 2, 3, 3, 2, 1},
+				SpritePath: "assets/sprites/enemies/senhora_das_trevas/idle_scan.png",
+				FrameWidth: 596, FrameHeight: 568, Columns: 4,
+				FrameTime: 0.16, FootLine: 556,
+				OneShot:   true,
+				PlayOrder: []int{0, 0, 1, 2, 3, 3, 2, 1},
 				// segura as pontas do giro
 			},
 			AnimCastLoop: {
-				SpritePath:  "assets/sprites/enemies/senhora_das_trevas/cast_loop.png",
-				FrameWidth:  594, FrameHeight: 632, Columns: 4,
-				FrameTime:   0.22, FootLine: 620,
+				SpritePath: "assets/sprites/enemies/senhora_das_trevas/cast_loop.png",
+				FrameWidth: 594, FrameHeight: 632, Columns: 4,
+				FrameTime: 0.22, FootLine: 620,
 			},
 			AnimCastRelease: {
-				SpritePath:  "assets/sprites/enemies/senhora_das_trevas/cast_release.png",
-				FrameWidth:  592, FrameHeight: 626, Columns: 4,
-				FrameTime:   0.11, FootLine: 614,
-				OneShot:     true,
-				PlayOrder:   []int{0, 1, 1, 2, 2, 2, 3, 3},
+				SpritePath: "assets/sprites/enemies/senhora_das_trevas/cast_release.png",
+				FrameWidth: 592, FrameHeight: 626, Columns: 4,
+				FrameTime: 0.11, FootLine: 614,
+				OneShot:   true,
+				PlayOrder: []int{0, 1, 1, 2, 2, 2, 3, 3},
 				// segura o disparo (indice 2)
 			},
 			AnimAttackWindup: {
-				SpritePath:  "assets/sprites/enemies/senhora_das_trevas/attack_windup.png",
-				FrameWidth:  586, FrameHeight: 578, Columns: 4,
-				FrameTime:   0.10, FootLine: 566,
+				SpritePath: "assets/sprites/enemies/senhora_das_trevas/attack_windup.png",
+				FrameWidth: 586, FrameHeight: 578, Columns: 4,
+				FrameTime: 0.10, FootLine: 566,
 			},
 			AnimAttackStrike: {
-				SpritePath:  "assets/sprites/enemies/senhora_das_trevas/attack_strike.png",
-				FrameWidth:  584, FrameHeight: 488, Columns: 4,
-				FrameTime:   0.10, FootLine: 476,
-				OneShot:     true,
-				PlayOrder:   []int{0, 0, 1, 2, 2, 2, 2, 3},
+				SpritePath: "assets/sprites/enemies/senhora_das_trevas/attack_strike.png",
+				FrameWidth: 584, FrameHeight: 488, Columns: 4,
+				FrameTime: 0.10, FootLine: 476,
+				OneShot:   true,
+				PlayOrder: []int{0, 0, 1, 2, 2, 2, 2, 3},
 				// segura o AGACHAMENTO (indice 2)
 			},
 		},
@@ -583,7 +600,7 @@ func init() {
 		// monstro pesado. Vendo a 3400 ele comeca a caminhar enquanto o grupo
 		// ainda esta longe, e chega junto com a briga em vez de depois dela.
 		Vision: 3400,
-		Color:          "#6B4A3A",
+		Color:  "#6B4A3A",
 	})
 }
 

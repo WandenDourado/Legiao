@@ -47,16 +47,34 @@ func sentryStore(host bool) (*sentryState, *sync.RWMutex) {
 }
 
 // SpawnSentryOrb poe uma esfera em campo e devolve o ID gerado, que o chamador
-// precisa para replicar aos clientes.
-func SpawnSentryOrb(host bool, id, sentryID, targetID string, start, target rl.Vector2) string {
+// precisa para replicar aos clientes. ttl <= 0 cai para SentryOrbTTL —
+// ver NewSentryOrb.
+func SpawnSentryOrb(host bool, id, sentryID, targetID string, start, target rl.Vector2, ttl float32) string {
 	if id == "" {
 		id = nextSentryOrbID()
 	}
 	st, mu := sentryStore(host)
 	mu.Lock()
 	defer mu.Unlock()
-	st.Orbs[id] = NewSentryOrb(id, sentryID, targetID, start, target)
+	st.Orbs[id] = NewSentryOrb(id, sentryID, targetID, start, target, ttl)
 	return id
+}
+
+// SentryHasLiveOrb reports whether the sentry identified by sentryID already
+// has an orb in flight — the "one orb per sentry" rule
+// (doc/plan_avanco_bots_e_gargula.md §B2): with global range and a slow
+// travel time, cadence alone would otherwise stack a dozen orbs chasing the
+// same player.
+func SentryHasLiveOrb(host bool, sentryID string) bool {
+	st, mu := sentryStore(host)
+	mu.RLock()
+	defer mu.RUnlock()
+	for _, o := range st.Orbs {
+		if o.SentryID == sentryID {
+			return true
+		}
+	}
+	return false
 }
 
 // RemoveSentryOrb tira uma esfera de campo e, se burst, deixa o estouro no

@@ -96,6 +96,12 @@ type Host struct {
 	// (host_bots.go). Guarded by playersMutex, like the h.players slot it
 	// belongs to.
 	bots map[string]*botRuntime
+	// advanceDir is the whole party's smoothed heading, recomputed once per
+	// tickBots call from the living humans' velocity and read by every bot
+	// that same tick (host_bot_tick.go, doc/plan_avanco_bots_e_gargula.md
+	// §A3, R3). Touched only from the simulation goroutine inside tickBots
+	// — no mutex, same as WorldBounds and PlayerSpawn above.
+	advanceDir rl.Vector2
 	// vacatedBodies is where tickAbsence stashes a removed human's last
 	// position/health, by class, so ReconcileBots can have the replacement
 	// bot inherit the body instead of popping up fresh at the map spawn.

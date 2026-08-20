@@ -248,6 +248,12 @@ type SentryOrbPayload struct {
 	TargetID  string `json:"target_id,omitempty"`
 	X         int    `json:"x,omitempty"`
 	Y         int    `json:"y,omitempty"`
+	// TTL so vai no "cast": com alcance global o tempo de voo varia por
+	// disparo (host_sentry_orb.go, sentryOrbTTLFor), e sem ele o cliente
+	// criaria a esfera com o padrao (9s) e a podaria antes de uma esfera
+	// lancada de longe completar a viagem de verdade
+	// (doc/plan_avanco_bots_e_gargula.md §B2).
+	TTL float32 `json:"ttl,omitempty"`
 }
 
 // CannonBallPayload carries a corridor cannon's fireball to clients.

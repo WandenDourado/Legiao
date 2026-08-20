@@ -7,14 +7,15 @@ import rl "github.com/gen2brain/raylib-go/raylib"
 // is geometry, not a threat stat), shields under pressure, swings whenever
 // something is in reach, and calls Avatar Divino when the group is falling.
 type paladinaBrain struct {
-	targetID string
-	decideIn float32
+	targetID   string
+	decideIn   float32
+	retreating bool
 }
 
 func (b *paladinaBrain) Think(v View) Intent {
 	if b.decideIn <= 0 {
 		b.decideIn = decideEvery
-		if foe, ok := mostThreateningFoe(v.Self, v.Allies, v.Foes); ok {
+		if foe, ok := mostThreateningFoe(v.Self, v.Allies, engageableFoes(v)); ok {
 			b.targetID = foe.ID
 		} else {
 			b.targetID = ""
@@ -24,24 +25,36 @@ func (b *paladinaBrain) Think(v View) Intent {
 	}
 
 	target, hasTarget := findFoe(v.Foes, b.targetID)
+	// Gated on Shield already being spent (v.PrimaryReady false): a front
+	// line that retreats before trying to mitigate abandons the group
+	// (plan §A4).
+	retreating := paladinaRetreatHysteresis(&b.retreating, healthFrac(v.Self), v.PrimaryReady)
 
 	intent := Intent{}
 
 	// Position: between the target and the frailest ally, at sword range.
-	dest := v.PartyCentre
+	dest := followDest(v)
+	usingTravel := false
+	if td, ok := travelDest(v); ok {
+		dest, usingTravel = td, true
+	}
 	if hasTarget {
 		frailest := frailestAlly(v.Self, v.Allies)
 		mid := rl.Vector2Lerp(frailest, target.Pos, 0.6)
 		dest = mid
-	} else if !withinFollowRadius(v.Self.Pos, v.PartyCentre) {
-		dest = v.PartyCentre
-	} else {
-		dest = v.Self.Pos
+		usingTravel = false
 	}
-	moveTo(&intent, v.Self.Pos, dest, v.Allies)
+	if retreating {
+		nearest, hasNearest := nearestFoe(v.Self.Pos, v.Foes)
+		dest = retreatDest(v, nearest.Pos, hasNearest)
+		usingTravel = false
+	}
+	finishMove(&intent, v, dest, usingTravel)
 
-	// Sword sweep whenever something is within reach.
-	if hasTarget && rl.Vector2Distance(v.Self.Pos, target.Pos) <= frontRing {
+	// Sword sweep whenever something is within reach — never while
+	// retreating, or she would keep swinging with her back turned instead
+	// of actually opening distance (plan §A4).
+	if !retreating && hasTarget && rl.Vector2Distance(v.Self.Pos, target.Pos) <= frontRing {
 		aim := target.Pos
 		intent.Attack = &aim
 	}

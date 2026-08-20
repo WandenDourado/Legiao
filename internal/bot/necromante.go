@@ -10,14 +10,15 @@ import rl "github.com/gen2brain/raylib-go/raylib"
 // Espectral comes out when surrounded or when the map hands over a mass of
 // enemies.
 type necromanteBrain struct {
-	targetID string
-	decideIn float32
+	targetID   string
+	decideIn   float32
+	retreating bool
 }
 
 func (b *necromanteBrain) Think(v View) Intent {
 	if b.decideIn <= 0 {
 		b.decideIn = decideEvery
-		if foe, ok := nearestFoe(v.Self.Pos, v.Foes); ok {
+		if foe, ok := nearestFoe(v.Self.Pos, engageableFoes(v)); ok {
 			b.targetID = foe.ID
 		} else {
 			b.targetID = ""
@@ -26,21 +27,33 @@ func (b *necromanteBrain) Think(v View) Intent {
 		b.decideIn -= v.Dt
 	}
 	target, hasTarget := findFoe(v.Foes, b.targetID)
+	retreating := retreatHysteresis(&b.retreating, healthFrac(v.Self), retreatUnder, rejoinAbove)
 
 	intent := Intent{}
 
-	dest := v.PartyCentre
+	dest := followDest(v)
+	usingTravel := false
+	if td, ok := travelDest(v); ok {
+		dest, usingTravel = td, true
+	}
+	// Only the "too close, back off" case actually overrides the
+	// destination — the same asymmetry that already existed before travel:
+	// a target within attack range but past magoKeepRange does not pull her
+	// toward it, so heading to the portal while still firing (below) is the
+	// right outcome (plan §A2 "andar e atirar").
 	if hasTarget && rl.Vector2Distance(v.Self.Pos, target.Pos) < magoKeepRange {
 		away := direction(target.Pos, v.Self.Pos)
 		dest = rl.Vector2Add(v.Self.Pos, rl.Vector2Scale(away, magoKeepRange))
-	} else if !withinFollowRadius(v.Self.Pos, v.PartyCentre) {
-		dest = v.PartyCentre
-	} else {
-		dest = v.Self.Pos
+		usingTravel = false
 	}
-	moveTo(&intent, v.Self.Pos, dest, v.Allies)
+	if retreating {
+		nearest, hasNearest := nearestFoe(v.Self.Pos, v.Foes)
+		dest = retreatDest(v, nearest.Pos, hasNearest)
+		usingTravel = false
+	}
+	finishMove(&intent, v, dest, usingTravel)
 
-	if hasTarget {
+	if hasTarget && rl.Vector2Distance(v.Self.Pos, target.Pos) <= necromanteAttackRange {
 		aim := target.Pos
 		intent.Attack = &aim
 	}

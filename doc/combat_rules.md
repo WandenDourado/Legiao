@@ -162,14 +162,26 @@ marcadores `enemy_spawn_*` e sem corrida quase sempre é esquecimento, então
 | Slime | 100 | 100 | 10 | 1,0 s | 25 |
 | Lobo | 40 | 240 | 18 | 0,7 s | 30 |
 | Orc | 600 | 130 | 30 | 1,5 s | 70 |
-| Gárgula | 40 | **0** | 14 | 1,35 s | **1900** |
+| Gárgula | 40 | **0** | 14 | 1,35 s | **global** |
 
 A gárgula (`castle_sentry`) é a única criatura que não se move e a única que
 `checkProjectileCollisions` recusa machucar com **projétil comum** — espada e
-espectro passam. Alcance 1900 contra os 720 de raio da Área Angelical: ela é o
-monstro desenhado para bater de **fora** da resposta que o grupo tem, e é por
-isso que a fase seguinte à que a introduz é a que entrega as Flechas Celestiais
-(40 de dano perfurante contra os 40 de vida dela).
+espectro passam. Alcance **global** (`entity.SentryGlobalRange`, 16000 —
+maior que a diagonal do maior mapa) contra os 720 de raio da Área Angelical:
+ela é o monstro desenhado para bater de **fora** da resposta que o grupo tem,
+e é por isso que a fase seguinte à que a introduz é a que entrega as Flechas
+Celestiais (40 de dano perfurante contra os 40 de vida dela).
+
+**Alcance global não é dano instantâneo.** O golpe continua chegando só
+quando a esfera (`skill.SentryOrb`) encosta — o alcance decide só QUEM ela
+pode escolher como alvo. Duas mudanças acompanham o alcance global, ou a
+esfera lenta (velocidade 300) vira ruído: o TTL passa a ser calculado pela
+distância do disparo (`network.sentryOrbTTLFor`: `dist/velocidade*1,5 + 2s`,
+teto de 40s) em vez de fixo em 9s, e cada gárgula não dispara de novo
+enquanto a própria esfera ainda estiver no ar
+(`skill.SentryHasLiveOrb`) — sem isso, cadência de 1,35s contra uma viagem de
+até 40s empilharia uma dezena de esferas perseguindo o mesmo jogador. Ver
+`doc/plan_avanco_bots_e_gargula.md` §B1/§B2.
 
 Onde ela aparece está em `network/sentries.go`, e as duas portas de entrada são
 diferentes porque os mapas são: no `world_04`, travessia de território, ela é
@@ -649,7 +661,7 @@ aparece em `waveRuns`, `climaxRuns`, `garrisons` nem `sentryPosts`
 
 ### O canhão não é um `entity.Enemy`
 
-Ao contrário da gárgula sentinela (`enemy_sentry_*`, alcance 1900, ataca por
+Ao contrário da gárgula sentinela (`enemy_sentry_*`, alcance global, ataca por
 esfera e pode ser ferida por espectro), o canhão do corredor é **decoração do
 Tiled com uma arma de host atrás**: a estátua de gárgula já existente no
 manifesto do castelo, reaproveitada como marco visual (decisão do Gui,

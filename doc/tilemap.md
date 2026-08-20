@@ -509,6 +509,20 @@ Regras que valem a pena não reinventar:
 - `ui/wave_hud.go` fecha o ciclo: ao limpar o mapa o subtítulo diz onde o portal
   abriu, porque a luta termina longe do fim da trilha.
 
+**Um mapa de guarnição abre o portal cedo, de propósito.** `world_03` não tem
+um único marcador `enemy_spawn_*` — a jogabilidade dele é guarnição, não
+corrida de hordas — então `Waves` fica nil, `WaveState.Total` é 0 e
+`PortalsUnlocked()` devolve `true` desde o primeiro quadro, com a guarnição
+inteira ainda em campo. Isso é a regra "mapa sem hordas fica liberado" (acima)
+funcionando como desenhado, não um bug: o mapa se protege sozinho na prática,
+porque o portão da fortaleza (`portal_portao_da_fortaleza`) fica **dentro**
+da zona `castle_climax`, ao norte — atravessar a zona arma a emboscada do
+clímax, e o portal fecha de novo até a emboscada ser resolvida. O que **não**
+podia continuar era um bot tratando "portal ativo" como "vá até lá agora":
+ver `doc/plan_avanco_bots_e_gargula.md` §A2, causa 4, e `travelDest`
+(`internal/bot/steering.go`) — o portal só é destino de um bot quando não há
+nada por perto para lutar **e** um humano já está na porta.
+
 `work/portal-preview/preview_portal.py <tempo>` reproduz o desenho fora do jogo
 (mesma matemática, blend aditivo e alpha separados) para conferir proporção e
 cor contra a grama sem compilar.

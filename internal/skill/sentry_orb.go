@@ -36,8 +36,18 @@ const (
 	// isso: a corona nao machuca, so o nucleo.
 	SentryOrbRadius float32 = 26
 
-	// SentryOrbTTL evita esfera orfa quando o alvo morre ou sai do mapa.
+	// SentryOrbTTL e o padrao usado quando o chamador nao calcula um TTL
+	// proprio (ttl <= 0 em NewSentryOrb) — evita esfera orfa quando o alvo
+	// morre ou sai do mapa. Com alcance global (doc/tilemap.md,
+	// SentryGlobalRange) o chamador real (host_sentry_orb.go) sempre calcula
+	// o TTL pela distancia: uma esfera lancada do outro lado do mapa nao
+	// caberia nestes 9s.
 	SentryOrbTTL float32 = 9.0
+
+	// SentryOrbMaxTTL e o teto do TTL calculado pela distancia — um disparo
+	// absurdamente longe nao pode viver para sempre (doc/plan_avanco_bots_e_gargula.md
+	// §B2).
+	SentryOrbMaxTTL float32 = 40.0
 )
 
 // SentryOrb e um projetil perseguidor desenhado com primitivas raylib.
@@ -59,10 +69,19 @@ type SentryOrb struct {
 }
 
 // NewSentryOrb cria a esfera saindo de start em direcao ao alvo.
-func NewSentryOrb(id, sentryID, targetID string, start, target rl.Vector2) *SentryOrb {
+//
+// ttl <= 0 cai para SentryOrbTTL. O chamador real (host_sentry_orb.go)
+// sempre passa um TTL calculado pela distancia do disparo — alcance global
+// (SentryGlobalRange) significa que a esfera pode nascer a milhares de
+// pixels do alvo, e os 9s fixos de antes nunca chegariam lá
+// (doc/plan_avanco_bots_e_gargula.md §B2).
+func NewSentryOrb(id, sentryID, targetID string, start, target rl.Vector2, ttl float32) *SentryOrb {
 	dir := rl.Vector2Subtract(target, start)
 	if dir.X == 0 && dir.Y == 0 {
 		dir = rl.NewVector2(0, 1)
+	}
+	if ttl <= 0 {
+		ttl = SentryOrbTTL
 	}
 	return &SentryOrb{
 		ID:       id,
@@ -70,7 +89,7 @@ func NewSentryOrb(id, sentryID, targetID string, start, target rl.Vector2) *Sent
 		TargetID: targetID,
 		Position: start,
 		Velocity: rl.Vector2Scale(rl.Vector2Normalize(dir), SentryOrbSpeed),
-		TTL:      SentryOrbTTL,
+		TTL:      ttl,
 		Trail:    NewParticleEmitter(),
 	}
 }
