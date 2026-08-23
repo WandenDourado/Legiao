@@ -1128,6 +1128,499 @@ de antes.
 
 ---
 
+## 4⁹⁄₁₀. Host e cliente — o lag que cresce com a FASE (22/08/2026)
+
+A secao 4⅞ tratou do lag que cresce com o TEMPO de partida no cliente mobile.
+Esta trata de um relato diferente: dois jogadores em desktop (host + cliente),
+o jogo ficando quase injogavel **conforme a campanha avanca de fase**. As duas
+curvas se parecem e tem causas distintas — uma cresce com a duracao, a outra
+com o mapa carregado.
+
+### 0. Primeiro a medida, depois a correcao
+
+O projeto media tempo de quadro, draw call, quad e celula visitada. Nao media
+**um unico byte**. Sem isso, "esta vazando memoria" e "o mapa 6 e mais pesado
+que o mapa 1" produzem a mesma queixa e pedem correcoes opostas.
+
+`internal/game/perf_mem.go` acrescenta tres linhas ao painel do F3:
+
+```
+heap 84.3 MB (pico 96.1 / sys 121.0)   objetos 412.883   GC 137
+goroutines 7   VRAM: mapa 12  inimigos 6  retratos 3
+espelho: jogadores 2  inimigos 83  projeteis 4   anims 91
+```
+
+**Como ler.** Uma captura na fase 1 e outra na fase que engasga, as duas logo
+depois do carregamento, paradas, sem horda em campo — senao o que se compara e
+a briga, nao a fase.
+
+| O que a captura mostra | O que significa |
+|---|---|
+| `heap` parecido, `pico` muito maior | Nao ha retencao; ha alocacao por quadro. Procurar o caminho que aloca, nao o que guarda. |
+| `heap` subindo fase a fase e nunca voltando | Vazamento do lado do Go. A terceira linha diz qual colecao. |
+| `heap` estavel e o jogo lento assim mesmo | O custo esta na GPU/VRAM. A linha `VRAM` conta TEXTURAS: cada retrato ~6 MB, cada atlas de manifesto ate 16 MB. |
+| `goroutines` subindo | Conexao que nao fecha (rede), nao memoria de jogo. |
+
+A amostragem so roda com o F3 ligado e a cada 30 quadros: `runtime.ReadMemStats`
+para o mundo enquanto le, e um medidor que trava o quadro que veio medir mente
+sobre o proprio quadro.
+
+### 1. `Collision.Rects()` por quadro no cliente — CORRIGIDO
+
+`loop.go` chamava `w.Collision.Rects()` a cada quadro para passar os obstaculos
+a `AdvanceClientSkills`. `CollisionGrid.Rects()` varre a grade INTEIRA e aloca
+um `rl.Rectangle` por celula solida, mais os footprints — no `world_03` sao
+42.000 celulas visitadas e alguns milhares de retangulos, sessenta vezes por
+segundo, com `make([]rl.Rectangle, 0)` sem capacidade (logo, realocando e
+copiando durante a propria montagem).
+
+O host nunca teve esse problema: ele recebe a lista uma vez por mapa em
+`SetCollisionRects`. A assimetria era o defeito. A lista agora e um campo do
+`World` (`collisionRects`), montada uma vez em `TryLoadWorld`, e os dois papeis
+leem `World.CollisionRects()`.
+
+Ele nao e um vazamento: e trabalho repetido cuja conta sobe a cada fase maior.
+
+> **Corrigido depois pela medicao (ver §5 abaixo).** Quando isto foi escrito,
+> este parecia o item mais provavel. A medicao em jogo mostrou que ele era
+> real mas pequeno perto do verdadeiro culpado — e que a lista plana de
+> retangulos era o problema errado a otimizar, porque a resposta certa era
+> **nao ter lista plana nenhuma**. O cache no `World` foi removido junto com
+> ela.
+
+Consequencia a respeitar: a fatia e compartilhada e nunca deve ser modificada
+por quem recebe. Se algum dia a colisao passar a mudar em runtime
+(`SetFootprintsEnabledOverlapping`, hoje sem chamador), o cache tem de ser
+invalidado no mesmo lugar em que ela muda.
+
+### 2. `portraitCache` sem descarga — CORRIGIDO (era o M5 da §2.2)
+
+`internal/ui/dialogue_box.go` carregava o `reference.png` de cada orador e
+guardava para a sessao inteira. Cada um e ~6 MB de VRAM; a campanha tem sete
+fases e cada uma apresenta oradores novos. O elenco da fase 1 continuava
+residente na fase 7.
+
+O cache saiu para `internal/ui/portrait_cache.go` e passou a viver por MAPA:
+`travelTo` chama `ui.UnloadPortraits()` logo depois de `current.Unload()`, na
+mesma linha de raciocinio (o mapa que fica para tras devolve tudo o que era so
+dele), e `playSession` tem um `defer` para o fim da sessao. O preco e um
+carregamento por orador por fase, que e o preco certo.
+
+`PortraitCacheSize()` publica a contagem no F3 — se ela voltar a so crescer, o
+vazamento voltou.
+
+### 3. `Manager.Reset()` deixava os efeitos do chefe em campo — CORRIGIDO
+
+Espinhoes e nevoa da Senhora das Trevas so eram limpos pela morte dela
+(`host_boss.go`). `Reset()` — que roda tanto no reinicio de fase quanto na
+TROCA DE MAPA (`ApplyToHost`) — nao os tocava, entao sair do mapa 7 por portal
+ou por F8 levava a nevoa junto para o destino, e nada mais a tiraria de la.
+`skill/reset.go` agora chama `m.ClearBossEffects()`.
+
+### 4. Referencia de textura duplicada em `MapRenderer.Load` — CORRIGIDO
+
+`AcquireTexture` conta CADA chamada; `mr.Textures` e indexado por caminho e
+guarda UMA entrada. Dois tilesets do mesmo mapa citando a mesma imagem davam
+dois `Acquire` e um `Release`, e o atlas ficava preso na VRAM ate o fim da
+sessao — um vazamento que so aparece em mapa com tileset repetido, mas que nao
+tem como se corrigir sozinho depois. `Load` agora ignora um caminho que ja
+esta em `mr.Textures`, e `Unload` zera `Terrain` e `Manifests` depois de
+devolve-los, para uma segunda chamada nao devolver o que ela ja nao tem.
+
+### O que este levantamento NAO encontrou (e vale registrar)
+
+Foram conferidos e estao corretos, com poda no lugar: `identityCache` e
+`announcer` (`wire.go`), `remoteAnims` (`enemy_sprite.go`, TTL de 5 s),
+`RemoteEnemies`/`RemotePlayers`/`RemoteProjectiles` (substituidos inteiros por
+snapshot, podados no host), `textureCache` (contagem de referencia),
+`EntityManager` (inimigo morto sai do mapa em `RemoveEnemy`, nao fica
+inativo), `discoveredHosts` (deduplicado) e o ciclo `Acquire`/`Release` do
+terreno e dos manifestos. **Nenhuma colecao de jogo cresce sem limite.** Se o
+medidor do F3 mostrar heap subindo fase a fase depois destas correcoes, o
+proximo lugar a olhar e fora desta lista.
+
+### Custo por fase que NAO e defeito
+
+Vale separar: as fases finais sao objetivamente mais caras. O `world_03` tem 83
+monstros de guarnicao em campo desde o carregamento; o `world_07` e uma arena
+de corrida infinita com dez gargulas e um chefe. Parte do "fica lento no fim da
+campanha" e conteudo, nao vazamento — e o painel de memoria e justamente o que
+permite separar os dois.
+
+---
+
+
+### 5. Medicao em jogo (22/08/2026) — o veredito
+
+Duas capturas do painel novo, host, 3840x2160, mesma sessao:
+
+| | `world_01` (fluido) | `world_02` apos o climax (injogavel) |
+|---|---|---|
+| fps / quadro / PIOR | 60 / 16,7 ms / 16,7 ms | **16 / 96,7 ms / 177,8 ms** |
+| cpu mapa / entidades / resto | 0,6 / 0,5 / 15,6 ms | 3,1 / 3,5 / **90,1 ms** |
+| terreno | 924 quads, 2 binds | 3208 quads, 5 binds |
+| inimigos vivos / desenhados | 1 / 1 | 10 / 10 |
+| heap (pico / sys) | 1,6 MB (3,5 / 17,5) | **2,5 MB (3,6 / 17,7)** |
+| objetos / GC | 9.239 / 611 | 29.399 / **9.003** |
+| goroutines | 4 | 4 |
+| VRAM mapa / inimigos / retratos | 7 / 11 / 3 | 14 / 11 / 5 |
+| espelho (jog/ini/proj/anims) | 5 / 0 / 0 / 0 | 5 / 0 / 0 / 0 |
+
+**A hipotese de vazamento esta DESCARTADA, com dado.** O heap vivo praticamente
+nao mudou (1,6 -> 2,5 MB), o pico nao mudou (3,5 -> 3,6 MB), o `Sys` nao mudou
+(17,5 -> 17,7 MB), as goroutines nao mudaram (4 -> 4), a VRAM cresceu o que um
+mapa maior justifica e o espelho de rede esta zerado nos dois. Nada acumula.
+
+**O que a tabela grita e outra coisa: `GC 611` contra `GC 9.003`.** Nove mil
+ciclos de coletor com um heap vivo de 2,5 MB nao e retencao — e CHURN: alguma
+coisa alocava e descartava centenas de MB por segundo. E os 90,1 ms de "resto"
+diziam onde: `UpdateSimulation` do host roda no laco principal, fora do bloco
+da camera, entao caia inteira ali dentro.
+
+#### A causa: a Legiao Espectral testava obstaculo contra o mapa inteiro
+
+O relato de quem jogou foi preciso — "piorou depois do climax, quando o
+Necromante usou a suprema". A conta fecha:
+
+- `LegionCount = 30`. A Legiao poe **trinta** entidades simuladas em campo.
+  Elas nao sao `entity.Enemy`, entao nao aparecem em "inimigos 10 vivos" — o
+  painel mostrava um mapa quase vazio enquanto trinta espectros pisavam nele.
+- Cada espectro se movia por `moveSpecter`, que chamava
+  `tilemap.IsColliding(pos, w, h, rects)` **ate quatro vezes** (teste direto +
+  deslize em X + deslize em Y).
+- `IsColliding` percorre a lista **inteira** de solidos. O `world_02` tem 1.132
+  celulas solidas na camada `collision` mais os apoios das 179 pecas de
+  vegetacao: **~1.400 retangulos por teste**.
+- E `separate()` movia os dois espectros de **cada par** na hora: 30 espectros
+  sao 435 pares, ate 870 `moveSpecter` por quadro.
+
+Somando o pior caso de um quadro com a legiao engajada (que e quando os
+espectros se amontoam sobre a matilha e a separacao dispara em quase todo par):
+
+```
+(30 advance + 870 separate) x ate 4 testes x ~1.400 retangulos
+    = ~5.000.000 de comparacoes de retangulo POR QUADRO
+```
+
+A 16 fps, ~80 milhoes por segundo — cada uma passando por `CheckCollisionRecs`
+do raylib. Isso e os 90 ms de "resto" e e a origem do lixo que produziu os
+9.003 ciclos de GC.
+
+**E o custo cresce com o TAMANHO DO MAPA**, porque cresce com a contagem de
+retangulos. Por isso a mesma suprema rodava lisa no `world_01` e derrubava o
+jogo no `world_02` — e por isso a queixa tinha a forma de "piora conforme
+avanca nas fases", que e exatamente a forma de um vazamento sem ser um.
+
+#### A correcao
+
+**C1 — as magias passam a falar com o `CollisionGrid`, nao com uma lista plana.**
+`skill.StepLegions`, `StepArrows`, `StepFireballs` e `Manager.AdvanceLegions`
+recebem `collision.Solid` em vez de `[]rl.Rectangle`; `Host.SetCollisionRects`
+virou `Host.SetSolid`. `CollidesCentered` consulta so as celulas que a caixa
+toca mais o indice espacial de apoios (`footprintIndex`): uma caixa de 24 px
+numa celula de 128 px olha **uma ou quatro** celulas, nao mil e quatrocentos
+retangulos.
+
+Isso e a mesma porta que jogador e monstro ja usavam (`EntityManager.Solid`).
+As magias e que estavam de fora — e a lista plana existia so para elas.
+
+**C2 — `separate()` soma os empurroes e move uma vez por espectro.**
+De ate 870 `moveSpecter` por quadro para 30. Alem de mais barato, e mais
+estavel: aplicando par a par, o empurrao de A contra B mudava a posicao que o
+par seguinte lia, e a ordem do laco virava parte do resultado.
+
+Aritmetica das duas juntas, no mesmo pior caso de antes:
+
+```
+(30 advance + 30 separate) x ate 4 testes x ~1 a 4 celulas
+    = ~1.000 comparacoes por quadro, contra ~5.000.000
+```
+
+Nao e um numero medido: e a conta dos dois desenhos. A medida vem da proxima
+captura — e o painel ganhou a linha para ela (abaixo).
+
+**C3 — o painel separa `simulacao` de `resto`.**
+`cpu: mapa / entidades / simulacao / resto`. "Resto" agora e so GPU, vsync e o
+que e desenhado fora do bloco da camera; a simulacao (host `UpdateSimulation`,
+cliente `AdvanceClientSkills`) tem numero proprio. Foi a falta desse corte que
+deixou 90 dos 96,7 ms num balde chamado "resto".
+
+**C4 — mais duas colunas no painel:** `lixo N MB/s` (taxa de alocacao — o
+denominador que faltava para o `GC 9003` significar alguma coisa) e
+`espectros N` no fim da linha do espelho, porque a Legiao e a unica magia que
+poe trinta entidades em campo e nao aparecia em contador nenhum.
+
+#### O que a proxima captura tem de mostrar
+
+Refazer as duas capturas, mesmo lugar. O esperado:
+
+- `simulacao` perto de zero no `world_02` com a legiao em campo, e `espectros 30`
+  visivel para provar que ela estava mesmo la.
+- `GC` na casa das centenas, nao dos milhares, e `lixo` em poucos MB/s.
+
+**Se `simulacao` cair e o `resto` continuar em 90 ms**, a causa e outra e esta
+na GPU — e ai o suspeito passa a ser o terreno (3208 quads contra 924) em 4K,
+o que e a Faixa R4 da §1.4 e um trabalho completamente diferente. O painel
+decide; nao ha mais o que supor.
+
+### Sobre distribuir o jogo entre os nucleos da CPU
+
+A captura do Gerenciador de Tarefas junto das duas acima mostra **14% de
+utilizacao** num Ryzen 5 3600X (6 nucleos / 12 logicos) enquanto o jogo rodava
+a 16 fps. Isso e ~1,7 nucleos ocupados.
+
+Vale ler o que esse numero diz: **o jogo nao estava sem CPU.** Um jogo travado
+por CPU numa thread so apareceria como um nucleo saturado — ~8% do total em 12
+logicos — e o resto parado. 1,7 nucleos e a goroutine principal MAIS os workers
+de marcacao do GC, que e exatamente o que 9.003 ciclos de coletor produzem. A
+CPU ociosa nao era capacidade desperdicada esperando ser usada; era o processo
+esperando (GC e GPU) enquanto uma goroutine fazia trabalho demais.
+
+Por isso paralelizar nao era a resposta aqui, e a comparacao e direta:
+distribuir o laco errado por 6 nucleos daria **6x**; corrigir o algoritmo deu
+cerca de **mil vezes**. Otimizar antes de medir teria custado uma refatoracao
+concorrente inteira para esconder um defeito de ~1.000 comparacoes disfarcado
+de 5 milhoes.
+
+Duas restricoes que continuam valendo, para quando a pergunta voltar:
+
+1. **O desenho nao sai da thread principal.** Toda chamada `rl.Draw*` /
+   `rl.Load*` exige o contexto OpenGL, que pertence a uma thread so. Isso nao e
+   escolha do projeto, e do OpenGL — `internal/tilemap/texture_cache.go` ja
+   registra a mesma regra para o cache de texturas ("carregar textura e chamada
+   de GPU, que so pode acontecer na goroutine que detem o contexto").
+2. **O host e autoritativo e a simulacao e sequencial por design.** Ordem
+   deterministica ja e uma decisao explicita: `EntityManager.UpdateAll` ORDENA
+   os inimigos por ID antes de simular, justamente para o quadro nao depender
+   da ordem aleatoria do `map`. Paralelizar aquele laco significa reintroduzir
+   nao-determinismo e proteger cada leitura de posicao — muito custo por pouco.
+
+O que SERIA paralelizavel no dia em que fizer falta, em ordem de facilidade:
+
+- **A malha de navegacao** (`nav.Build`), que roda uma vez por carregamento de
+  mapa e ja e medida em log proprio. E puro calculo sobre dado imutavel.
+- **O passe de decisao dos bots** (`bot.Brain.Think`), um por bot, sem escrita
+  compartilhada — a saida e um `Intent` por agente.
+- **A leitura de vizinhanca do `UpdateAll`** (steering), separando a fase de
+  LER posicoes da fase de ESCREVER, num padrao de duplo buffer.
+
+Nenhuma delas aparece hoje no painel: com 83 monstros no `world_03`, o passe de
+entidades custa 3,5 ms. A regra fica: **medir no `simulacao` primeiro,
+paralelizar so o que aparecer la e for realmente independente.**
+
+---
+
+
+### 6. Veredito medido (22/08/2026, segunda rodada) — a correcao pegou
+
+Tres capturas depois das correcoes, mesmo host, mesma resolucao:
+
+| | `world_01` | `world_02` pos-climax | `world_03` (dialogo) |
+|---|---|---|---|
+| fps / quadro / PIOR | 60 / 16,7 / 16,7 ms | **60 / 16,7 / 16,7 ms** | 60 / 16,9 / **40,2 ms** |
+| mapa / entidades / **simulacao** / resto | 1,0 / 0,5 / **0,0** / 15,2 | 1,5 / 1,0 / **0,0** / 14,2 | 2,5 / 1,5 / **0,5** / 12,4 |
+| terreno | 939 quads, 2 binds | 1826 quads, 5 binds | 2376 quads, 7 binds |
+| inimigos vivos / desenhados | 12 / 10 | 12 / 7 | **156 / 16** |
+| heap (pico / sys) | 3,3 (3,5 / 17,2) | 2,2 (3,5 / 17,2) | 2,7 (3,6 / 17,5) |
+| objetos / GC / lixo | 47.433 / 232 / 18 MB/s | 35.733 / 2.514 / 31 MB/s | 42.061 / 6.197 / 45 MB/s |
+| retratos na VRAM | 3 | 3 | 4 |
+
+**A mesma cena do `world_02` que rodava a 16 fps com 96,7 ms de quadro roda a
+60 fps com 16,7 ms.** O "resto" de 90,1 ms virou 14,2, e a linha nova diz onde
+ele estava: `simulacao 0,0`.
+
+Corroboracao independente: o `world_03` sustenta **156 inimigos vivos** com
+`simulacao 0,5 ms` e `entidades 1,5 ms` (culling desenhando 16 dos 156). A
+simulacao inteira ficou barata, nao so a Legiao.
+
+**Ressalva honesta:** as tres capturas mostram `espectros 0` — a legiao ja
+tinha acabado quando o print foi tirado, entao nao existe ainda uma captura com
+os trinta espectros vivos DEPOIS da correcao. A comparacao antes/depois e da
+mesma cena do mesmo mapa, e a aritmetica de §5 explica o resultado, mas a prova
+direta pede um print com `espectros 30` na tela.
+
+**Sobre ler `lixo` e `GC` juntos.** `GC` e contagem ACUMULADA da sessao: ele so
+cresce, e comparar o numero absoluto entre duas capturas da mesma sessao nao
+diz nada. Quem responde e `lixo`, que e taxa. 18 a 45 MB/s e normal para um
+jogo em Go; o que produziu os 9.003 ciclos da rodada anterior era da ordem de
+190 MB/s.
+
+**Sobre ler `resto`.** Ele inclui a ESPERA — o sono do `SetTargetFPS` e, agora,
+o bloqueio do vsync ate o retraco. Num quadro que fecha em 4 ms de trabalho com
+o alvo em 16,7 ms, um `resto` de ~13 ms e o jogo ocioso, nao o jogo em
+dificuldade. `resto` alto so preocupa quando o quadro TOTAL passa do alvo.
+
+### 7. O quadro de 40 ms do dialogo — CORRIGIDO
+
+A captura do `world_03` mostra `PIOR 40,2 ms` contra 16,7 dos outros dois, e
+quem jogou descreveu o sintoma exato: *"toda vez que passa um dialogo o ms
+piora, mas depois de alguns segundos normaliza"*.
+
+E o retrato. `portraitTexture` carregava a `reference.png` do orador na
+PRIMEIRA fala em que ele aparecia — 1536x1024, ~6 MB depois de decodificada —
+dentro do quadro que abre a caixa. "Normaliza depois" porque a segunda fala do
+mesmo personagem ja acha a textura no cache.
+
+E o mesmo defeito, letra por letra, que `entity.PreloadEnemyTextures` ja tinha
+resolvido para as folhas de monstro (§"o quadro isolado de 43 ms"). A solucao e
+a mesma: descobrir o elenco no carregamento do mapa e pagar o custo la.
+
+- `dialogue.File.PortraitKeys()` lista, sem repetir, todo retrato que o arquivo
+  do mapa pode pedir.
+- `ui.PreloadPortraits(keys)` sobe todos de uma vez.
+- `DialogueDirector.syncMap` chama os dois no quadro em que o mapa troca — que
+  ja e um quadro de carregamento, onde o jogador espera uma pausa.
+
+A lista sai do ARQUIVO inteiro e nao do roteiro que vai tocar: os tres gatilhos
+disparam em momentos imprevisiveis no carregamento, e o `on_last_stand` dispara
+no meio de uma luta perdida — o pior momento possivel para parar o quadro e ler
+um PNG do disco.
+
+Roda em toda maquina, nao so na que dirige a narrativa: o cliente nao decide
+quando a cena comeca, mas desenha a mesma caixa com o mesmo retrato.
+
+**O que sobra (M5 da §2.2, ainda aberto):** o retrato e uma `reference.png` de
+1536x1024 desenhada num quadro de ~200x250 px. Precarregar tira a trava, mas a
+VRAM continua desproporcional. A correcao final e de arte/build: uma versao
+reduzida da `reference.png` so para o retrato.
+
+### Vsync e teto de quadro
+
+O relato de screen tearing na mesma sessao tem causa direta e o painel a
+escondia: **o jogo nunca pediu vsync.**
+
+`rl.SetTargetFPS(60)` NAO e vsync. Ele so faz o laco dormir ate completar o
+intervalo alvo; a troca de buffer continua acontecendo no meio do desenho da
+tela pelo monitor, e a imagem rasga. Era por isso que o painel mostrava
+`quadro 16,7 ms / PIOR 16,7 ms` — a CADENCIA estava perfeita e o SINCRONISMO
+nunca existiu. Uma metrica de tempo de quadro nao consegue ver tearing.
+
+`Config` ganhou `VSync bool` (verdadeiro nas duas plataformas) e `Run` aplica
+`rl.SetConfigFlags(rl.FlagVsyncHint)` **antes** de `InitWindow` — a flag e um
+hint de criacao do contexto GL e nao tem efeito depois que a janela existe.
+
+Dois detalhes que valem a regra:
+
+1. **`Config.TargetFPS` nao era lido.** `Run` chamava `rl.SetTargetFPS(60)` com
+   o numero cravado, entao o mecanismo descrito no item mobile #6 ("declarar 30
+   no Android sem `if isAndroid`") nao teria efeito nenhum. Agora e lido, e
+   `TargetFPS: 0` significa "sem teto proprio: quem cadencia e o monitor".
+2. **Teto e vsync podem brigar.** Um teto MENOR que o refresh continua valendo
+   (o 30 do celular). Um teto IGUAL ao refresh e inofensivo. Um teto que nao
+   bate com o refresh — 60 num monitor de 144 Hz — faz o quadro cair ora em
+   dois, ora em tres retracos, e isso e judder visivel. O padrao ficou em 60
+   para nao mudar carga de GPU sem medida; **num monitor acima de 60 Hz, trocar
+   `TargetFPS` para `0` em `DefaultConfig` entrega a cadencia ao monitor.** O
+   `fps` do F3 mostra o resultado em cinco segundos: se subir e o quadro
+   continuar estavel, ficar com zero; se o fps cair abaixo de 60, voltar para
+   60 — a GPU nao sustenta o refresh do monitor em 4K.
+
+---
+
+
+### 8. A Chuva de Meteoros do Mago (22/08/2026) — o mesmo defeito por outra porta
+
+Relato: "a ultimate do Mago esta reduzindo o fps". Diagnostico sem precisar de
+captura, porque a conta esta nas constantes.
+
+**O regime.** `MeteorRainInterval = 0.025` (um meteoro a cada 25 ms, ~40/s)
+durante `MeteorRainDuration = 15` s. Cada meteoro vive `MeteorFallTime` (0,9 s)
+mais `meteorImpactTime` (0,5 s) = 1,4 s. Logo:
+
+```
+40 nascimentos/s  x  1,4 s de vida  =  ~56 meteoros no ar SIMULTANEOS
+15 s de chuva     x  40             =  600 meteoros na ultimate inteira
+```
+
+**As particulas.** Cada meteoro caindo emite TRES particulas por quadro
+(`Advance`), e cada impacto solta uma rajada de 26 + 14:
+
+```
+caindo:   36 no ar x 3 particulas x 60 fps           = 6.480 nascem/s
+          x ~0,28 s de vida media                     = ~1.800 vivas
+impacto:  40 impactos/s x 40 particulas               = 1.600 nascem/s
+          x ~0,47 s de vida                           =   ~750 vivas
+                                                        ~2.550 VIVAS
+```
+
+Cada particula desenha um `DrawCircleGradient`, que o rlgl expande num leque de
+~36 triangulos, mais um `DrawCircle`. **~92.000 triangulos por quadro so de
+particulas**, todos em blending aditivo, em 3840x2160.
+
+**E nada disso era cullado.** A chuva sorteia alvos no MAPA INTEIRO
+(`StepMeteorRains` recebe `worldW/worldH`), e `DrawMeteors` desenhava todos. O
+`world_02` tem 7680x6400 unidades = 49,2 Mpx de mundo; a tela mostra 8,3 Mpx.
+**83% do desenho era pago e jogado fora.**
+
+**E a rede.** `tickMeteors` transmite um `broadcastUltimate` POR METEORO: 40
+mensagens por segundo, 600 na ultimate, cada uma com marshal de JSON e escrita
+para cada peer. E por isso que o CLIENTE tambem cai.
+
+#### A correcao
+
+**C1 — culling em todo desenho de magia.** `internal/skill/view.go` publica a
+janela visivel uma vez por quadro (`SetDrawView`, chamado pelo renderer com a
+MESMA janela do mapa e dos inimigos) e oferece `visible` / `visibleAny`.
+Aplicado em `meteor.go` (duas pontas: a marca no chao e a rocha, que nasce 780
+unidades acima dela), `particle.go` (por particula, nao por emissor),
+`explosion.go` e `fire_ground.go`.
+
+Esperado: de ~56 meteoros e ~2.550 particulas desenhados para os ~17% que
+cabem na tela.
+
+**C2 — o painel conta.** Linha nova no F3:
+`magias: N desenhadas / M puladas pelo culling`. Uma magia nova que esqueca o
+culling aparece como um `M` que fica em zero num mapa grande — que e exatamente
+o instrumento que faltava para este defeito ter sido pego na revisao.
+
+**O que NAO foi mexido, de proposito:** `MeteorRainInterval` e
+`MeteorRainDuration` sao decisao de design ("a chuva tem de parecer
+apocaliptica e varrer o mapa"). Culling nao muda um pixel do que o jogador ve.
+Se depois da medida ainda faltar quadro, os proximos passos, em ordem de
+impacto e na ordem inversa de risco visual: (1) lotear o broadcast de meteoros
+no tique de rede em vez de um por nascimento; (2) semear a chuva para host e
+cliente sortearem a mesma sequencia, reduzindo 600 mensagens a uma; (3) metade
+das particulas com o dobro do raio.
+
+**A regra que saiu daqui** virou `doc/skill_performance.md`, obrigatorio para
+qualquer magia nova (a rota esta no `AGENTS.md` e a `create-character-abilities`
+aponta para ele).
+
+### O tearing ao caminhar: provavelmente NAO e tearing
+
+O vsync foi ligado em 22/08/2026 (`rl.SetConfigFlags(rl.FlagVsyncHint)` antes
+de `InitWindow`). O relato de que a imagem ainda "quebra ao caminhar" tem outra
+explicacao, e ela ja estava neste documento desde 09/08: a **Causa 3** da §4½.
+
+O terreno nao declara filtro de textura, entao usa o padrao do raylib — POINT,
+vizinho mais proximo. A camera recebia `Target` = posicao float do jogador e
+`Offset` = `sw/2`. Com deslocamento fracionario mudando a cada quadro, o chao
+era amostrado com uma fase diferente a cada quadro: ele **saltava de texel em
+texel** enquanto arvores, monstros e o jogador deslizavam suavemente por cima.
+
+Como distinguir os dois, sem ferramenta:
+
+| | Tearing | Causa 3 |
+|---|---|---|
+| Parado | acontece | **nao acontece** |
+| Onde | um corte horizontal atravessando a tela | so o CHAO, fervendo/saltando |
+| Sprites | cortados junto | intactos, deslizando normal |
+
+**C2 (ancorar a camera em pixel) foi implementado.** `Camera2DState.Update`
+arredonda `Target` e `Offset` depois do clamp. O deslocamento de amostragem
+passa a ser constante e as duas camadas concordam sobre onde o mundo esta. O
+preco e o mundo andar em passos de 1 px — a 200 u/s, imperceptivel, e e o que
+jogo 2D faz.
+
+**E o painel agora responde a pergunta do vsync.** O cabecalho do F3 mostra
+`vsync ON/OFF` e o refresh do monitor, lidos do estado REAL da janela
+(`rl.IsWindowState`) e nao da `Config`: a flag e um pedido ao driver, e um
+perfil de placa com "vertical sync: off" forcado ganha do jogo. Se aparecer
+`vsync OFF` com a `Config` pedindo ON, o problema esta no painel de controle da
+GPU, nao no codigo.
+
+---
+
 ## 5. Ordem recomendada
 
 Cada faixa entrega valor sozinha. Não começar a próxima antes de medir a

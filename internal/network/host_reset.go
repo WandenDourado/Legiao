@@ -37,6 +37,11 @@ func (h *Host) ResetStage() {
 	} else if h.Waves != nil {
 		h.Waves.Reset()
 	}
+	// E o portal volta a ficar trancado ate a emboscada acontecer de novo. O
+	// F5 fica no MESMO mapa, entao SetClimaxMap nunca roda e sem isto a
+	// segunda tentativa da fase 3 recomecaria com a saida aberta — que e
+	// exatamente a trava que climax_pending.go existe para impedir.
+	RearmClimaxPending()
 	// E a guarnicao volta ao campo: o EntityManager acabou de ser esvaziado.
 	h.RestoreGarrison()
 	// As gargulas junto. Sem isto a segunda tentativa do mapa 4 correria sem

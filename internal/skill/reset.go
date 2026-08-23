@@ -55,4 +55,10 @@ func (m *Manager) Reset() {
 	ResetSentryOrbs()
 	// As bolas de canhao, pela mesma razao.
 	ResetCannonBalls()
+	// E os efeitos do chefe (espinhoes e nevoa), que ate aqui so eram limpos
+	// pela morte dele (host_boss.go). Um `Reset` que os deixa em campo os leva
+	// para a corrida seguinte: sair do mapa 7 por portal ou por F8 carregava a
+	// nevoa e os espinhoes do chefe para a fase de destino, e nada mais os
+	// tiraria de la.
+	m.ClearBossEffects()
 }

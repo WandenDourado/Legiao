@@ -4,6 +4,7 @@ package network
 // positions (the Paladina shield aura follows its owner).
 
 import (
+	"github.com/WandenDourado/Legiao/internal/collision"
 	"github.com/WandenDourado/Legiao/internal/skill"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -42,9 +43,14 @@ func sentryOrbTarget(playerID string) (rl.Vector2, bool) {
 
 // AdvanceClientSkills animates client-side skill visuals for one frame:
 // arrows fly out, shield auras / angelic areas / avatars follow their owners,
-// meteors fall, spectral legions hunt (respecting the map's solid obstacles
-// in collisionRects). Fireball and sanctuary visuals keep their dedicated calls.
-func AdvanceClientSkills(dt float32, collisionRects []rl.Rectangle) {
+// meteors fall, spectral legions hunt (respecting the map's blocked space in
+// solid). Fireball and sanctuary visuals keep their dedicated calls.
+//
+// solid e o CollisionGrid do mapa carregado, o mesmo objeto que o host recebe
+// em SetSolid. Ate 22/08/2026 isto recebia a lista plana de retangulos,
+// remontada a cada quadro pelo laco do jogo — duas vezes errado de uma vez,
+// e o segundo erro era o caro: ver skill/legion.go, funcao `blocked`.
+func AdvanceClientSkills(dt float32, solid collision.Solid) {
 	if ClientSkills == nil {
 		return
 	}
@@ -75,7 +81,7 @@ func AdvanceClientSkills(dt float32, collisionRects []rl.Rectangle) {
 		enemyPos = append(enemyPos, rl.NewVector2(float32(e.X), float32(e.Y)))
 	}
 	RemoteEnemiesMutex.Unlock()
-	ClientSkills.AdvanceLegions(dt, enemyPos, collisionRects)
+	ClientSkills.AdvanceLegions(dt, enemyPos, solid)
 
 	// As esferas da sentinela nao vivem no Manager (sao de um monstro), entao
 	// avancam por fora dele - mas no mesmo quadro e com o mesmo dt.

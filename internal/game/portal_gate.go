@@ -21,10 +21,18 @@ const portalRevealTime float32 = 1.6
 // A map with no horde run at all (Total 0 — a terrain map, or the frames before
 // the host publishes its first state) is NOT locked: locking it would leave a
 // quiet map with no way out.
+//
+// COM UMA EXCECAO, e ela e a fase 3. Um mapa de EMBOSCADA (world_03, world_04)
+// tambem chega aqui com Total 0 — a unica horda dele e o climax, e o climax so
+// e instalado quando o grupo alcanca o objetivo. Ali "Total 0" nao quer dizer
+// "mapa quieto", quer dizer "a luta ainda nao comecou", e abrir o portal nesse
+// estado travava a fase: quem entrasse no portal congelava fora da zona da
+// fortaleza e a porta do climax, que exige TODOS os vivos dentro dela, nunca
+// armava. Ver network/climax_pending.go.
 func PortalsUnlocked() bool {
 	state := network.GetWaveState()
 	if state.Total == 0 {
-		return true
+		return !network.ClimaxPending()
 	}
 	return network.WavePhase(state.Phase) == network.WavePhaseCleared
 }

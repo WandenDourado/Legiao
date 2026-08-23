@@ -12,7 +12,7 @@ import (
 // snapshot broadcast, so no per-hit event is required.
 func (h *Host) handleArrowTick(dt float32) {
 	dead := skill.StepArrows(
-		h.Skills, h.EntityManager.GetAllEnemies(), h.collisionRects, dt)
+		h.Skills, h.EntityManager.GetAllEnemies(), h.solid, dt)
 	for _, id := range dead {
 		h.EntityManager.RemoveEnemy(id)
 		h.broadcastCombatEvent("death", id, "enemy", 0, "")

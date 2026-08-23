@@ -11,23 +11,35 @@ package network
 // Entre armar e resolver o Game Over fica SEGURADO. Sem isso a cena perderia
 // a corrida: o grupo cai, o host anuncia o fim, e o resgate chega depois do
 // jogo ter acabado — que e o mesmo que nao chegar.
+//
+// QUEM SE ERGUE E SEMPRE ALGUEM DA PARTIDA.
+//
+// Aqui morava um NPC de recurso: um "heroi invocado" que entrava em campo
+// quando ninguem no grupo jogava com a classe da fase, apenas para ser dono
+// de um efeito e ser desenhado. Ele existia porque a cena nao podia depender
+// das escolhas de personagem do grupo — e essa dependencia acabou quando toda
+// classe vaga passou a ser preenchida por um BOT (host_bots.go). Nao existe
+// mais partida sem Sacerdotisa, sem Arqueiro ou sem Paladina: a cena sempre
+// encontra um corpo de verdade para reerguer, e a suprema e lancada por quem
+// joga com ela, humano ou bot.
+//
+// O que se ganha ao remove-lo nao e so codigo. O NPC nao era um jogador — nao
+// contava no HUD, nao pesava no Game Over, nao morria e nao era sincronizado —
+// e cada uma dessas excecoes era uma regra a menos valendo dentro de uma cena
+// que e justamente o momento mais delicado da fase.
 
 import (
 	"log"
 	"sync"
 
 	"github.com/WandenDourado/Legiao/internal/entity"
-	"github.com/WandenDourado/Legiao/internal/skill"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
-// Quem se ergue depende do MAPA (ver last_stand_heroes.go). O que segue vale
-// para qualquer um deles.
-
 // O resgate atende duas pessoas diferentes, com dois tamanhos.
 //
-// O HEROI DA FASE e quem age: ele volta INTEIRO e com dois segundos, porque
+// O HEROI DA FASE e quem age: ele volta INTEIRO e com alguns segundos, porque
 // precisa sair dos dentes, escolher a direcao e lancar. O resto do grupo so
 // precisa nao morrer no proximo golpe — mas precisa disso de verdade, porque a
 // cena dispara com todo mundo abaixo de um quarto da vida e devolver o jogo
@@ -55,13 +67,6 @@ type lastStandState struct {
 	armed bool
 	// done marks the rescue as already spent for this run of the stage.
 	done bool
-	// npcActive is true while the summoned hero is on the field.
-	npcActive bool
-	npcPos    rl.Vector2
-	// npcID e o dono do efeito do NPC em campo, e npcChar e quem desenhar.
-	// Ficam no estado, e nao numa constante, porque o heroi e do mapa.
-	npcID   string
-	npcChar entity.CharacterType
 }
 
 var lastStand lastStandState
@@ -80,35 +85,6 @@ func LastStandDone() bool {
 	lastStand.mu.RLock()
 	defer lastStand.mu.RUnlock()
 	return lastStand.done
-}
-
-// setLastStandNPC puts the summoned hero on or off the field. Host and client
-// both call it — the host when it summons, the client when the ultimate's
-// broadcast tells it one exists.
-func setLastStandNPC(pos rl.Vector2, active bool) {
-	setLastStandNPCAs(pos, active, "", "")
-}
-
-// setLastStandNPCAs faz o mesmo dizendo QUEM esta em campo.
-func setLastStandNPCAs(pos rl.Vector2, active bool, npcID string,
-	char entity.CharacterType) {
-	lastStand.mu.Lock()
-	defer lastStand.mu.Unlock()
-	lastStand.npcActive = active
-	lastStand.npcPos = pos
-	lastStand.npcID = npcID
-	lastStand.npcChar = char
-}
-
-// LastStandNPC returns the summoned hero's position, WHO it is, and whether it
-// is on the field at all. The renderer draws it from this; nothing else needs
-// it. O personagem vem junto porque ele muda de fase para fase, e desenhar o
-// Necromante no mapa da Sacerdotisa seria um erro invisivel no codigo e
-// gritante na tela.
-func LastStandNPC() (rl.Vector2, entity.CharacterType, bool) {
-	lastStand.mu.RLock()
-	defer lastStand.mu.RUnlock()
-	return lastStand.npcPos, lastStand.npcChar, lastStand.npcActive
 }
 
 // ArmLastStand holds the Game Over back because the scene is about to play.
@@ -134,25 +110,17 @@ func ResetLastStand() {
 	defer lastStand.mu.Unlock()
 	lastStand.armed = false
 	lastStand.done = false
-	lastStand.npcActive = false
-	lastStand.npcPos = rl.Vector2{}
-	lastStand.npcID = ""
-	lastStand.npcChar = ""
 }
 
 // ResolveLastStand performs the rescue as the scene's last line closes.
 //
-// Two shapes, decided by who is in the party:
-//
-//   - Somebody plays the map's hero: they come back on their feet with full
-//     health and a couple of seconds of immunity, and they cast the ultimate
-//     THEMSELVES. The scene hands the moment to the player; it does not play
-//     it for them.
-//   - Nobody does: one answers anyway and casts on the spot. The rescue
-//     cannot depend on the party's character picks.
+// Uma forma so, desde que os bots existem: quem joga a classe do heroi — humano
+// ou bot — volta de pe, com vida cheia, alguns segundos de imunidade e a
+// suprema recarregada e destravada. A CENA ENTREGA O MOMENTO A QUEM ESTA
+// JOGANDO; ela nao o encena por ninguem.
 //
 // QUEM e o heroi vem de LastStandHeroFor(h.stageMap) — no mapa 2 o
-// Necromante, no 3 a Sacerdotisa.
+// Necromante, no 3 a Sacerdotisa, no 4 o Arqueiro.
 func (h *Host) ResolveLastStand() {
 	lastStand.mu.Lock()
 	if lastStand.done {
@@ -169,65 +137,39 @@ func (h *Host) ResolveLastStand() {
 	// cena devolvia o jogo com o grupo ainda abaixo de um quarto da vida, e o
 	// primeiro lobo desfazia o que ela acabou de fazer.
 	h.reviveParty(saved)
-	if h.stageMap == "assets/maps/world_04.json" {
-		origin := h.partyCentre()
-		owner := saved
-		if owner == "" {
-			owner = hero.npcID
-			setLastStandNPCAs(origin, true, hero.npcID, hero.character)
-		}
-		h.castCastleJudgment(owner, origin)
-		return
-	}
-	if h.stageMap == "assets/maps/world_06.json" {
-		origin := h.partyCentre()
-		owner := saved
-		if owner == "" {
-			owner = hero.npcID
-			setLastStandNPCAs(origin, true, hero.npcID, hero.character)
-		}
-		// Always cast the hero's ultimate and broadcast it, whether NPC or player-controlled
-		hero.cast(h.Skills, owner, origin)
-		h.BroadcastSkill(hero.skillID, owner, origin)
-		h.castCannonJudgment(owner, origin)
-		return
+
+	// O mapa 6 tem um SEGUNDO ATO, e ele nao e uma magia: os dois canhoes do
+	// corredor sao destruidos pelo roteiro. Isto continua roteirizado — e nao
+	// entregue a Paladina como as outras supremas — porque o Avatar dos Deuses
+	// e imunidade total, nao um ataque a distancia: sem esta parte o resgate do
+	// mapa 6 devolveria o grupo vivo dentro do mesmo corredor bombardeado.
+	// Ver castCannonJudgment.
+	if h.stageMap == "assets/maps/world_06.json" && saved != "" {
+		h.castCannonJudgment(saved)
 	}
 
-	if saved != "" {
-		log.Printf("[UltimoSuspiro] %s se ergueu; a ultimate e dele", saved)
+	if saved == "" {
+		// Nao deveria acontecer: ReconcileBots mantem exatamente um bot por
+		// classe sem humano, entao toda classe esta sempre ocupada. Se
+		// acontecer, a cena passa sem resgate — e isso precisa aparecer no log,
+		// nao em silencio no meio de um Game Over.
+		log.Printf("[UltimoSuspiro] ninguem em campo joga com %s; a cena "+
+			"passou sem resgate (bot da classe faltando?)", hero.character)
 		return
 	}
-	h.summonHeroNPC(hero)
-}
-
-// castCastleJudgment gives the map-4 rescue a precise destination contract:
-// both island sentries are hit by Flechas Celestiais even though normal shots
-// cannot touch their waterbound positions. It changes neither the Arqueiro's
-// selectable ultimate nor its two-charge aiming rule outside this cutscene.
-func (h *Host) castCastleJudgment(ownerID string, origin rl.Vector2) {
-	for _, enemy := range h.EntityManager.GetAllEnemies() {
-		if enemy.Type != entity.EnemyTypeCastleSentry || !enemy.IsActive {
-			continue
-		}
-		dir := rl.Vector2Subtract(enemy.Position, origin)
-		skill.SpawnCelestialArrow(h.Skills, ownerID, origin, dir)
-		h.BroadcastSkillDir("celestial_arrows", ownerID, origin, dir)
-	}
-	log.Printf("[UltimoSuspiro] julgamento celestial do Arqueiro alcancou as sentinelas")
+	log.Printf("[UltimoSuspiro] %s se ergueu; a ultimate e dele", saved)
 }
 
 // castCannonJudgment e o resgate do mapa 6: com o Avatar dos Deuses erguido,
 // a Paladina alcanca o fim do corredor e destroi os dois canhoes de uma vez.
 //
-// Como o julgamento do Arqueiro no mapa 4, isto e roteirizado a parte da
-// magia selecionavel — Avatar dos Deuses e imunidade total, nao um ataque a
-// distancia — porque o resgate precisa de um contrato PRECISO: os canhoes
-// declarados pelo mapa, e nao um alvo que o jogador teria de mirar. `origin`
-// e so de onde a explosao PARECE vir na tela (o centro do grupo); a
-// Paladina nao anda fisicamente ate la — a narracao do dialogo e que conta
-// a corrida, o mesmo recurso que a cena do mapa 4 usa para as flechas
-// alcancarem ilhas que o Arqueiro nunca pisou.
-func (h *Host) castCannonJudgment(ownerID string, origin rl.Vector2) {
+// Isto e roteirizado a parte da magia selecionavel — Avatar dos Deuses e
+// imunidade total, nao um ataque a distancia — porque o resgate precisa de um
+// contrato PRECISO: os canhoes declarados pelo mapa, e nao um alvo que o
+// jogador teria de mirar. A Paladina nao anda fisicamente ate la — a narracao
+// do dialogo e que conta a corrida, e a explosao acontece em cima do canhao,
+// que e onde o jogador precisa ve-la.
+func (h *Host) castCannonJudgment(ownerID string) {
 	hit := h.DestroyCannons()
 	for i, pos := range hit {
 		h.broadcastCannonBall("impact", "judgment"+ownerID+string(rune('a'+i)), pos, rl.Vector2{})
@@ -327,68 +269,4 @@ func (h *Host) reviveHero(character entity.CharacterType) string {
 	h.BroadcastUltimateGrant(character)
 	h.broadcastRespawn(*revived)
 	return revived.PlayerID
-}
-
-// summonHeroNPC drops the map's hero into the fight and casts their ultimate
-// from it.
-//
-// The NPC is deliberately NOT a player entry. Adding one would make it count
-// in the player list, in the Game Over check and in the HUD, and it would have
-// to die, respawn and be networked like everybody else. All it has to do is
-// own an effect and be drawn, and every ultimate is keyed by a plain owner id.
-func (h *Host) summonHeroNPC(hero lastStandHero) {
-	pos := h.partyCentre()
-	setLastStandNPCAs(pos, true, hero.npcID, hero.character)
-
-	hero.cast(h.Skills, hero.npcID, pos)
-	h.BroadcastSkill(hero.skillID, hero.npcID, pos)
-	log.Printf("[UltimoSuspiro] ninguem e %s; um respondeu em (%.0f, %.0f)",
-		hero.character, pos.X, pos.Y)
-}
-
-// partyCentre is where the summoned Necromante appears: the middle of whoever
-// is still on the field.
-//
-// The legion only hunts within LegionLeashRadius of its owner, so dropping the
-// NPC anywhere else would summon a rescue that cannot reach the fight.
-func (h *Host) partyCentre() rl.Vector2 {
-	h.playersMutex.RLock()
-	defer h.playersMutex.RUnlock()
-	var sum rl.Vector2
-	n := 0
-	for _, p := range h.players {
-		sum.X += float32(p.X)
-		sum.Y += float32(p.Y)
-		n++
-	}
-	if n == 0 {
-		return h.PlayerSpawn
-	}
-	return rl.NewVector2(sum.X/float32(n), sum.Y/float32(n))
-}
-
-// tickLastStand keeps the summoned hero's effect anchored when it needs to be,
-// and takes the NPC off the field once the effect is spent — it came for one
-// thing.
-func (h *Host) tickLastStand() {
-	lastStand.mu.RLock()
-	active, pos, npcID := lastStand.npcActive, lastStand.npcPos, lastStand.npcID
-	lastStand.mu.RUnlock()
-	if !active {
-		return
-	}
-	hero := LastStandHeroFor(h.stageMap)
-	if !hero.alive(h.Skills, npcID) {
-		setLastStandNPC(rl.Vector2{}, false)
-		// O cliente precisa saber para parar de desenha-lo. Cada heroi diz
-		// qual e a mensagem: a legiao usa `legion_end`, que o cliente ja
-		// escuta para dissolve-la.
-		h.broadcastUltimate(hero.endSignal, npcID, rl.Vector2{}, rl.Vector2{})
-		log.Printf("[UltimoSuspiro] a magia se gastou; o NPC se foi")
-		return
-	}
-	// So a ultimate que SEGUE o dono precisa ser reancorada. O altar nao.
-	if hero.anchor != nil {
-		hero.anchor(h.Skills, npcID, pos)
-	}
 }

@@ -71,6 +71,11 @@ func (g *FireGround) Update(dt float32) bool {
 
 // Draw renders the translucent ground patch and flames additively.
 func (g *FireGround) Draw() {
+	// 550 de raio em blending aditivo e uma das coisas mais caras que o jogo
+	// pinta; fora da tela ela custa o mesmo e nao mostra nada.
+	if !visible(g.Center, g.Radius*1.2) {
+		return
+	}
 	fade := clamp01(g.TTL / 1.0)
 	rl.BeginBlendMode(rl.BlendAdditive)
 	rl.DrawCircle(int32(g.Center.X), int32(g.Center.Y), g.Radius, rl.NewColor(255, 90, 20, uint8(70*fade)))

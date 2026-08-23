@@ -52,8 +52,8 @@ func TestRescueGrantsNothingWhenNobodyPlaysTheHero(t *testing.T) {
 	if saved := h.reviveHero(entity.CharNecromante); saved != "" {
 		t.Fatalf("reviveHero devolveu %q sem ninguem jogar o heroi", saved)
 	}
-	// Ninguem jogando o heroi: o NPC lanca direto (summonHeroNPC), que nao
-	// passa pelo gate de suprema. A concessao por corrida nao deveria existir.
+	// Ninguem jogando o heroi (o que so acontece se faltar ate o bot da
+	// classe): nao ha quem reerguer, entao nao ha concessao a fazer.
 	if UltimateUnlockedFor(entity.CharNecromante) {
 		t.Fatal("a suprema foi liberada sem ninguem ter sido reerguido como o heroi")
 	}

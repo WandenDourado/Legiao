@@ -31,7 +31,7 @@ func UpdatePortalCancel(p *entity.Player, w *World, cfg Config, sw, sh float32) 
 		return
 	}
 	stepOutsidePortal(p, w)
-	network.LocalPlayerInPortal = false
+	network.LeaveLocalPortal()
 }
 
 // stepOutsidePortal moves p just clear of whatever portal rectangle its

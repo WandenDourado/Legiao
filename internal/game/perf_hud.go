@@ -19,6 +19,7 @@ import (
 
 	"github.com/WandenDourado/Legiao/internal/entity"
 	"github.com/WandenDourado/Legiao/internal/network"
+	"github.com/WandenDourado/Legiao/internal/skill"
 	"github.com/WandenDourado/Legiao/internal/tilemap"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -85,22 +86,31 @@ func DrawPerfHUD(sw, sh float32, w *World, p *entity.Player) {
 	// O resto do quadro e o que sobra depois da submissao de CPU: GPU, vsync e
 	// tudo que e desenhado fora do bloco da camera (HUD, dialogo, portal).
 	// Separado de proposito — se ele domina, culling nao resolve mais nada.
-	rest := avg*1000 - stats.MapMS - stats.EntityMS
+	sim := simMilliseconds()
+	rest := avg*1000 - stats.MapMS - stats.EntityMS - sim
 	if rest < 0 {
 		rest = 0
 	}
 
+	drawnFX, culledFX := skill.DrawCounts()
+
 	lines := []string{
-		fmt.Sprintf("%s   %s   %.0fx%.0f", mapLabel(w), roleLabel(), sw, sh),
+		fmt.Sprintf("%s   %s   %.0fx%.0f   %s", mapLabel(w), roleLabel(), sw, sh, syncLabel()),
 		fmt.Sprintf("fps %d   quadro %.1f ms   PIOR %.1f ms", rl.GetFPS(), avg*1000, worst*1000),
-		fmt.Sprintf("cpu: mapa %.1f   entidades %.1f   resto %.1f ms", stats.MapMS, stats.EntityMS, rest),
+		fmt.Sprintf("cpu: mapa %.1f   entidades %.1f   simulacao %.1f   resto %.1f ms",
+			stats.MapMS, stats.EntityMS, sim, rest),
 		fmt.Sprintf("terreno %d quads / %d binds de shader", stats.TerrainQuads, stats.ShaderBinds),
 		fmt.Sprintf("tiles %d   props %d   trilha %d quads   celulas %d",
 			stats.Tiles, stats.Props, stats.TrailQuads, stats.CellsVisited),
 		fmt.Sprintf("inimigos %d vivos / %d desenhados   projeteis %d",
 			enemies.Alive, enemies.Drawn, enemies.Projectiles),
+		fmt.Sprintf("magias: %d desenhadas / %d puladas pelo culling", drawnFX, culledFX),
 		playerLabel(w, p),
 	}
+	// As linhas de memoria vem por ultimo, e vem de perf_mem.go: elas respondem
+	// uma pergunta diferente das de cima ("esta acumulando?" contra "este
+	// quadro custou quanto?") e sao lidas juntas na mesma captura.
+	lines = append(lines, memLines()...)
 
 	drawPerfPanel(sw, lines, worst)
 }
@@ -112,6 +122,27 @@ func mapLabel(w *World) string {
 		return "mapa ?"
 	}
 	return strings.TrimSuffix(filepath.Base(w.Path), ".json")
+}
+
+// syncLabel diz se o vsync esta ATIVO e a que taxa o monitor atualiza.
+//
+// Existe porque a pergunta "o vsync foi habilitado?" nao tinha resposta na
+// tela, e nenhuma metrica de TEMPO responde: `quadro 16,7 ms / PIOR 16,7 ms`
+// e o que um jogo com a cadencia certa e o sincronismo errado mostra — o
+// `SetTargetFPS` limita o intervalo, o vsync alinha a TROCA DE BUFFER ao
+// retraco, e so o segundo evita a imagem rasgada. Um medidor de tempo de
+// quadro nao ve tearing.
+//
+// Le o estado REAL da janela (`IsWindowState`) e nao a `Config`: a flag e um
+// pedido ao driver, e o driver pode recusar — um perfil da placa com "vertical
+// sync: off" forcado ganha do jogo, e nesse caso a `Config` diria "ligado"
+// enquanto a tela rasga.
+func syncLabel() string {
+	hz := rl.GetMonitorRefreshRate(rl.GetCurrentMonitor())
+	if rl.IsWindowState(rl.FlagVsyncHint) {
+		return fmt.Sprintf("vsync ON   %d Hz", hz)
+	}
+	return fmt.Sprintf("vsync OFF   %d Hz", hz)
 }
 
 // roleLabel diz de que lado da rede este processo esta, porque o host e o

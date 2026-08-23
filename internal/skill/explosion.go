@@ -36,6 +36,11 @@ func (e *Explosion) Update(dt float32) bool {
 
 // Draw renders the explosion shock ring plus particles with additive blending.
 func (e *Explosion) Draw() {
+	// O anel cresce ate 1,4x o raio e as particulas voam ate ~3,5x: o raio de
+	// teste cobre a rajada inteira, nao so o anel.
+	if !visible(e.Position, e.Radius*3.5) {
+		return
+	}
 	progress := 1 - clamp01(e.TTL/e.MaxTTL)
 	ringR := e.Radius * (0.3 + progress*1.1)
 	alpha := uint8(220 * (1 - progress))

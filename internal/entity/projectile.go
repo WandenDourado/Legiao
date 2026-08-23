@@ -46,6 +46,80 @@ const (
 	NecroAttackRadius    float32 = 16
 )
 
+// QUANTO TEMPO UM TIRO VIVE — e, com a velocidade, ATE ONDE ELE CHEGA.
+//
+// Os dois numeros estavam cravados dentro de NewProjectile e do `case
+// KindArrow`, com o nome escrito num comentario ao lado. Ficaram com nome de
+// verdade porque agora alguem de fora precisa deles: o guarda de territorio
+// pergunta "este jogador consegue me ACERTAR?" (enemy_territory.go), e essa
+// resposta e velocidade x tempo de vida. Um numero cravado aqui e lido de
+// cabeca la e a forma classica dessa relacao envelhecer sem ninguem notar.
+const (
+	// ProjectileLifetime e o tempo de vida padrao de um ataque basico.
+	ProjectileLifetime float32 = 2.0
+	// ArrowLifetime e mais curto de proposito: a flecha e a mais rapida do
+	// elenco (700), e sem encurtar a vida dela o Arqueiro atiraria de quase o
+	// dobro da distancia de todo mundo.
+	ArrowLifetime float32 = 1.6
+)
+
+// AttackReach e ate onde o ataque basico de um personagem CHEGA, em px.
+//
+// Alcance util, nao alcance teorico: o projetil some quando o tempo de vida
+// acaba, entao velocidade x tempo de vida e a distancia real. A Paladina e
+// corpo a corpo e nao tem projetil — o alcance dela e a espada, e quem precisa
+// desse numero (o guarda) ja esta com ela em cima quando isso importa.
+func AttackReach(ct CharacterType) float32 {
+	switch AttackKindFor(ct) {
+	case KindFireball:
+		return FireballAttackSpeed * ProjectileLifetime
+	case KindHoly:
+		return HolyAttackSpeed * ProjectileLifetime
+	case KindArrow:
+		return ArrowAttackSpeed * ArrowLifetime
+	case KindNecroSkull:
+		return NecroAttackSpeed * ProjectileLifetime
+	}
+	return 0
+}
+
+// LongestAttackReach e o maior alcance de ataque basico do elenco (hoje o
+// Arqueiro, 700 x 1,6 = 1120 px).
+//
+// UM numero para o elenco inteiro, e nao um por personagem, porque quem o
+// consome — o guarda — nao sabe com quem esta lidando: `entity.PlayerState` e a
+// visao minima que a IA recebe e nao carrega classe. Levar a classe ate la
+// tornaria o guarda mais preciso e criaria uma falha SILENCIOSA: um caminho que
+// esquecesse de preencher o campo devolveria alcance zero, e o posto voltaria a
+// ser abatido de longe sem nada acusar. Errar para o lado do guarda mais alerta
+// custa 360 px de folga contra a Sacerdotisa; errar para o outro lado devolve o
+// defeito.
+//
+// PERCORRE AS CONSTANTES, E NAO O REGISTRO DE PERSONAGENS, e a diferenca e de
+// ordem de inicializacao — nao de gosto. Os personagens entram no registro por
+// um `init()` (character.go), e Go inicializa TODA variavel de pacote antes de
+// rodar qualquer `init()`. Uma versao anterior disto varria `AllCharacters()`, e
+// `guardThreatRadius` (enemy_territory.go, uma variavel de pacote) teria sido
+// calculada sobre um registro ainda vazio: alcance zero, raio de ameaca de 250
+// px, e o defeito que ela veio consertar de volta — em silencio.
+//
+// Quem cobra que o elenco caiba aqui e um TESTE, que roda depois do `init()`:
+// TestTheThreatRadiusCoversTheLongestWeaponInTheCast.
+func LongestAttackReach() float32 {
+	longest := float32(0)
+	for _, reach := range []float32{
+		FireballAttackSpeed * ProjectileLifetime,
+		HolyAttackSpeed * ProjectileLifetime,
+		ArrowAttackSpeed * ArrowLifetime,
+		NecroAttackSpeed * ProjectileLifetime,
+	} {
+		if reach > longest {
+			longest = reach
+		}
+	}
+	return longest
+}
+
 // AttackKindFor returns the basic-attack projectile kind for a character.
 // The Paladina has no projectile (melee sword sweep) and returns "".
 func AttackKindFor(ct CharacterType) string {
@@ -97,7 +171,7 @@ func NewProjectile(ownerID string, startPos rl.Vector2, direction rl.Vector2) *P
 		Radius:   ProjectileSize,
 		Color:    "#FFFF00", // Yellow projectiles
 		IsActive: true,
-		Lifetime: 2.0, // ProjectileLifetime
+		Lifetime: ProjectileLifetime,
 	}
 }
 
@@ -128,7 +202,7 @@ func NewAttackProjectile(ownerID string, ct CharacterType, startPos, direction r
 		p.Radius = ArrowAttackRadius
 		p.Velocity = rl.Vector2Scale(rl.Vector2Normalize(direction), ArrowAttackSpeed)
 		p.Color = "#C8A064"
-		p.Lifetime = 1.6
+		p.Lifetime = ArrowLifetime
 	case KindNecroSkull:
 		p.Damage = NecroAttackDamage
 		p.Lifesteal = NecroAttackLifesteal

@@ -67,7 +67,7 @@ func (g *climaxGate) bind(w *World) {
 
 // partyArrived reports whether every living player stands inside the zone.
 //
-// Three rules, and each one is a decision:
+// Quatro regras, e cada uma delas é uma decisão:
 //
 //   - Um grupo VAZIO não chegou. Antes do primeiro estado de jogador a lista
 //     está vazia e "todos dentro" é verdade sobre ninguém — a cena tocaria no
@@ -78,10 +78,18 @@ func (g *climaxGate) bind(w *World) {
 //   - TODOS, e não a maioria. O clímax é uma emboscada contra o grupo reunido;
 //     armá-la com metade do time ainda a caminho entrega a cena a quem chegou
 //     e mata quem não chegou.
+//   - Quem está DENTRO DE UM PORTAL não conta, nem para segurar nem para
+//     abrir. Um corpo em espera no portal está congelado e nem sequer é
+//     desenhado (network/host_portal_presence.go), então exigir que ele esteja
+//     na esplanada trava a fase para sempre, e ninguém em campo consegue ver
+//     por quê. Hoje isso é cinto e suspensório — o portal de um mapa de
+//     emboscada não abre antes dela (network/climax_pending.go) —, mas essa
+//     combinação foi exatamente a trava relatada na fase 3, e a porta não deve
+//     depender de o portal estar fechado para funcionar.
 func (g *climaxGate) partyArrived(players map[string]network.PlayerState) bool {
 	alive := 0
 	for _, p := range players {
-		if p.IsDead {
+		if p.IsDead || p.InPortal {
 			continue
 		}
 		alive++

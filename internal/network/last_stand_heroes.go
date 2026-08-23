@@ -10,96 +10,44 @@ package network
 // A mesma correcao que waveRuns levou, e pelo mesmo motivo: uma fase nova nao
 // pode depender de alguem lembrar de editar uma constante global. Aqui a fase
 // declara o heroi dela e o resto do sistema le a declaracao.
+//
+// A TABELA ENCOLHEU quando o NPC do ultimo suspiro saiu (ver host_last_stand.go).
+// Ela carregava, por heroi, um `npcID`, um `cast`, um `alive`, um `anchor` e um
+// `endSignal` — cinco campos que existiam so para um personagem invocado poder
+// ser dono de um efeito, mante-lo ancorado e avisar o cliente quando sumir.
+// Com toda classe vaga preenchida por um bot, quem lanca a suprema e um
+// JOGADOR: a magia passa pelo caminho normal de qualquer magia, e o que a fase
+// ainda precisa declarar e so QUEM se ergue e QUAL magia devolver carregada.
 
-import (
-	"github.com/WandenDourado/Legiao/internal/entity"
-	"github.com/WandenDourado/Legiao/internal/skill"
+import "github.com/WandenDourado/Legiao/internal/entity"
 
-	rl "github.com/gen2brain/raylib-go/raylib"
-)
-
-// lastStandHero e quem se ergue quando o grupo cai, e o que ele lanca.
-//
-// `npcID` e o dono da magia quando NINGUEM no grupo joga com o personagem. Ele
-// nao e um jogador: nunca entra em h.players, entao nao conta no HUD, nao pesa
-// no Game Over e nao precisa morrer nem ser sincronizado. Precisa so ser dono
-// de um efeito e ser desenhado.
-//
-// `alive` e `anchor` separam as duas naturezas de ultimate que existem hoje, e
-// a diferenca e de MANUTENCAO, nao de poder:
-//
-//   - A Legiao Espectral e um bando que SEGUE o dono, entao ela tem `anchor`:
-//     o host reancora a legiao no NPC a cada quadro.
-//   - A Area Angelical e um ALTAR consagrado no chao. Ela nao segue ninguem,
-//     entao nao tem `anchor` — mas tem `alive` como qualquer outra, porque o
-//     NPC precisa sair de campo quando o efeito se gasta. Uma versao anterior
-//     disto so pulava a manutencao para quem nao fosse legiao, e o resultado
-//     era a Sacerdotisa invocada ficando plantada na esplanada ate o fim da
-//     fase.
-//
-// `endSignal` e a mensagem que avisa o cliente para parar de desenhar o NPC.
+// lastStandHero e quem se ergue quando o grupo cai, e qual suprema a cena
+// devolve carregada e destravada para ele.
 type lastStandHero struct {
 	character entity.CharacterType
 	skillID   string
-	npcID     string
-	cast      func(*skill.Manager, string, rl.Vector2)
-	alive     func(*skill.Manager, string) bool
-	anchor    func(*skill.Manager, string, rl.Vector2)
-	endSignal string
 }
 
 var (
 	necromancerLastStand = lastStandHero{
 		character: entity.CharNecromante,
 		skillID:   "spectral_legion",
-		npcID:     "npc_necromante",
-		cast:      skill.ActivateLegion,
-		alive:     (*skill.Manager).HasLegion,
-		anchor:    (*skill.Manager).SetLegionAnchor,
-		endSignal: "legion_end",
 	}
 	priestessLastStand = lastStandHero{
 		character: entity.CharSacerdotisa,
 		skillID:   "angelic_area",
-		npcID:     "npc_sacerdotisa",
-		cast:      skill.ActivateAngelic,
-		alive:     (*skill.Manager).HasAngelic,
-		// sem anchor: o altar fica onde foi consagrado
-		endSignal: "angelic_end",
 	}
 	archerLastStand = lastStandHero{
 		character: entity.CharArqueiro,
 		skillID:   "celestial_arrows",
-		npcID:     "npc_arqueiro",
-		// Map 4 owns this cast because it must target the two declared stream
-		// sentries, not an arbitrary aim point. ResolveLastStand invokes it.
-		cast:      func(*skill.Manager, string, rl.Vector2) {},
-		alive:     func(*skill.Manager, string) bool { return false },
-		endSignal: "celestial_end",
 	}
 	mageLastStand = lastStandHero{
 		character: entity.CharMago,
 		skillID:   "meteor_rain",
-		npcID:     "npc_mago",
-		cast:      skill.StartMeteorRain,
-		alive:     (*skill.Manager).HasMeteorRain,
-		endSignal: "meteor_rain_end",
 	}
 	paladinaLastStand = lastStandHero{
 		character: entity.CharPaladina,
 		skillID:   "divine_avatar",
-		npcID:     "npc_paladina",
-		// O cast puro (imunidade + visual) e so metade do resgate do mapa 6:
-		// o julgamento que alcanca e destroi os dois canhoes e roteirizado a
-		// parte, em castCannonJudgment — a mesma divisao que o mapa 4 faz
-		// entre "conceder a suprema" e "acertar as sentinelas declaradas".
-		// ResolveLastStand chama os dois.
-		cast:  skill.ActivateAvatar,
-		alive: (*skill.Manager).HasAvatar,
-		// sem anchor: o NPC nao anda, e tickAvatars so reancora avatares de
-		// JOGADOR (h.players) mesmo — um avatar de NPC fica parado onde foi
-		// concedido, que e o centro do grupo.
-		endSignal: "avatar_end",
 	}
 )
 
@@ -140,30 +88,4 @@ func LastStandCharacterFor(mapPath string) (entity.CharacterType, bool) {
 		return "", false
 	}
 	return hero.character, true
-}
-
-// isLastStandNPC diz se o dono de um efeito e o NPC do ultimo suspiro de
-// qualquer mapa. O cliente precisa disto: ele aprende que ha um NPC em campo
-// pela propria mensagem da magia, sem mensagem nova de protocolo para uma
-// coisa que acontece uma vez por fase.
-func isLastStandNPC(ownerID string) bool {
-	for _, hero := range lastStandHeroes {
-		if hero.npcID == ownerID {
-			return true
-		}
-	}
-	return false
-}
-
-// noteLastStandNPC poe o NPC em campo se o dono do efeito for um deles.
-//
-// Chamado do cliente em cada ultimate que algum mapa usa no ultimo suspiro.
-// Para o dono ser um jogador de verdade nao faz nada, que e o caso comum.
-func noteLastStandNPC(ownerID string, pos rl.Vector2) {
-	for _, hero := range lastStandHeroes {
-		if hero.npcID == ownerID {
-			setLastStandNPCAs(pos, true, ownerID, hero.character)
-			return
-		}
-	}
 }

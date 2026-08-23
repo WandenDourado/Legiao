@@ -48,7 +48,7 @@ func (h *Host) handleNecroTick(dt float32) {
 
 	// Specter combat: rapid bites on enemies; enemies strike back and can
 	// kill specters (mirrored on clients via specter_die events).
-	for _, ev := range skill.StepLegions(h.Skills, enemies, h.collisionRects, dt) {
+	for _, ev := range skill.StepLegions(h.Skills, enemies, h.solid, dt) {
 		if ev.SpecterDied {
 			h.broadcastUltimate("specter_die", ev.OwnerID, ev.SpecterPos, rl.Vector2{})
 			continue

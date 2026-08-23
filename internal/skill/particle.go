@@ -41,7 +41,15 @@ func (p *Particle) step(dt float32) bool {
 }
 
 // drawParticle renders a particle as an additive radial glow.
+//
+// O culling e POR PARTICULA e nao por emissor, porque um emissor pode ter o
+// centro fora da tela e cuspir particulas para dentro dela — e porque cada
+// particula custa caro sozinha: `DrawCircleGradient` e um leque de triangulos,
+// nao um pixel. Em regime, a Chuva de Meteoros mantem ~2.500 particulas vivas.
 func drawParticle(p *Particle) {
+	if !visible(p.Pos, maxF(2, p.Radius)) {
+		return
+	}
 	alpha := uint8(255 * clamp01(p.Life/p.MaxLife))
 	c := rl.NewColor(p.Color.R, p.Color.G, p.Color.B, alpha)
 	if p.Radius > 1 {

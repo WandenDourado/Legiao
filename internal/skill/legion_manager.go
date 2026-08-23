@@ -3,6 +3,7 @@ package skill
 import (
 	"math"
 
+	"github.com/WandenDourado/Legiao/internal/collision"
 	"github.com/WandenDourado/Legiao/internal/entity"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -72,7 +73,7 @@ func (m *Manager) DissolveLegion(ownerID string) bool {
 // game's highest attack speed; the enemy fights back at its own (slower)
 // attack cadence and can kill the specter. Returns combat events for the
 // caller to broadcast (dead enemies are NOT removed here).
-func StepLegions(m *Manager, enemies []*entity.Enemy, collisionRects []rl.Rectangle, dt float32) []LegionEvent {
+func StepLegions(m *Manager, enemies []*entity.Enemy, solid collision.Solid, dt float32) []LegionEvent {
 	events := make([]LegionEvent, 0)
 	m.necroMutex.Lock()
 	defer m.necroMutex.Unlock()
@@ -86,7 +87,7 @@ func StepLegions(m *Manager, enemies []*entity.Enemy, collisionRects []rl.Rectan
 				target = &e.Position
 				radius = e.Radius
 			}
-			if !l.advance(s, target, radius, dt, collisionRects) || e == nil || s.Dying {
+			if !l.advance(s, target, radius, dt, solid) || e == nil || s.Dying {
 				continue
 			}
 			// Specter bite: fastest attack in the game.
@@ -113,7 +114,7 @@ func StepLegions(m *Manager, enemies []*entity.Enemy, collisionRects []rl.Rectan
 				}
 			}
 		}
-		l.separate(collisionRects)
+		l.separate(solid)
 		l.prune()
 		if l.Spent() {
 			delete(m.Legions, owner)
@@ -147,14 +148,14 @@ func nearestHuntable(enemies []*entity.Enemy, anchor, from rl.Vector2) *entity.E
 // and replay the bite lunge cosmetically, but never resolve damage — specter
 // deaths arrive as host events via KillLegionSpecterNear. enemyPositions are
 // the latest enemy snapshots.
-func (m *Manager) AdvanceLegions(dt float32, enemyPositions []rl.Vector2, collisionRects []rl.Rectangle) {
+func (m *Manager) AdvanceLegions(dt float32, enemyPositions []rl.Vector2, solid collision.Solid) {
 	m.necroMutex.Lock()
 	defer m.necroMutex.Unlock()
 	for owner, l := range m.Legions {
 		l.Time += dt
 		for _, s := range l.Specters {
 			target := nearestPosition(enemyPositions, l.Anchor, s.Position)
-			if l.advance(s, target, 14, dt, collisionRects) && !s.Dying {
+			if l.advance(s, target, 14, dt, solid) && !s.Dying {
 				s.hitTimer -= dt
 				if s.hitTimer <= 0 {
 					s.hitTimer = SpecterAttackEvery
@@ -162,7 +163,7 @@ func (m *Manager) AdvanceLegions(dt float32, enemyPositions []rl.Vector2, collis
 				}
 			}
 		}
-		l.separate(collisionRects)
+		l.separate(solid)
 		l.prune()
 		if l.Spent() {
 			delete(m.Legions, owner)
@@ -195,6 +196,23 @@ func (m *Manager) KillLegionSpecterNear(ownerID string, pos rl.Vector2) {
 	if l, ok := m.Legions[ownerID]; ok {
 		l.killNearest(pos)
 	}
+}
+
+// SpecterCount e quantos espectros estao em campo, somando todas as legioes.
+//
+// Existe para o painel do F3. A Legiao Espectral e a unica magia do jogo que
+// poe TRINTA entidades simuladas em campo de uma vez (LegionCount), entao ela
+// e a primeira suspeita sempre que o custo de simulacao salta — e sem o numero
+// na tela a correlacao "a ultimate do Necromante derrubou o fps" fica sendo
+// impressao de quem jogou.
+func (m *Manager) SpecterCount() int {
+	m.necroMutex.RLock()
+	defer m.necroMutex.RUnlock()
+	n := 0
+	for _, l := range m.Legions {
+		n += len(l.Specters)
+	}
+	return n
 }
 
 // DrawLegions renders every legion in world space.

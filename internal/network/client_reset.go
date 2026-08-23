@@ -27,6 +27,12 @@ func (c *Client) applyStageReset(rp ResetPayload) {
 	// progression.go) nao sobrevive a um reinicio de fase.
 	ClearRunGrantedUltimates()
 
+	// Espelha o RearmClimaxPending que o host acabou de fazer: o portal de um
+	// mapa de emboscada e desenhado nas duas maquinas (game.PortalsUnlocked),
+	// entao um cliente que nao re-armasse continuaria vendo a saida aberta
+	// depois do F5. Ver climax_pending.go.
+	RearmClimaxPending()
+
 	GameOver = false
 	LocalPlayerDead = false
 	LocalRespawnIn = 0

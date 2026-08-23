@@ -2,6 +2,7 @@ package game
 
 import (
 	"log"
+	"time"
 
 	"github.com/WandenDourado/Legiao/internal/entity"
 	"github.com/WandenDourado/Legiao/internal/input"
@@ -20,9 +21,22 @@ import (
 // host in reach, the loop returns here and opens the menu again in a fresh
 // session, exactly like a clean process start.
 func Run(cfg Config) {
+	// ANTES de InitWindow: o vsync e um hint de criacao do contexto GL e nao
+	// tem efeito depois que a janela existe. Ver Config.VSync para por que a
+	// falta dele nao aparecia no medidor de quadro — `SetTargetFPS` cadencia,
+	// nao sincroniza, e a imagem rasga do mesmo jeito.
+	if cfg.VSync {
+		rl.SetConfigFlags(rl.FlagVsyncHint)
+	}
 	rl.InitWindow(0, 0, cfg.Title)
 	defer rl.CloseWindow()
-	rl.SetTargetFPS(60)
+	// Zero = sem teto proprio, com o vsync cadenciando no refresh do monitor.
+	// Um teto MENOR que o refresh continua valendo (o 30 do celular); um teto
+	// IGUAL ao refresh e inofensivo e um teto que nao bate com ele briga com o
+	// vsync — ver doc/performance.md, "Vsync e teto de quadro".
+	if cfg.TargetFPS > 0 {
+		rl.SetTargetFPS(cfg.TargetFPS)
+	}
 
 	for !rl.WindowShouldClose() {
 		playSession(cfg)
@@ -59,6 +73,9 @@ func playSession(cfg Config) {
 	defer entity.UnloadEnemyTextures()
 	defer entity.UnloadSharedTextures()
 	defer entity.UnloadDeathTint()
+	// Os retratos ja saem a cada troca de mapa (world_travel.go); isto cobre o
+	// fim da sessao, quando nao houve troca depois da ultima cena.
+	defer ui.UnloadPortraits()
 
 	network.RemotePlayersMutex.Lock()
 	if state, ok := network.RemotePlayers[network.LocalPlayerID]; ok {
@@ -127,7 +144,10 @@ func playSession(cfg Config) {
 			w.UpdateArenaGate(p)
 			UpdateStageSkip(cfg, w)
 			if network.Role != "" {
-				network.UpdatePlayerState(network.PlayerState{
+				// UpdateLocalPlayerState, e nao UpdatePlayerState: este
+				// PlayerState e o que ESTA maquina prediz, e ele nao carrega
+				// os veredictos do host (InPortal, Absent). Ver globals.go.
+				network.UpdateLocalPlayerState(network.PlayerState{
 					PlayerID:     network.LocalPlayerID,
 					X:            int(p.Position.X),
 					Y:            int(p.Position.Y),
@@ -195,15 +215,19 @@ func playSession(cfg Config) {
 			if stageClimax.update(w) {
 				network.CurrentHost.StartClimax(w.Path, w.ClimaxSpawns)
 			}
+			simStart := time.Now()
 			network.CurrentHost.UpdateSimulation(dt)
+			recordSimTime(time.Since(simStart))
 		}
 
 		// Animate client-side skill visuals (fireballs, explosions,
 		// ground fire, sanctuaries — placement + dissipation only).
 		if network.Role == "client" && network.ClientSkills != nil {
+			simStart := time.Now()
 			network.ClientSkills.UpdateFire(dt)
 			network.ClientSkills.AdvanceSanctuaries(dt)
-			network.AdvanceClientSkills(dt, w.Collision.Rects())
+			network.AdvanceClientSkills(dt, w.Collision)
+			recordSimTime(time.Since(simStart))
 		}
 
 		// Update camera

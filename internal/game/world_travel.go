@@ -9,6 +9,7 @@ import (
 	"github.com/WandenDourado/Legiao/internal/entity"
 	"github.com/WandenDourado/Legiao/internal/network"
 	"github.com/WandenDourado/Legiao/internal/tilemap"
+	"github.com/WandenDourado/Legiao/internal/ui"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -37,6 +38,13 @@ func travelTo(current *World, targetMap, targetSpawn string, p *entity.Player) *
 	}
 
 	current.Unload()
+	// Os retratos de dialogo saem com o mapa, e nao com a sessao. Cada fase
+	// apresenta oradores novos e o `reference.png` de cada um e ~6 MB na placa;
+	// mantidos por sessao, o elenco inteiro da campanha ficava residente ate o
+	// fim (doc/performance.md, M5). Depois de `current.Unload()` pelo mesmo
+	// motivo que ele: e a linha em que o mapa que ficou para tras devolve tudo
+	// o que era so dele.
+	ui.UnloadPortraits()
 	p.Position = next.PlayerSpawn
 	p.Velocity = rl.Vector2{}
 	next.ApplyToHost()

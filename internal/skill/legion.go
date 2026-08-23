@@ -20,17 +20,21 @@ package skill
 import (
 	"math"
 
-	"github.com/WandenDourado/Legiao/internal/tilemap"
+	"github.com/WandenDourado/Legiao/internal/collision"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 // Legion owns the specters summoned by one caster.
 type Legion struct {
-	OwnerID string
-	Anchor  rl.Vector2 // owner position, synced every frame
-	Time    float32
+	OwnerID  string
+	Anchor   rl.Vector2 // owner position, synced every frame
+	Time     float32
 	Specters []*Specter
+	// push e o acumulador reaproveitado por `separate`. Fica no Legion, e nao
+	// numa alocacao por quadro, porque `separate` roda a cada quadro para cada
+	// legiao em campo.
+	push []rl.Vector2
 }
 
 // NewLegion summons a full circle of specters around pos.
@@ -66,32 +70,50 @@ func (l *Legion) Spent() bool { return len(l.Specters) == 0 }
 // moveSpecter displaces a specter by delta, respecting solid obstacles with
 // axis-sliding (like players). A specter that somehow starts inside a solid
 // (e.g., summoned over one) moves freely until it escapes.
-func moveSpecter(s *Specter, delta rl.Vector2, rects []rl.Rectangle) {
+func moveSpecter(s *Specter, delta rl.Vector2, solid collision.Solid) {
+	if delta.X == 0 && delta.Y == 0 {
+		return
+	}
 	size := SpecterRadius * 1.6
-	if tilemap.IsColliding(s.Position, size, size, rects) {
+	if blocked(solid, s.Position, size) {
 		s.Position = rl.Vector2Add(s.Position, delta)
 		return
 	}
 	next := rl.Vector2Add(s.Position, delta)
-	if !tilemap.IsColliding(next, size, size, rects) {
+	if !blocked(solid, next, size) {
 		s.Position = next
 		return
 	}
 	nx := rl.NewVector2(s.Position.X+delta.X, s.Position.Y)
-	if delta.X != 0 && !tilemap.IsColliding(nx, size, size, rects) {
+	if delta.X != 0 && !blocked(solid, nx, size) {
 		s.Position = nx
 		return
 	}
 	ny := rl.NewVector2(s.Position.X, s.Position.Y+delta.Y)
-	if delta.Y != 0 && !tilemap.IsColliding(ny, size, size, rects) {
+	if delta.Y != 0 && !blocked(solid, ny, size) {
 		s.Position = ny
 	}
 }
 
 // separate pushes overlapping specters apart so the pack never stacks up on
 // itself (pushes also respect solid obstacles).
-func (l *Legion) separate(rects []rl.Rectangle) {
+//
+// Os empurroes de TODOS os pares sao somados primeiro e aplicados UMA vez por
+// espectro no fim. Antes, cada par movia os dois espectros na hora: com trinta
+// espectros sao 435 pares, ou seja ate 870 `moveSpecter` por quadro contra os
+// 30 de agora. Alem de 29x mais barato, somar antes e mais estavel — aplicando
+// par a par, o empurrao de A contra B mudava a posicao que o par seguinte lia,
+// e a ordem do laco virava parte do resultado.
+func (l *Legion) separate(solid collision.Solid) {
 	minDist := SpecterRadius * 1.7
+	if cap(l.push) < len(l.Specters) {
+		l.push = make([]rl.Vector2, len(l.Specters))
+	}
+	push := l.push[:len(l.Specters)]
+	for i := range push {
+		push[i] = rl.Vector2{}
+	}
+
 	for i := 0; i < len(l.Specters); i++ {
 		a := l.Specters[i]
 		if a.Dying || a.Age < specterSpawnTime {
@@ -114,11 +136,16 @@ func (l *Legion) separate(rects []rl.Rectangle) {
 			} else {
 				to = rl.Vector2Scale(to, 1/dist)
 			}
-			push := (minDist - dist) / 2
-			moveSpecter(a, rl.Vector2Scale(to, -push), rects)
-			moveSpecter(b, rl.Vector2Scale(to, push), rects)
+			amount := (minDist - dist) / 2
+			push[i] = rl.Vector2Subtract(push[i], rl.Vector2Scale(to, amount))
+			push[j] = rl.Vector2Add(push[j], rl.Vector2Scale(to, amount))
 		}
 	}
+
+	for i, s := range l.Specters {
+		moveSpecter(s, push[i], solid)
+	}
+	l.push = push
 }
 
 // advance moves one specter for this frame: dying specters dissolve, hunters
@@ -126,7 +153,7 @@ func (l *Legion) separate(rects []rl.Rectangle) {
 // target is nil when there is nothing to hunt. Returns true while the specter
 // is ENGAGED (in biting range of its target) — the caller runs the combat
 // timers (bites out, enemy blows in).
-func (l *Legion) advance(s *Specter, target *rl.Vector2, targetRadius, dt float32, rects []rl.Rectangle) bool {
+func (l *Legion) advance(s *Specter, target *rl.Vector2, targetRadius, dt float32, solid collision.Solid) bool {
 	s.Age += dt
 	if s.lungeT > 0 {
 		s.lungeT -= dt
@@ -151,7 +178,7 @@ func (l *Legion) advance(s *Specter, target *rl.Vector2, targetRadius, dt float3
 		if step > dist {
 			step = dist
 		}
-		moveSpecter(s, rl.Vector2Scale(to, step/dist), rects)
+		moveSpecter(s, rl.Vector2Scale(to, step/dist), solid)
 		return false
 	}
 	// No prey: ease back toward the orbit slot, facing outward (on guard).
@@ -163,7 +190,7 @@ func (l *Legion) advance(s *Specter, target *rl.Vector2, targetRadius, dt float3
 		if step > dist {
 			step = dist
 		}
-		moveSpecter(s, rl.Vector2Scale(to, step/dist), rects)
+		moveSpecter(s, rl.Vector2Scale(to, step/dist), solid)
 	}
 	out := rl.Vector2Subtract(s.Position, l.Anchor)
 	if rl.Vector2Length(out) > 1 {

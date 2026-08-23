@@ -78,6 +78,38 @@ type File struct {
 	Scripts []Script `json:"scripts"`
 }
 
+// PortraitKeys lista, sem repetir, todo retrato que este arquivo pode pedir.
+//
+// Existe para o PRECARREGAMENTO. O retrato de um orador e a `reference.png`
+// dele — 1536x1024, ~6 MB depois de decodificada —, e ela era carregada na
+// primeira fala em que aparecia, ou seja DENTRO do quadro que abre a caixa de
+// dialogo: um quadro isolado de ~40 ms, medido no F3 do mapa 3, toda vez que
+// um personagem novo falava pela primeira vez.
+//
+// E o mesmo defeito que `entity.PreloadEnemyTextures` ja resolveu para as
+// folhas de monstro, e a mesma solucao: descobrir o elenco no carregamento do
+// mapa e pagar o custo la, onde o jogador ja espera uma pausa.
+//
+// A lista sai do ARQUIVO inteiro e nao do roteiro que vai tocar agora, porque
+// os tres gatilhos de um mapa (abertura, hordas limpas, ultimo suspiro)
+// disparam em momentos que ninguem consegue prever no carregamento — e o
+// ultimo suspiro dispara no meio de uma luta perdida, que e o pior momento
+// possivel para parar o quadro e ler um PNG do disco.
+func (f File) PortraitKeys() []string {
+	seen := make(map[string]bool)
+	keys := make([]string, 0, 4)
+	for _, s := range f.Scripts {
+		for _, l := range s.Lines {
+			if l.Portrait == "" || seen[l.Portrait] {
+				continue
+			}
+			seen[l.Portrait] = true
+			keys = append(keys, l.Portrait)
+		}
+	}
+	return keys
+}
+
 // ByTrigger returns the first script bound to the given trigger, if any.
 // One script per trigger is deliberate: two scripts firing on the same beat
 // would race for the screen, and a longer scene is just more lines.

@@ -344,7 +344,17 @@ func init() {
 		},
 
 		Radius: 58, HitOffsetY: -67, HitRadius: 78,
-		Health: 40, Speed: 0, AttackDamage: 14, AttackRange: SentryGlobalRange,
+		// AttackDamage 25: QUATRO esferas derrubam um personagem (100 de
+		// vida, entity/character.go). Eram 14, ou seja oito acertos — e oito
+		// acertos a uma esfera por vez (host_sentry_orb.go so deixa uma no ar
+		// por gargula) e uma ameaca que o grupo simplesmente absorve andando.
+		// A gargula existe para bater de FORA do raio da Area Angelical; se
+		// ela nao doi, a fase 4 nao tem pergunta nenhuma.
+		//
+		// Continua sendo dano ESQUIVAVEL: a esfera viaja a 300 e o jogador
+		// anda a 200 com vantagem de angulo. Quatro golpes e o preco de
+		// ignora-la, nao de enfrenta-la.
+		Health: 40, Speed: 0, AttackDamage: 25, AttackRange: SentryGlobalRange,
 		AttackCooldown: 1.35, Color: "#6B287A",
 	})
 
@@ -420,7 +430,17 @@ func init() {
 		},
 
 		Radius: 130, HitOffsetY: -180, HitRadius: 200,
-		Health: 400, Speed: 0, AttackDamage: 22, AttackRange: 1400,
+		// Health 2000, cinco vezes os 400 que ela tinha.
+		//
+		// Os 400 vinham de quando ela era o chefe do world_05, uma criatura
+		// no fim de uma corrida de cinco hordas. Hoje ela comanda a ARENA do
+		// world_07, e ali a vida dela nao e um bolo de dificuldade: e o
+		// CRONOMETRO da fase. A corrida da arena e `Endless` e so para quando
+		// a chefe cai (WaveDef.EndsWithBoss), entao a vida dela decide quanto
+		// tempo o grupo segura os dois portoes. Com 400 o cerco final acabava
+		// antes de a fase mostrar do que e capaz — uma salva de Flechas
+		// Celestiais e uma Chuva de Meteoros a derrubavam.
+		Health: 2000, Speed: 0, AttackDamage: 22, AttackRange: 1400,
 		AttackCooldown: 4.0, Color: "#2A2540", Vision: 2600,
 	})
 

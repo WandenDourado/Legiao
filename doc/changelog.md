@@ -1,5 +1,298 @@
 # Changelog
 
+## 2026-08-23 (2) — A linha do setor virou escudo do jogador
+
+**Relato:** *"os jogadores estao conseguindo matar os monstros de longe, sem
+precisar entrar no posto"* (mapa 3).
+
+**Causa:** `Guard.covers` exigia o jogador DENTRO do retangulo do setor para o
+guarda sequer olhar. As faixas do mapa 3 tem **1280 px** de altura e a flecha
+alcanca **1120**: dava para ficar na faixa de tras, atirar por cima da linha e
+limpar o posto seguinte um a um. O raio de visao de 2600 nao ajudava — ele nem
+chegava a ser perguntado, porque a pergunta do setor vinha antes e ja devolvia
+"nao".
+
+**Correcao — nao foi mexer no raio nem apagar o setor**, foi acrescentar uma
+SEGUNDA porta de aquisicao, mais curta que a primeira:
+
+| Porta | Pergunta | Raio | Respeita o retangulo? |
+|---|---|---|---|
+| Setor | "entrou no pedaco que eu guardo, e eu o vejo?" | 2600 (3400 no orc) | sim |
+| **Ameaca** | "consegue me **acertar** daqui?" | ~1370 | **nao** |
+
+Mais restritiva em distancia, mais permissiva em geometria — as duas coisas
+juntas sao o ponto. A acumulacao faixa por faixa continua valendo (um guarda nao
+acorda por alguem longe noutra faixa), mas **um posto nao deixa de ser defendido
+porque quem atira ficou do lado de fora**.
+
+O raio sai de `entity.LongestAttackReach()` — velocidade x tempo de vida do
+projetil, nao um numero escrito a mao. Para isso, dois numeros cravados dentro
+de `NewProjectile` viraram constantes com nome: `ProjectileLifetime` (2,0 s) e
+`ArrowLifetime` (1,6 s).
+
+**E levar dano virou notar.** `Enemy.TakeDamage` marca o guarda como engajado,
+qualquer que seja a origem do golpe. A porta de ameaca cobre a geometria
+previsivel; esta e a rede embaixo dela — magia de area, flecha celestial, um
+angulo que ninguem previu. Fica no `TakeDamage` porque ele e o FUNIL por onde
+todo dano a inimigo passa (dez pontos de chamada, verificados), e porque um
+caminho novo de dano nao pode depender de alguem lembrar de avisar a IA.
+
+### A armadilha que quase entrou junto
+
+O raio de ameaca e uma **variavel de pacote**, e os personagens entram no
+registro por um `init()`. Go inicializa toda variavel de pacote **antes** de
+rodar qualquer `init()`, entao a primeira versao — que varria `AllCharacters()`
+para achar o maior alcance — teria calculado sobre um registro vazio: alcance 0,
+raio de 250 px, e o defeito de volta **em silencio**, sem nada acusar.
+
+`LongestAttackReach` percorre as **constantes** dos projeteis. Quem cobra que o
+elenco caiba nelas e um teste, que roda depois do `init()`.
+
+### Um teste mudou de lado
+
+`TestGuardIgnoresTrespassersOutsideItsSector` afirmava que "quem esta do outro
+lado da barricada nao e problema deste monstro" a 600 px do posto. Essa frase
+deixou de ser verdadeira de proposito: ela agora exige o alvo fora do setor **e**
+fora do alcance. O caso que ela cobria virou o teste irmao,
+`TestGuardDefendsItsPostAgainstSomeoneShootingFromOutsideTheSector`.
+
+## 2026-08-23 — O portal abria antes da emboscada; o ultimo suspiro perdeu os NPCs
+
+Nove ajustes pedidos em jogo. Tres deles sao a mesma historia contada de tres
+lugares, entao vale comecar por ela.
+
+### A fase 3 travava, e o portal era a causa
+
+**Sintoma:** o grupo chegava a fortaleza e a horda infinita nao comecava.
+
+**Causa:** o `world_03` nao tem um unico marcador `enemy_spawn_*` — de
+proposito, a jogabilidade dele e de guarnicao. Entao `WaveState.Total` fica em
+zero, e `game.PortalsUnlocked` lia isso como "mapa quieto, nao tranque a
+saida": **o portal se materializava no primeiro quadro da fase**. Bastava um
+jogador entrar nele para a fase parar de vez — quem espera dentro de um portal
+e congelado e nem desenhado (`host_portal_presence.go`), e a porta do climax
+exige TODOS os vivos dentro da zona da fortaleza. Aquele corpo nunca chegava, a
+emboscada nunca armava, e nada na tela dizia por que.
+
+**Correcao, em dois lugares porque sao dois defeitos:**
+
+- `network/climax_pending.go` (novo): enquanto um mapa ainda DEVE a emboscada
+  roteirizada (`climaxRuns`), ele nao e um mapa quieto — e um mapa cuja luta
+  ainda nao comecou, e o portal fica trancado como em qualquer corrida de
+  hordas. Instalada a emboscada, `WaveState.Total > 0` e a regra normal volta a
+  valer sozinha; por isso o cliente nao precisa de mensagem nova de protocolo —
+  ele descobre o mapa no carregamento igual ao host.
+- `game/climax_gate.go`: quem esta dentro de um portal nao conta para a porta
+  do climax, nem para segurar nem para abrir. Hoje e cinto e suspensorio, mas a
+  porta nao deve depender de o portal estar fechado para funcionar.
+
+### O personagem nao sumia no portal e o aviso piscava
+
+Mesmo tema, outro defeito. `game/loop.go` republicava o jogador local a cada
+quadro com `network.UpdatePlayerState`, que **substitui a entrada inteira** —
+apagando `InPortal` e `Absent`, que sao veredictos do host e chegam no snapshot
+a 20 Hz. Sessenta quadros por segundo apagando, vinte por segundo repondo: o
+corpo continuava desenhado e "Aguardando o grupo" piscava.
+
+Agora existe `network.UpdateLocalPlayerState`, que preserva os campos que a
+maquina local apenas espelha, e `network.LeaveLocalPortal`, que o ESC/SAIR usa
+para limpar a flag **e** o espelho de uma vez (so a flag seria reposta no quadro
+seguinte).
+
+### Os NPCs do ultimo suspiro sairam
+
+O "heroi invocado" existia para um caso que nao existe mais: ninguem no grupo
+jogando com a classe da fase. Desde que toda classe vaga virou um BOT
+(`host_bots.go`), a cena sempre encontra um corpo de verdade para reerguer.
+
+Foram embora `summonHeroNPC`, `tickLastStand`, `LastStandNPC`,
+`game/last_stand_npc.go` e cinco campos de `lastStandHero` (`npcID`, `cast`,
+`alive`, `anchor`, `endSignal`) que so serviam para um personagem invocado ser
+dono de um efeito. O que a fase ainda declara e QUEM se ergue e QUAL suprema
+devolver carregada.
+
+Junto foi o **julgamento celestial do mapa 4** (`castCastleJudgment`), que era o
+outro item do relato: mesmo com um Arqueiro em campo, a cena disparava as
+flechas nas sentinelas sozinha. Agora nao — a cena reergue o Arqueiro (humano ou
+bot), devolve a suprema carregada e destravada, e **quem atira e ele**. O bot ja
+sabe cacar gargula (`bot/arqueiro.go`). O julgamento do mapa 6
+(`castCannonJudgment`) FICOU: o Avatar dos Deuses e imunidade total, nao um
+ataque a distancia, entao sem ele o resgate devolveria o grupo vivo dentro do
+mesmo corredor bombardeado.
+
+### As duas flechas do Arqueiro iam para a mesma torre
+
+A suprema dele tem duas cargas e a recarga so arma depois da segunda
+(`ability.Charged`), entao entre um disparo e o outro `UltimateReady` continua
+verdadeiro — o bot reavaliava "qual e a gargula mais perto", achava a MESMA (a
+flecha ainda estava no ar) e gastava a segunda carga nela. Duas flechas, uma
+torre, quando uma flecha ja resolve (40 de dano perfurante contra 40 de vida).
+
+`arqueiroBrain` ganhou uma memoria de 3 s por alvo — o voo maximo de uma flecha
+(4800 de alcance a 1600/s). Passado esse tempo, um alvo ainda de pe quer dizer
+que ela errou, e ai ele pode voltar a mirar nele. Um tiro que atravessa DUAS
+torres alinhadas marca as duas.
+
+### As gargulas do mapa 4 nao atiram mais desde o vestibulo
+
+`network/sentry_wake.go` (novo): a fase declara a partir de qual degrau de
+territorio (`tilemap.Zone.Tier`) as sentinelas dela abrem fogo. O mapa 4 declara
+o **degrau 3**, a boca do saguao — que e onde a emboscada arma e onde o anuncio
+"As sentinelas despertaram" acontece. Antes disso elas estao em campo, sao
+desenhadas e podem morrer; so nao atiram.
+
+Uma vez acordadas, nao dormem mais (mesmo principio de `Enemy.chasing`): recuar
+nao pode ser uma forma de desligar a fase. Um corpo caido la na frente tambem
+nao acorda ninguem — a fase reage a quem esta avancando. Mapa fora da tabela
+atira desde o primeiro quadro, que e o certo para os mapas 5 e 7, onde as
+gargulas entram por horda e a fase ja escolheu o momento delas.
+
+### Numeros
+
+| O que | De | Para | Por que |
+|---|---|---|---|
+| `MeteorImpactDamage` | 100 | **480** | Uma pedra tira 80% da vida do Orc (600). Os 100 vinham de quando o inimigo mais duro do jogo tinha 100 de vida: desde o orc de guarnicao a chuva passava por cima do elenco pesado sem arranhar. Duas acertam de morte; uma sozinha nunca resolve. |
+| `MeteorRainInterval` | 0,025 s | **0,015 s** | ~40/s para ~67/s. A chuva e a unica suprema que nao escolhe alvo — sorteia pontos no mapa inteiro —, entao o que ela controla de verdade nao e quanto cada pedra tira, e sim quantas caem perto de alguem. **Custa quadro**: os simultaneos sobem de ~56 para ~93, cada um com o proprio emissor de particulas. Se o F3 acusar, e este numero que afrouxa primeiro, nao o dano. |
+| Sentinela `AttackDamage` | 14 | **25** | Quatro esferas derrubam um personagem (100 de vida), em vez de oito. A uma esfera por vez, oito acertos era uma ameaca que o grupo absorvia andando. |
+| Senhora das Trevas `Health` | 400 | **2000** | Ela deixou de ser o chefe no fim de uma corrida de cinco hordas e virou quem comanda a ARENA: a vida dela nao e um bolo de dificuldade, e o CRONOMETRO da fase (a corrida so para quando ela cai). Com 400, o cerco final acabava antes de a fase mostrar do que e capaz. |
+
+As tres relacoes acima estao travadas em `network/balance_test.go`: um numero de
+equilibrio que so significa alguma coisa em relacao a outro numero precisa de um
+teste que defenda a RELACAO, nao o valor.
+
+## 2026-08-22 (3) — Correcao confirmada em jogo; retratos precarregados; vsync ligado
+
+Refeitas as capturas do F3 depois da correcao da Legiao Espectral. **A mesma
+cena do `world_02` que rodava a 16 fps com 96,7 ms de quadro roda a 60 fps com
+16,7 ms**, e a linha nova diz onde estavam os 90 ms de "resto": `simulacao 0,0`.
+Corroboracao independente: o `world_03` sustenta 156 inimigos vivos com
+`simulacao 0,5 ms`. Ressalva honesta: as capturas mostram `espectros 0`, entao
+ainda falta um print com os trinta espectros vivos para a prova direta.
+
+Duas coisas novas apareceram nessas capturas:
+
+- **O quadro de 40 ms do dialogo — CORRIGIDO.** `PIOR 40,2 ms` no `world_03`,
+  e o sintoma relatado ("toda vez que passa um dialogo o ms piora, depois
+  normaliza") e o retrato: a `reference.png` do orador (1536x1024, ~6 MB) era
+  carregada na PRIMEIRA fala dele, dentro do quadro que abre a caixa. Mesmo
+  defeito que `PreloadEnemyTextures` ja resolvia para as folhas de monstro, e
+  mesma solucao: `dialogue.File.PortraitKeys()` lista o elenco do mapa e
+  `ui.PreloadPortraits` sobe todos no `syncMap`, no quadro da troca de mapa. A
+  lista sai do arquivo INTEIRO e nao do roteiro que vai tocar, porque o
+  `on_last_stand` dispara no meio de uma luta perdida — o pior momento possivel
+  para ler um PNG do disco.
+- **Screen tearing: o jogo nunca pediu vsync.** `rl.SetTargetFPS` NAO e vsync —
+  ele so faz o laco dormir, e o buffer continua sendo trocado no meio do
+  desenho da tela. Era por isso que o painel mostrava `quadro 16,7 / PIOR 16,7`
+  enquanto a imagem rasgava: a cadencia estava certa, o sincronismo nunca
+  existiu, e um medidor de tempo de quadro nao ve tearing. `Config` ganhou
+  `VSync bool` (true nas duas plataformas) e `Run` aplica
+  `rl.SetConfigFlags(rl.FlagVsyncHint)` ANTES de `InitWindow`.
+
+E um defeito de fiacao encontrado no caminho: **`Config.TargetFPS` nunca era
+lido** — `Run` chamava `rl.SetTargetFPS(60)` com o numero cravado, entao o
+mecanismo de "declarar 30 no Android" descrito no item mobile #6 nao teria
+efeito nenhum. Agora e lido, e `0` significa "sem teto proprio: quem cadencia e
+o monitor". O padrao continua 60 para nao mudar carga de GPU sem medida; num
+monitor acima de 60 Hz vale trocar para `0` (ver `doc/performance.md`, "Vsync e
+teto de quadro").
+
+## 2026-08-22 (2) — A Legiao Espectral testava obstaculo contra o mapa inteiro: 16 fps no mapa 2
+
+O painel de memoria adicionado horas antes respondeu a pergunta que motivou
+ele, e a resposta foi "nao e vazamento". Duas capturas do mesmo host
+(`world_01` fluido, `world_02` apos o climax a 16 fps) mostram heap vivo
+praticamente igual (1,6 -> 2,5 MB), pico igual (3,5 -> 3,6), `Sys` igual
+(17,5 -> 17,7), goroutines iguais (4) e espelho de rede zerado nos dois. Nada
+acumula entre as fases.
+
+O que a captura mostrava era **`GC 611` contra `GC 9.003`** e **90,1 dos 96,7 ms
+do quadro no balde chamado "resto"** — churn de alocacao, nao retencao, dentro
+de `UpdateSimulation`.
+
+A causa: `LegionCount = 30`. Cada espectro se movia por `moveSpecter`, que
+chamava `tilemap.IsColliding` ate quatro vezes, e `IsColliding` percorre a
+lista INTEIRA de solidos do mapa — ~1.400 retangulos no `world_02` (1.132
+celulas solidas mais os apoios das 179 pecas de vegetacao). Somando a
+separacao, que movia os DOIS espectros de cada um dos 435 pares na hora, um
+quadro com a legiao engajada fazia da ordem de **cinco milhoes de comparacoes
+de retangulo**. E o custo cresce com o TAMANHO DO MAPA, que e por que a mesma
+suprema rodava lisa na fase 1 e derrubava o jogo na fase 2 — a forma de um
+vazamento, sem ser um.
+
+- **As magias passam a falar com o `CollisionGrid`.** `StepLegions`,
+  `StepArrows`, `StepFireballs` e `AdvanceLegions` recebem `collision.Solid` em
+  vez de `[]rl.Rectangle`; `Host.SetCollisionRects` virou `Host.SetSolid`.
+  `CollidesCentered` olha so as celulas que a caixa toca mais o indice espacial
+  de apoios: uma ou quatro celulas, nao mil e quatrocentos retangulos. E a
+  mesma porta que jogador e monstro ja usavam (`EntityManager.Solid`) — as
+  magias e que estavam de fora, e a lista plana existia so para elas. O cache
+  `World.collisionRects`, criado no mesmo dia, foi removido: com a lista plana
+  sem uso, ele deixou de ter o que cachear.
+- **Efeito colateral bom no portao da arena.** `UpdateArenaGate` remontava o
+  snapshot de retangulos do host toda vez que o portao abria, para as magias
+  enxergarem a passagem nova. Com a grade COMPARTILHADA, o portao muda os apoios
+  dentro dela e quem le pela grade ve a mudanca no quadro seguinte: a chamada
+  saiu. A malha de navegacao continua sendo avisada (`RebuildNavArea`), porque
+  ela e derivada uma vez no carregamento e nao observa a grade.
+- **`Legion.separate` soma os empurroes e move uma vez por espectro**: de ate
+  870 `moveSpecter` por quadro para 30. Tambem mais estavel — aplicando par a
+  par, o empurrao de A contra B mudava a posicao que o par seguinte lia.
+- **O painel do F3 separa `simulacao` de `resto`** (`internal/game/perf_sim.go`)
+  e ganhou `lixo N MB/s` (taxa de alocacao, o denominador que faltava para o
+  `GC 9003`) e `espectros N` — a Legiao poe trinta entidades simuladas em campo
+  e nao aparecia em contador nenhum, entao o painel mostrava "inimigos 10 vivos"
+  num mapa onde trinta espectros pisavam.
+
+Aritmetica das duas correcoes juntas: ~1.000 comparacoes por quadro contra
+~5.000.000. Nao e numero medido — a medida vem da proxima captura, e a linha
+`simulacao` existe para ela. Se `simulacao` cair e o `resto` continuar em 90 ms,
+a causa e GPU (terreno em 4K, Faixa R4) e e outro trabalho.
+
+Detalhes, tabela das capturas e a analise de por que paralelizar entre nucleos
+NAO era a resposta (14% de CPU a 16 fps significa processo esperando, nao
+processo sem nucleo) em `doc/performance.md`, secao 4⁹⁄₁₀.
+
+## 2026-08-22 — O lag que cresce com a FASE: medidor de memoria no F3 e quatro retencoes fechadas
+
+Sessao de teste com dois jogadores (host + cliente) reportou o jogo ficando
+quase injogavel conforme a campanha avanca. A suspeita era acumulo de recurso.
+O projeto nao media um unico byte, entao a primeira entrega e a MEDIDA e nao a
+correcao: `internal/game/perf_mem.go` acrescenta tres linhas ao painel do F3 —
+heap Go (atual, pico da sessao e `Sys`), objetos, contagem de GC, goroutines,
+texturas na VRAM separadas por familia (mapa / folhas de inimigo / retratos de
+dialogo) e o tamanho do mundo espelhado da rede. Comparar duas capturas, uma na
+fase 1 e outra na fase em que engasga, ambas logo apos o carregamento, responde
+sozinha se o defeito e retencao, pico de alocacao ou custo de GPU.
+
+Quatro achados do mesmo levantamento, ja corrigidos:
+
+1. **O cliente reconstruia a colisao inteira do mapa a cada quadro.**
+   `loop.go` chamava `w.Collision.Rects()` sessenta vezes por segundo para
+   entregar os obstaculos a `AdvanceClientSkills`; `Rects()` varre a grade
+   inteira (42.000 celulas no `world_03`) e aloca um retangulo por celula
+   solida. O host ja fazia certo — uma vez por mapa, via `SetCollisionRects`.
+   Agora a lista mora no `World` (`World.collisionRects`), montada uma vez no
+   carregamento, e os dois papeis leem a mesma. E o unico dos quatro cujo custo
+   CRESCE COM O TAMANHO DO MAPA, entao e o que melhor explica "piora conforme
+   avanca nas fases".
+2. **`portraitCache` nunca descarregava** (`internal/ui/dialogue_box.go`, item
+   M5 de `doc/performance.md`). Cada orador de dialogo prende o `reference.png`
+   dele, ~6 MB na placa, ate o fim da sessao; sete fases de campanha acumulam o
+   elenco inteiro. O cache mudou de arquivo (`internal/ui/portrait_cache.go`) e
+   de escopo: vive por MAPA, e `travelTo` o descarrega junto do mapa que fica
+   para tras.
+3. **`Manager.Reset()` nao limpava os efeitos do chefe.** Espinhoes e nevoa so
+   saiam pela morte da Senhora das Trevas (`host_boss.go`); sair do mapa 7 por
+   portal ou por F8 os levava para a fase de destino e nada mais os tirava de
+   la.
+4. **`MapRenderer.Load` podia vazar referencia de textura.** Dois tilesets do
+   mesmo mapa citando a MESMA imagem davam dois `AcquireTexture` e um so
+   `ReleaseTexture` (o mapa `mr.Textures` e indexado por caminho), prendendo o
+   atlas na VRAM pelo resto da sessao. Uma referencia por caminho agora. E
+   `Unload` zera `Terrain` e `Manifests` depois de devolve-los, para uma
+   segunda chamada nao devolver referencias que ja nao tem.
+
 ## 2026-08-20 — Bots atravessavam o mapa 3 sem lutar: o atalho do portal desligava o cerebro
 
 `tickOneBot` pulava `rt.brain.Think(view)` inteiro sempre que o portal estava

@@ -200,6 +200,10 @@ func (h *Host) StartClimax(mapPath string, points []tilemap.SpawnPoint) bool {
 	// corredor ate ele era corpo a corpo, e corpo a corpo e exatamente o que a
 	// Area Angelical — que o grupo ja tem nesta fase — responde inteiro.
 	h.Waves = NewWaveRunner(points, defs)
+	// A partir daqui o portal volta a ser decidido pelo WaveState normal: a
+	// emboscada esta em campo, entao Total > 0 e a saida so abre com a fase
+	// limpa. Ver climax_pending.go.
+	NoteClimaxSprung()
 	log.Printf("[Climax] %s: emboscada iniciada de %d pontos", mapPath, len(points))
 	return true
 }

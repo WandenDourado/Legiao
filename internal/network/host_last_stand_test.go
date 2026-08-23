@@ -4,8 +4,6 @@ import (
 	"testing"
 
 	"github.com/WandenDourado/Legiao/internal/entity"
-
-	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 // A cena so tem valor se acontecer ANTES do Game Over, e se acontecer uma vez.
@@ -55,44 +53,15 @@ func TestLastStandCannotArmTwiceInOneRun(t *testing.T) {
 func TestResetLastStandGivesTheSceneBack(t *testing.T) {
 	ResetLastStand()
 	lastStand.mu.Lock()
-	lastStand.done, lastStand.armed, lastStand.npcActive = true, true, true
-	lastStand.npcPos = rl.NewVector2(100, 200)
+	lastStand.done, lastStand.armed = true, true
 	lastStand.mu.Unlock()
 
 	// Reiniciar a fase e uma corrida NOVA: quem perdeu tem direito a cena de
-	// novo, e o heroi invocado da corrida anterior nao pode ficar no campo.
+	// novo.
 	ResetLastStand()
 	if LastStandPending() || LastStandDone() {
 		t.Error("o reset nao devolveu a cena")
 	}
-	if _, _, active := LastStandNPC(); active {
-		t.Error("o heroi invocado sobreviveu ao reset da fase")
-	}
-}
-
-func TestLastStandNPCVisibility(t *testing.T) {
-	ResetLastStand()
-	if _, _, active := LastStandNPC(); active {
-		t.Fatal("NPC em campo sem ninguem ter invocado")
-	}
-
-	setLastStandNPCAs(rl.NewVector2(640, 480), true, "npc_sacerdotisa",
-		entity.CharSacerdotisa)
-	pos, char, active := LastStandNPC()
-	if !active || pos.X != 640 || pos.Y != 480 {
-		t.Errorf("NPC em (%v, %v) ativo=%v; esperado (640, 480) ativo", pos.X, pos.Y, active)
-	}
-	// QUEM esta em campo importa tanto quanto ONDE: o renderer desenha a folha
-	// de sprite deste personagem, e o heroi muda de fase para fase.
-	if char != entity.CharSacerdotisa {
-		t.Errorf("NPC desenhado como %q; esperado sacerdotisa", char)
-	}
-
-	setLastStandNPC(rl.Vector2{}, false)
-	if _, _, active := LastStandNPC(); active {
-		t.Error("NPC continuou em campo depois de a legiao se gastar")
-	}
-	ResetLastStand()
 }
 
 func TestInvulnerabilityWindowExpires(t *testing.T) {
@@ -132,7 +101,6 @@ func TestGrantInvulnerabilityKeepsTheLongerWindow(t *testing.T) {
 	clearInvulnerability()
 }
 
-
 // O heroi do ultimo suspiro e da FASE. Este teste existe porque a versao
 // anterior tinha o Necromante escrito no codigo em oito lugares, e a unica
 // forma de descobrir que o mapa 3 usa a Sacerdotisa era ler todos eles.
@@ -153,26 +121,6 @@ func TestLastStandHeroIsPerMap(t *testing.T) {
 		if hero.character != tc.want || hero.skillID != tc.skill {
 			t.Errorf("%s: heroi %q com %q; esperado %q com %q",
 				tc.mapPath, hero.character, hero.skillID, tc.want, tc.skill)
-		}
-		if hero.cast == nil {
-			t.Errorf("%s: heroi sem magia para lancar", tc.mapPath)
-		}
-	}
-}
-
-// Cada mapa tem que ter o proprio npcID: dois mapas com o mesmo dono fariam o
-// cliente desenhar o personagem errado, e `isLastStandNPC` nao teria como
-// distinguir de quem e o efeito que chegou.
-func TestLastStandNPCIDsAreUnique(t *testing.T) {
-	seen := map[string]string{}
-	for mapPath, hero := range lastStandHeroes {
-		if other, dup := seen[hero.npcID]; dup {
-			t.Errorf("%s e %s usam o mesmo npcID %q", other, mapPath, hero.npcID)
-			continue
-		}
-		seen[hero.npcID] = mapPath
-		if !isLastStandNPC(hero.npcID) {
-			t.Errorf("%s: isLastStandNPC nao reconhece %q", mapPath, hero.npcID)
 		}
 	}
 }

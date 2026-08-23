@@ -179,26 +179,112 @@ func TestGuardSeesFartherThanItsAttackRange(t *testing.T) {
 	}
 }
 
-// TestGuardIgnoresTrespassersOutsideItsSector: o setor decide QUEM ele nota.
+// AS DUAS PORTAS DE AQUISICAO (ver `Guard.wants`).
 //
-// E a unica coisa que o setor ainda faz, e e o que impede o mapa inteiro de
-// acordar de uma vez agora que a perseguicao nao termina mais: o grupo acumula
-// perseguidores faixa por faixa conforme avanca, em vez de puxar 136 monstros
-// numa fila so.
-func TestGuardIgnoresTrespassersOutsideItsSector(t *testing.T) {
-	post := rl.NewVector2(5000, 5000)
+// O SETOR e o que impede o mapa inteiro de acordar de uma vez agora que a
+// perseguicao nao termina mais: o grupo acumula perseguidores faixa por faixa
+// conforme avanca, em vez de puxar 136 monstros numa fila so. Raio generoso,
+// limitado pelo retangulo.
+//
+// A AMEACA e a porta curta que ignora o retangulo, e ela existe porque o setor
+// tinha virado escudo do jogador — ver o teste logo abaixo dela.
+//
+// Os quatro testes seguintes cobrem as duas e a fronteira entre elas.
+
+// sectorGuard e um posto num setor ESTREITO, como as faixas do mapa 3: quem
+// esta acima ou abaixo da linha nao entrou no pedaco deste monstro.
+func sectorGuard(post rl.Vector2) *Enemy {
 	e := NewEnemy(EnemyTypeGarrison, post.X, post.Y)
 	a, b := PatrolSegment(post, 0)
-	// Setor estreito: uma faixa de 400px de altura, como as do mapa 3.
 	e.Guard = Guard{
 		Post: post, PatrolA: a, PatrolB: b, Radius: 1100,
 		Territory: rl.NewRectangle(post.X-2000, post.Y-200, 4000, 400),
 	}
-	// Perto, mas do outro lado da fronteira do setor.
-	outside := rl.NewVector2(post.X+100, post.Y+600)
-	if e.guardTarget([]PlayerState{playerAt(outside)}) != nil {
-		t.Error("notou alguem fora do proprio setor: quem esta do outro lado " +
-			"da barricada nao e problema deste monstro")
+	return e
+}
+
+func TestGuardIgnoresTrespassersOutsideItsSector(t *testing.T) {
+	post := rl.NewVector2(5000, 5000)
+	e := sectorGuard(post)
+	// Fora do setor E fora do alcance de qualquer arma do elenco: este
+	// realmente nao e problema dele.
+	far := rl.NewVector2(post.X+100, post.Y+GuardThreatRadius()+400)
+	if e.guardTarget([]PlayerState{playerAt(far)}) != nil {
+		t.Error("notou alguem fora do proprio setor e fora de alcance: quem " +
+			"esta do outro lado da barricada, longe, nao e problema deste monstro")
+	}
+}
+
+// A LINHA DO SETOR NAO E ESCUDO (23/08/2026).
+//
+// Relato do Gui: "os jogadores estao conseguindo matar os monstros de longe,
+// sem precisar entrar no posto". A faixa do mapa 3 tem 1280 px de altura e a
+// flecha alcanca 1120: dava para ficar na faixa de tras e limpar o posto
+// seguinte um a um, porque `covers` exigia o jogador DENTRO do retangulo para o
+// guarda sequer olhar.
+func TestGuardDefendsItsPostAgainstSomeoneShootingFromOutsideTheSector(t *testing.T) {
+	post := rl.NewVector2(5000, 5000)
+	e := sectorGuard(post)
+	// Fora do setor (a faixa acaba 200 px abaixo do posto), mas perto o
+	// bastante para acertar o posto daqui.
+	shooter := rl.NewVector2(post.X, post.Y+GuardThreatRadius()-100)
+	if e.guardTarget([]PlayerState{playerAt(shooter)}) == nil {
+		t.Error("um jogador ao alcance de acertar o posto foi ignorado por " +
+			"estar do outro lado da linha do setor")
+	}
+}
+
+// O raio de AMEACA e mais curto que o de setor, e isso e o ponto: a segunda
+// porta nao pode virar "todo monstro do mapa acorda". Ela troca alcance por
+// geometria — perto, em qualquer retangulo; longe, so no meu.
+func TestTheThreatDoorIsShorterThanTheSectorDoor(t *testing.T) {
+	const sectorRadius = float32(2600) // guardRadiusFor, network/host_garrison.go
+	if GuardThreatRadius() >= sectorRadius {
+		t.Errorf("raio de ameaca (%.0f) nao e mais curto que o de setor (%.0f); "+
+			"a porta curta viraria a porta larga e o mapa acordaria inteiro",
+			GuardThreatRadius(), sectorRadius)
+	}
+}
+
+// E ele tem de cobrir a arma de MAIOR alcance do elenco, ou a classe que
+// alcanca mais longe continua com o exploit para ela sozinha.
+func TestTheThreatRadiusCoversTheLongestWeaponInTheCast(t *testing.T) {
+	for _, def := range AllCharacters() {
+		if reach := AttackReach(def.Type); reach > GuardThreatRadius() {
+			t.Errorf("%s alcanca %.0f px e o posto so acorda a %.0f: ela mata "+
+				"de fora sem ser notada", def.Type, reach, GuardThreatRadius())
+		}
+	}
+}
+
+// LEVAR DANO E NOTAR. A porta de ameaca cobre a geometria previsivel; esta e a
+// rede embaixo dela — magia de area, flecha celestial, um angulo que ninguem
+// previu. Se o golpe chegou, o guarda foi encontrado.
+func TestAGuardThatIsHitComesAfterWhoeverIsThere(t *testing.T) {
+	post := rl.NewVector2(5000, 5000)
+	e := sectorGuard(post)
+
+	// Longe demais para as duas portas de aquisicao.
+	sniper := rl.NewVector2(post.X, post.Y+GuardThreatRadius()+3000)
+	players := []PlayerState{playerAt(sniper)}
+	if e.guardTarget(players) != nil {
+		t.Fatal("o alvo estava fora das duas portas e mesmo assim foi notado")
+	}
+
+	e.TakeDamage(1)
+	if e.guardTarget(players) == nil {
+		t.Error("o guarda levou dano de longe e continuou patrulhando como se " +
+			"nada tivesse acontecido")
+	}
+}
+
+// Nao vale para quem nao guarda nada: um monstro de horda ja caca o mais
+// proximo, e marcar `chasing` nele so criaria estado que ninguem le.
+func TestTakingDamageDoesNotInventAChaseForANonGuard(t *testing.T) {
+	e := NewEnemy(EnemyTypeFast, 0, 0)
+	e.TakeDamage(1)
+	if e.chasing {
+		t.Error("um monstro sem posto ficou marcado como perseguindo")
 	}
 }
 

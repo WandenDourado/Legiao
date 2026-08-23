@@ -10,16 +10,29 @@ type arqueiroBrain struct {
 	targetID   string
 	decideIn   float32
 	retreating bool
+	// loosed e em QUEM ele ja gastou uma Flecha Celestial, e por quanto tempo
+	// ainda lembra disso (celestialMemory, tuning.go).
+	//
+	// UMA FLECHA POR ALVO. As duas cargas da suprema so valem a pena se forem
+	// para torres diferentes: a flecha tira 40 e a gargula tem 40 de vida, ou
+	// seja a primeira ja resolve, e a segunda no mesmo alvo e a carga jogada
+	// fora. Sem esta memoria era exatamente o que acontecia — entre os dois
+	// disparos a recarga ainda nao armou (ability.Charged), a flecha ainda
+	// esta no ar, e "a gargula mais perto" continua sendo a mesma.
+	loosed map[string]float32
 }
 
 func (b *arqueiroBrain) Think(v View) Intent {
+	// Envelhece a memoria ANTES de qualquer decisao deste quadro.
+	b.forgetLoosed(v)
+
 	// Suprema pronta e gargula viva: prioridade acima de tudo o resto (plan
 	// doc/plan_avanco_bots_e_gargula.md §B4). Enquanto a suprema nao estiver
 	// liberada pela campanha, v.UltimateReady ja vem falso e este bloco
 	// simplesmente nao dispara — nos mapas anteriores a gargula continua
 	// sendo problema do grupo, nao dele sozinho.
 	if v.UltimateReady {
-		if sentry, ok := nearestSentry(v.Self.Pos, v.Foes); ok {
+		if sentry, ok := b.nextSentry(v); ok {
 			return b.huntSentry(v, sentry)
 		}
 	}
@@ -80,11 +93,81 @@ func (b *arqueiroBrain) Think(v View) Intent {
 		return intent
 	}
 
-	if v.UltimateReady && hasTarget && (target.IsBoss || target.AttackRange > 1000) {
+	if v.UltimateReady && hasTarget && !b.alreadyLoosed(target.ID) &&
+		(target.IsBoss || target.AttackRange > 1000) {
 		intent.Skill = &Cast{SkillID: "celestial_arrows", Aim: target.Pos}
+		b.noteLoosed(target.ID)
 	}
 
 	return intent
+}
+
+// forgetLoosed ages the "an arrow is already on its way to this one" memory
+// and drops whatever expired or left the field.
+//
+// A foe that is no longer in v.Foes is gone for good — the host removes a
+// dead enemy from the EntityManager — so its entry would otherwise sit in the
+// map for the rest of the stage.
+func (b *arqueiroBrain) forgetLoosed(v View) {
+	if len(b.loosed) == 0 {
+		return
+	}
+	onField := make(map[string]bool, len(v.Foes))
+	for _, f := range v.Foes {
+		onField[f.ID] = true
+	}
+	for id, left := range b.loosed {
+		left -= v.Dt
+		if left <= 0 || !onField[id] {
+			delete(b.loosed, id)
+			continue
+		}
+		b.loosed[id] = left
+	}
+}
+
+// noteLoosed records that an arrow is already flying at these foes. It takes
+// several ids because one arrow can be aimed THROUGH two aligned sentries
+// (secondSentryAligned): both are spoken for by that single shot.
+func (b *arqueiroBrain) noteLoosed(ids ...string) {
+	if b.loosed == nil {
+		b.loosed = make(map[string]float32, 2)
+	}
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+		b.loosed[id] = celestialMemory
+	}
+}
+
+// alreadyLoosed reports whether this foe already has an arrow coming.
+func (b *arqueiroBrain) alreadyLoosed(id string) bool {
+	_, ok := b.loosed[id]
+	return ok
+}
+
+// nextSentry is nearestSentry minus whoever already has an arrow on the way.
+//
+// The common case allocates nothing: with an empty memory it is the plain
+// nearestSentry over v.Foes.
+func (b *arqueiroBrain) nextSentry(v View) (Foe, bool) {
+	if len(b.loosed) == 0 {
+		return nearestSentry(v.Self.Pos, v.Foes)
+	}
+	return nearestSentry(v.Self.Pos, b.unspokenFor(v.Foes))
+}
+
+// unspokenFor is v.Foes without the ones an arrow is already flying at.
+func (b *arqueiroBrain) unspokenFor(foes []Foe) []Foe {
+	out := make([]Foe, 0, len(foes))
+	for _, f := range foes {
+		if b.alreadyLoosed(f.ID) {
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
 }
 
 // huntSentry approaches within celestialApproachMargin of the ultimate's
@@ -105,12 +188,17 @@ func (b *arqueiroBrain) huntSentry(v View, sentry Foe) Intent {
 	// Mira o HitCentre, nao Pos (plan §B4, point 3): a folga do raio ainda
 	// acertaria mirando nos pés, mas seria folga, não desenho.
 	aim := sentry.HitCentre
-	if second, ok := secondSentryAligned(v.Self.Pos, sentry, v.Foes); ok {
+	spokenFor := []string{sentry.ID}
+	if second, ok := secondSentryAligned(v.Self.Pos, sentry, b.unspokenFor(v.Foes)); ok {
 		if through, ok2 := aimThrough(v.Self.Pos, sentry.HitCentre, second.HitCentre); ok2 {
 			aim = through
+			spokenFor = append(spokenFor, second.ID)
 		}
 	}
 	intent.Skill = &Cast{SkillID: "celestial_arrows", Aim: aim}
+	// A carga foi gasta NESTAS torres: a proxima decisao tem de procurar
+	// outra, e nao a mesma que ainda esta com a flecha a caminho.
+	b.noteLoosed(spokenFor...)
 	return intent
 }
 

@@ -33,6 +33,20 @@ package entity
 // geometria: e o setor que limita quantos acordam de uma vez, entao o grupo
 // acumula perseguidores faixa por faixa em vez de acordar o mapa. E fugir para
 // tras deixou de ser de graca porque o mapa passou a ter monstro atras.
+//
+//  4. O SETOR VIROU ESCUDO DO JOGADOR (23/08/2026). O relato: "os jogadores
+//     estao conseguindo matar os monstros de longe, sem precisar entrar no
+//     posto". A causa e a linha do setor. `covers` exigia o jogador DENTRO do
+//     retangulo para o guarda notar, e as faixas do mapa 3 tem 1280 px de
+//     altura contra os 1120 px de alcance da flecha: dava para ficar na faixa
+//     de tras, atirar por cima da linha e limpar o posto seguinte um a um, sem
+//     nunca virar problema de ninguem. O raio de 2600 nao ajudava — ele nem
+//     chegava a ser perguntado.
+//
+//     A correcao nao e aumentar raio nem apagar o setor. E acrescentar uma
+//     SEGUNDA porta de aquisicao, mais curta que a primeira: **quem esta perto
+//     o bastante para me ACERTAR e meu problema, esteja em que retangulo
+//     estiver**. Ver `wants` e `guardThreatRadius`.
 
 import (
 	"math"
@@ -102,24 +116,56 @@ func PatrolSegment(post rl.Vector2, index int) (a, b rl.Vector2) {
 	return rl.NewVector2(post.X-dx, post.Y-dy), rl.NewVector2(post.X+dx, post.Y+dy)
 }
 
+// guardThreatMargin e a folga somada ao alcance do jogador para decidir que
+// um posto esta sob ameaca.
+//
+// Ela existe porque o teste e feito contra o POSTO, e o monstro nao fica em
+// cima dele: ele caminha o proprio trecho de patrulha (metade de `patrolBeat`
+// para cada lado) e tem corpo, entao um tiro mirado nele pode partir de mais
+// longe do que a distancia ate o posto sugere. Medir contra o posto, e nao
+// contra cada monstro, e o que faz o ESQUADRAO reagir junto — que e o que
+// "defender o posto" quer dizer.
+const guardThreatMargin float32 = patrolBeat/2 + 120
+
+// guardThreatRadius e a distancia em que um jogador ja ameaca um posto.
+//
+// Calculado UMA vez, e nao a cada pergunta: `wants` roda por jogador por
+// monstro por quadro, e o mapa 3 sustenta 156 monstros vivos.
+var guardThreatRadius = LongestAttackReach() + guardThreatMargin
+
+// GuardThreatRadius expoe esse raio para quem precisa afinar ou testar a regra.
+func GuardThreatRadius() float32 { return guardThreatRadius }
+
 // wants reports whether the monster should be chasing this point.
 //
-// UMA PERGUNTA SO, E ELA E DE AQUISICAO: o alvo esta no meu setor e ao alcance
-// da minha vista? Quem ja esta perseguindo nao pergunta nada — `chasing` sai
-// verdadeiro direto.
+// DUAS PORTAS DE AQUISICAO, e elas perguntam coisas diferentes. Quem ja esta
+// perseguindo nao pergunta nada — `chasing` sai verdadeiro direto.
 //
-// Eram duas perguntas com dois regimes (setor + folga, raio x coleira), e o
-// regime de MANUTENCAO era a saida gratuita que o jogador tinha: a 200 contra os
-// 130 do orc, recuar alguns passos passava de qualquer teto e a guarnicao
-// inteira soltava o alvo no mesmo quadro.
+//	SETOR    "este alvo entrou no pedaco de mapa que eu guardo, e eu o vejo?"
+//	         Raio generoso (2600 no mapa 3), limitado pelo retangulo. E a
+//	         porta da FASE: e ela que faz o grupo acumular perseguidores faixa
+//	         por faixa em vez de acordar o mapa inteiro.
+//
+//	AMEACA   "este alvo consegue me ACERTAR daqui?" Raio curto (o maior
+//	         alcance de ataque basico do elenco mais folga, ~1370), e ele
+//	         IGNORA o retangulo de proposito.
+//
+// A segunda porta e mais restritiva em distancia e mais permissiva em
+// geometria, e as duas coisas juntas sao o ponto: um guarda nao acorda por um
+// jogador que esta longe noutra faixa, mas acorda por um que esta a queima
+// roupa do outro lado da linha. Sem ela o setor virava escudo — ver o defeito 4
+// no topo do arquivo.
+//
+// Um posto NAO deixa de ser defendido porque quem atira ficou do lado de fora.
 func (g Guard) wants(target rl.Vector2, chasing bool) bool {
 	if chasing {
 		return true
 	}
-	if !g.covers(target, 0) {
-		return false
+	d := rl.Vector2Distance(g.Post, target)
+	if g.covers(target, 0) && d <= g.Radius {
+		return true
 	}
-	return rl.Vector2Distance(g.Post, target) <= g.Radius
+	return d <= guardThreatRadius
 }
 
 // guardTarget decides who a garrison enemy is after this frame.

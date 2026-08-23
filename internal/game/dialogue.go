@@ -103,6 +103,15 @@ func (d *DialogueDirector) syncMap(w *World) {
 	d.mapPath = w.Path
 	d.scripts = dialogue.LoadForMap(w.Path)
 	d.zones = w.Zones
+	// O elenco do mapa sobe AGORA, no quadro da troca, e nao na primeira fala
+	// de cada personagem. Ver dialogue.File.PortraitKeys: sem isto, cada
+	// orador novo custava um quadro de ~40 ms no meio da cena — e o gatilho do
+	// ultimo suspiro cobraria esse quadro durante uma luta perdida.
+	//
+	// Roda em TODA maquina e nao so na que dirige a narrativa: o cliente nao
+	// decide quando a cena comeca, mas desenha a mesma caixa com o mesmo
+	// retrato, entao paga a mesma trava se nao precarregar.
+	ui.PreloadPortraits(d.scripts.PortraitKeys())
 	warnIfLastStandHasNoWindow(w.Path, d.scripts)
 }
 

@@ -55,6 +55,10 @@ func DrawFrame(
 	// que nao vivem numa grade e por isso recebem o retangulo pronto.
 	view := tilemap.NewViewport(cam.Camera, sw, sh,
 		mapRenderer.Map.TileWidth, mapRenderer.Map.TileHeight).World
+	// A MESMA janela que o mapa e os inimigos usam vai para as magias. Uma vez
+	// por quadro, aqui, porque `Manager.Draw*` tem dezesseis pontos de entrada
+	// e todos desenham dentro do bloco de camera abaixo — ver skill/view.go.
+	skill.SetDrawView(view)
 
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.Black)
@@ -129,7 +133,12 @@ func DrawFrame(
 			}
 		}
 
-		drawLastStandNPC()
+		// O "heroi invocado" do ultimo suspiro era desenhado aqui. Ele deixou
+		// de existir em 23/08/2026: toda classe vaga passou a ser preenchida
+		// por um BOT (internal/network/host_bots.go), entao a cena sempre
+		// encontra um corpo de verdade para reerguer e quem lanca a suprema e
+		// um jogador — que ja e desenhado pelo laco de jogadores remotos
+		// acima. Ver doc/combat_rules.md, "Nao ha mais NPC".
 
 		// Draw the local player. A dead one is still drawn: it greys out and
 		// stops animating instead of disappearing. Waiting inside a portal

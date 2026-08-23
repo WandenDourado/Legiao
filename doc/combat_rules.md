@@ -162,7 +162,23 @@ marcadores `enemy_spawn_*` e sem corrida quase sempre é esquecimento, então
 | Slime | 100 | 100 | 10 | 1,0 s | 25 |
 | Lobo | 40 | 240 | 18 | 0,7 s | 30 |
 | Orc | 600 | 130 | 30 | 1,5 s | 70 |
-| Gárgula | 40 | **0** | 14 | 1,35 s | **global** |
+| Gárgula | 40 | **0** | **25** | 1,35 s | **global** |
+| Senhora das Trevas | **2000** | **0** | 22 | 4,0 s | 1400 |
+
+**Gárgula, 14 → 25 de dano (23/08/2026): quatro esferas derrubam um
+personagem** (100 de vida), em vez de oito. Ela só mantém uma esfera no ar por
+vez, e a 300 de velocidade o jogador (200, com vantagem de ângulo) consegue
+desviar — oito acertos era uma ameaça que o grupo absorvia andando, e ela
+existe justamente para ser o tipo de pressão que a Área Angelical **não**
+responde. `network/balance_test.go` trava a relação.
+
+**Senhora das Trevas, 400 → 2000 de vida (23/08/2026).** Os 400 vinham de
+quando ela era o chefe no fim de uma corrida de cinco hordas. Hoje ela comanda a
+**arena** do `world_07`, e ali a vida dela não é um bolo de dificuldade: é o
+**cronômetro** da fase — a corrida é `Endless` e só para quando ela cai
+(`WaveDef.EndsWithBoss`), então a vida dela decide quanto tempo o grupo segura
+os dois portões. Com 400 o cerco final acabava antes de a fase mostrar do que é
+capaz.
 
 A gárgula (`castle_sentry`) é a única criatura que não se move e a única que
 `checkProjectileCollisions` recusa machucar com **projétil comum** — espada e
@@ -190,6 +206,32 @@ diferentes porque os mapas são: no `world_04`, travessia de território, ela é
 
 O posto ocupado **não é reocupado**: o cursor conta postos usados, não gárgulas
 vivas, então o que o jogador derruba fica derrubado.
+
+**E ela só abre fogo quando o grupo chega (23/08/2026).** No `world_04` as duas
+gárgulas nascem com o mapa, e com alcance 1900 elas começavam a atirar no quadro
+em que o portão se fechava atrás do grupo — do vestíbulo, de um lugar que
+ninguém ainda consegue ver. Agora a fase declara **a partir de qual degrau de
+território** (`tilemap.Zone.Tier`) elas acordam, em `network/sentry_wake.go`:
+
+| Mapa | Degrau | Onde é |
+|---|---|---|
+| `world_04` | 3 | `territorio_saguao` — o mesmo retângulo do `castle_climax`, e onde o anúncio "As sentinelas despertaram" toca |
+| qualquer outro | — | atiram desde o primeiro quadro |
+
+Antes do degrau elas estão em campo, são desenhadas e podem morrer; **só não
+atiram**. Depois dele, o resto da fase — degraus 3, 4 e 5, mais da metade do
+corredor — acontece debaixo do fogo.
+
+Duas regras que valem a pena: **uma vez acordadas não dormem mais** (mesmo
+princípio de `Enemy.chasing`: o degrau é uma pergunta de *aquisição*, e recuar
+não pode ser uma forma de desligar a fase); e **um corpo caído lá na frente não
+acorda ninguém**, porque a fase reage a quem está avançando — o contrário do
+checkpoint do mapa 6, onde a pergunta é "o grupo chegou até aqui?" e um cadáver
+responde que sim.
+
+Os mapas 5 e 7 ficam de fora de propósito: lá as gárgulas entram **por horda**,
+ou seja a fase já escolheu o momento delas, e uma segunda porta em cima disso
+seria uma torre que nasce e não atira.
 
 O lobo é desenhado para ser **a presa certa da Legião Espectral e a ameaça
 errada para o jogador**: pouca vida, muita velocidade, muito dano. A 240 ele
@@ -254,6 +296,29 @@ um mapa por onde ninguém progride só atrapalharia quem está experimentando.
 **A exceção é o resgate do próprio último suspiro**, que concede a suprema do
 herói da fase por cima desta tabela — só para a corrida em jogo, sem alterar o
 que `UltimatesGrantedOn` diz para a fase seguinte. Ver "O resgate" abaixo.
+
+### A Chuva de Meteoros mede-se contra o Orc (23/08/2026)
+
+| | De | Para |
+|---|---|---|
+| `MeteorImpactDamage` | 100 | **480** |
+| `MeteorRainInterval` | 0,025 s (~40/s) | **0,015 s (~67/s)** |
+
+O dano tem um contrato, e o contrato é o **Orc**: uma pedra tira **80% da vida
+dele** (600), ou seja **duas** acertam de morte e **uma sozinha nunca resolve**.
+Os 100 foram escritos quando o inimigo mais duro do jogo tinha 100 de vida;
+desde o orc de guarnição a chuva passava por cima do elenco pesado sem arranhar.
+Se a vida do orc mudar, este número muda com ela — `network/balance_test.go`
+cobra a razão, não o valor.
+
+A frequência sobe pelo mesmo motivo: a chuva é a **única** suprema que não
+escolhe alvo — ela sorteia pontos no mapa inteiro —, então o que ela controla de
+verdade não é quanto cada pedra tira, e sim **quantas caem perto de alguém**.
+
+**Isso custa quadro.** Cada meteoro carrega um emissor de partículas e vive
+~1,4 s, então os simultâneos sobem de ~56 para ~93. Se o painel do F3
+(`doc/performance.md`) acusar, **é este número que afrouxa primeiro, não o
+dano**.
 
 ## O último suspiro (`on_last_stand`)
 
@@ -422,7 +487,8 @@ dano fica **abaixo** da vida do espectro.
 | **Setor** | A faixa entre duas barricadas. Cinco deles, `tier` 1 a 5 do sul para o norte. É a unidade de **dificuldade**: quanto mais ao norte, mais guarnição. | retângulos `territorio_*` na camada `zones` |
 | **Raio** | O alcance individual de cada guarnição em volta do próprio posto. | `enemy_post_*` na camada `spawn` |
 
-O monstro persegue quem entra no território dele. **Fora dele, não.**
+O monstro persegue quem entra no território dele — **e quem, de fora dele,
+chega perto o bastante para acertá-lo.** Ver "Duas portas de aquisição" abaixo.
 
 O setor de cada posto **não** é repetido no nome: sai da geometria, do
 retângulo que contém o ponto. Guardar o mesmo dado em dois lugares é como as
@@ -456,6 +522,53 @@ visão, e em jogo os dois se resolviam andando para trás.
 **O que impede o mapa inteiro de acordar** não é mais um teto, é a geometria: o
 setor limita quantos *notam* de uma vez, então o grupo acumula perseguidores
 faixa por faixa conforme sobe, em vez de puxar 156 monstros numa fila só.
+
+### Duas portas de aquisição (23/08/2026)
+
+**Defeito relatado:** *"os jogadores estão conseguindo matar os monstros de
+longe, sem precisar entrar no posto"*.
+
+A causa era a linha do setor. `Guard.covers` exigia o jogador **dentro** do
+retângulo para o guarda sequer olhar, e as faixas do mapa 3 têm **1280 px** de
+altura contra os **1120 px** de alcance da flecha: dava para ficar na faixa de
+trás, atirar por cima da linha e limpar o posto seguinte um a um, sem nunca
+virar problema de ninguém. O raio de 2600 não ajudava — ele nem chegava a ser
+perguntado.
+
+A correção não foi aumentar raio nem apagar o setor. Foi acrescentar uma
+**segunda porta, mais curta que a primeira**:
+
+| Porta | Pergunta | Raio | Respeita o retângulo? |
+|---|---|---|---|
+| **Setor** | "entrou no pedaço que eu guardo, e eu o vejo?" | 2600 (piso por tipo; 3400 no orc) | **sim** |
+| **Ameaça** | "consegue me **acertar** daqui?" | ~1370 = maior alcance de ataque básico do elenco (1120, o Arqueiro) + folga | **não** |
+
+As duas coisas juntas são o ponto: a porta de ameaça é **mais restritiva em
+distância** e **mais permissiva em geometria**. Um guarda não acorda por um
+jogador que está longe noutra faixa — a acumulação faixa por faixa continua
+valendo —, mas acorda por um que está à queima-roupa do outro lado da linha.
+**Um posto não deixa de ser defendido porque quem atira ficou do lado de fora.**
+
+O raio de ameaça sai de `entity.LongestAttackReach()`, que é velocidade ×
+tempo de vida do projétil, não um número escrito à mão. A folga cobre o trecho
+de patrulha (o monstro não fica em cima do posto) e o corpo dele. Medir contra
+o **posto**, e não contra cada monstro, é o que faz o esquadrão reagir junto —
+que é o que "defender o posto" quer dizer.
+
+**E levar dano é notar.** `Enemy.TakeDamage` marca o guarda como engajado,
+qualquer que seja a origem do golpe. A porta de ameaça cobre a geometria
+previsível; esta é a rede embaixo dela — magia de área, flecha celestial, um
+ângulo que ninguém previu. Fica no `TakeDamage` porque ele é o **funil** por
+onde todo dano a inimigo passa, e porque um caminho novo de dano não pode
+depender de alguém lembrar de avisar a IA.
+
+Uma armadilha que quase entrou junto, registrada porque ela é invisível: o raio
+de ameaça é uma **variável de pacote**, e os personagens entram no registro por
+um `init()`. Go inicializa toda variável de pacote **antes** de rodar qualquer
+`init()`, então derivar o alcance varrendo `AllCharacters()` daria zero — raio
+de 250 px e o defeito de volta, em silêncio. `LongestAttackReach` percorre as
+**constantes** dos projéteis; quem cobra que o elenco caiba nelas é um teste,
+que roda depois do `init()`.
 
 ### Recuar tem preço: a retaguarda
 
@@ -532,42 +645,74 @@ retângulo de 44×11 células à frente do portão. Chegar é a condição.
 Só então vem a emboscada, e só dentro dela o `on_last_stand` volta a valer com
 a Sacerdotisa (ver a tabela de heróis acima).
 
+#### E o portal fica trancado até ela acontecer (23/08/2026)
+
+**Defeito relatado:** o grupo chegava à fortaleza e a horda infinita não
+começava.
+
+O `world_03` não tem um único marcador `enemy_spawn_*` — de propósito, a
+jogabilidade dele é de guarnição. Então `WaveState.Total` fica em zero, e
+`game.PortalsUnlocked` lia isso como *"mapa quieto, não tranque a saída"*: **o
+portal se materializava no primeiro quadro da fase**. Bastava um jogador entrar
+nele para a fase parar de vez — quem espera dentro de um portal congela e nem é
+desenhado (`host_portal_presence.go`), e a porta do clímax exige TODOS os vivos
+dentro da zona `fortaleza`. Aquele corpo nunca chegava, a emboscada nunca
+armava, e nada na tela dizia por quê.
+
+A correção é dizer a verdade sobre o mapa. Enquanto ele ainda **deve** a
+emboscada (`climaxRuns`), `Total 0` não quer dizer "mapa quieto" — quer dizer
+"a luta ainda não começou", e o portal fica trancado como em qualquer corrida de
+hordas. Instalada a emboscada, `WaveState.Total > 0` e a regra normal (só abre
+com a fase limpa) volta a valer sozinha; por isso **o cliente não precisa de
+mensagem nova de protocolo** — ele descobre o mapa no carregamento igual ao
+host. Ver `network/climax_pending.go`.
+
+E a porta do clímax deixou de contar quem está dentro de um portal, nem para
+segurar nem para abrir. Hoje é cinto e suspensório, mas a porta não deve
+depender de o portal estar fechado para funcionar.
+
 ## O resgate (`host_last_stand.go`)
 
 Quando a cena do último suspiro fecha a última linha, o resgate acontece. Ele
 tem duas formas, e quem decide é o grupo:
 
-| Se… | Então |
-|---|---|
-| Alguém joga com o herói da fase | Volta em pé com **vida cheia** e 2 s de imunidade, e **lança a ultimate por conta própria** |
-| Ninguém joga | Um **NPC** daquele personagem aparece no centro do grupo e lança ali mesmo |
+Ele tem **uma forma só**: quem joga a classe do herói — humano **ou bot** —
+volta em pé com **vida cheia**, 5 s de imunidade e a suprema **recarregada e
+destravada**, e lança por conta própria. A cena entrega o momento a quem está
+jogando; ela não o encena por ninguém.
 
-A cena entrega o momento ao jogador; ela não joga por ele. O NPC existe porque
-o resgate não pode depender das escolhas de personagem do grupo.
+Aqui existia uma segunda forma: um **NPC** do personagem aparecia quando ninguém
+no grupo jogava com ele. Ele existia porque o resgate não podia depender das
+escolhas de personagem do grupo — e essa dependência acabou quando toda classe
+vaga passou a ser preenchida por um **bot** (`host_bots.go`). Não há mais
+partida sem Sacerdotisa, sem Arqueiro ou sem Paladina, então a cena sempre
+encontra um corpo de verdade para reerguer.
+
+`Host.reviveHero` devolvendo `""` virou, por isso, uma **anomalia registrada em
+log**: quer dizer que faltou até o bot da classe.
 
 ### Quem se ergue é da FASE (`last_stand_heroes.go`)
 
-| Mapa | Herói | Ultimate | Sustentada? |
-|---|---|---|---|
-| `world_02` | Necromante | Legião Espectral | sim |
-| `world_03` | Sacerdotisa | Área Angelical | não |
-| `world_04` | Arqueiro | Flechas Celestiais (julgamento) | não |
-| `world_05` | Mago | Chuva de Meteoros | sim |
-| `world_06` | Paladina | Avatar dos Deuses | sim |
-| qualquer outro | Necromante | Legião Espectral | sim (padrão) |
+| Mapa | Herói | Ultimate devolvida carregada |
+|---|---|---|
+| `world_02` | Necromante | Legião Espectral |
+| `world_03` | Sacerdotisa | Área Angelical |
+| `world_04` | Arqueiro | Flechas Celestiais |
+| `world_05` | Mago | Chuva de Meteoros |
+| `world_06` | Paladina | Avatar dos Deuses |
+| qualquer outro | Necromante | Legião Espectral (padrão) |
 
 Isto era o Necromante escrito no código em oito lugares. A correção é a mesma
 que `waveRuns` levou, e pelo mesmo motivo: **uma fase nova não pode depender de
 alguém lembrar de editar uma constante global.** A fase declara o herói e o
-resto do sistema lê a declaração — inclusive o desenho do NPC, que recebe o
-personagem junto da posição.
+resto do sistema lê a declaração.
 
-**`sustained` separa as duas naturezas de ultimate, e a diferença é de
-manutenção e não de poder.** A Legião Espectral é um bando que *segue* o dono:
-o host reancora a legião a cada quadro e tira o NPC de campo quando ela se
-gasta. A Área Angelical é um **altar** consagrado no chão — ela não segue
-ninguém, e esperar por ela na manutenção prenderia o NPC no campo até o fim da
-fase, porque `HasLegion` nunca fica verdadeiro para quem não tem legião.
+**A tabela encolheu quando o NPC saiu.** Ela carregava, por herói, um `npcID`,
+um `cast`, um `alive`, um `anchor` e um `endSignal` — cinco campos que existiam
+só para um personagem invocado poder ser dono de um efeito, mantê-lo ancorado e
+avisar o cliente quando sumisse. Com a suprema sendo lançada por um **jogador**,
+a magia passa pelo caminho normal de qualquer magia, e o que a fase ainda
+precisa declarar é só QUEM se ergue e QUAL magia devolver carregada.
 
 **O herói é revivido mesmo estando vivo.** A cena dispara com o grupo
 abaixo de 30% da vida, então "vivo" ali quer dizer *por pouco*, e mandá-lo
@@ -586,22 +731,30 @@ entrada, o gate do host) leem o mesmo `network.UltimateUnlockedFor`. A
 concessão é apagada na troca de mapa e no reinício de fase — ver
 "Por corrida, não por sessão" abaixo.
 
-### O NPC não é um jogador
+### Não há mais NPC (23/08/2026)
 
-Ele nunca entra em `h.players`. Se entrasse, contaria no HUD de jogadores, na
-checagem de Game Over, e teria que morrer, ressuscitar e ser sincronizado como
-todo mundo. Tudo o que ele precisa é **ser dono de um efeito e ser visto** — e
-toda ultimate é indexada por um `ownerID` que é só uma string. Cada fase tem o
-próprio `npcID` (`npc_necromante`, `npc_sacerdotisa`): é por ele que o cliente
-descobre que há um NPC em campo, sem mensagem nova de protocolo.
+O que se ganhou ao removê-lo não é só código. O NPC **não era um jogador**: não
+entrava em `h.players`, não contava no HUD, não pesava no Game Over, não morria
+e não era sincronizado. Cada uma dessas exceções era uma regra a menos valendo
+dentro da cena mais delicada da fase — e a manutenção dele (reancorar a magia a
+cada quadro, tirá-lo de campo quando ela se gastasse, avisar o cliente por um
+`endSignal`) já tinha produzido pelo menos um defeito próprio: a Sacerdotisa
+invocada plantada na esplanada até o fim da fase.
 
-O cliente aprende que existe um NPC pela **mesma mensagem** que já traz a
-legião (`spectral_legion` com dono `npc_necromante`), então nada de protocolo
-novo para algo que acontece uma vez por fase. Ele é desenhado pelo caminho de
-um jogador remoto — mesma folha, mesma escala, mesma linha de contato — para
-não se denunciar como peça de outra natureza.
+Saíram `summonHeroNPC`, `tickLastStand`, `LastStandNPC`,
+`game/last_stand_npc.go` e o bloco de NPC do cliente (`noteLastStandNPC`,
+`isLastStandNPC`).
 
-Ele sai de campo quando a legião se gasta: veio para uma coisa só.
+**O julgamento celestial do mapa 4 saiu junto.** `castCastleJudgment` disparava
+as Flechas Celestiais nas duas sentinelas das ilhas **mesmo com um Arqueiro em
+campo** — a cena atirava por ele. Agora ela reergue o Arqueiro (humano ou bot),
+devolve a suprema carregada e destravada, e **quem atira é ele**; o bot já sabe
+caçar gárgula (`bot/arqueiro.go`, `huntSentry`).
+
+O julgamento dos canhões do mapa 6 **ficou**, e a diferença é de natureza: o
+Avatar dos Deuses é imunidade total, não um ataque a distância, então sem
+`castCannonJudgment` o resgate devolveria o grupo vivo dentro do mesmo corredor
+bombardeado. Ver "O resgate: o julgamento da Paladina".
 
 ### Invulnerabilidade concedida
 
@@ -701,11 +854,15 @@ a sala deles. `game.partyIsFalling` passa a perguntar por essa zona em vez do
 
 Quando a cena fecha a última fala, `ResolveLastStand` concede o Avatar dos
 Deuses **e** chama `castCannonJudgment`, que destrói diretamente os dois
-canhões declarados pelo mapa — o mesmo desenho que o julgamento do Arqueiro
-usa no mapa 4 (`castCastleJudgment`) para alcançar as sentinelas das ilhas: um
-resgate roteirizado precisa de um alvo **preciso**, não de algo que o jogador
-teria de mirar, e a Paladina não teria como mirar duas estátuas atrás de uma
-porta fechada de qualquer forma. `RestoreCannons` os repõe se a fase reiniciar.
+canhões declarados pelo mapa: um resgate roteirizado precisa de um alvo
+**preciso**, não de algo que o jogador teria de mirar, e a Paladina não teria
+como mirar dois canhões atrás de uma porta fechada de qualquer forma.
+`RestoreCannons` os repõe se a fase reiniciar.
+
+É o **único** julgamento roteirizado que sobrou. O do Arqueiro, no mapa 4, saiu
+em 23/08/2026 — ver "Não há mais NPC" — porque lá existe um Arqueiro em campo
+capaz de mirar, e a cena estava atirando no lugar dele. Aqui não existe magia da
+Paladina que alcance um canhão: o Avatar é imunidade.
 
 ### O portal fecha o ciclo, por enquanto
 

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/WandenDourado/Legiao/internal/assets"
 	"github.com/WandenDourado/Legiao/internal/entity"
 	"github.com/WandenDourado/Legiao/internal/network"
 
@@ -31,10 +30,7 @@ const (
 // means removing it again, or the portrait stays silently blank.
 var placeholderPortraits = map[entity.CharacterType]bool{}
 
-// portraitCache keeps one texture per speaker. Loaded on first use and kept
-// for the session: a scene flips between two or three speakers repeatedly, and
-// reloading a 1k texture per line would stutter the box open.
-var portraitCache = map[entity.CharacterType]rl.Texture2D{}
+// O cache de retratos e o ciclo de vida dele moram em portrait_cache.go.
 
 // DrawDialogueBox draws the line the host is currently narrating. It draws
 // nothing when no dialogue is running, so the caller can call it every frame.
@@ -138,30 +134,6 @@ func drawDialoguePortrait(tex rl.Texture2D, box rl.Rectangle) rl.Rectangle {
 	rl.DrawTexturePro(tex, source, drawn, rl.NewVector2(0, 0), 0, rl.White)
 	rl.DrawRectangleLinesEx(frame, 1, rl.Fade(rl.RayWhite, 0.25))
 	return frame
-}
-
-// portraitTexture resolves a portrait key to the speaker's reference art.
-// It reports false for narration (empty key), for an unknown character, and
-// for a character still using somebody else's art.
-func portraitTexture(key string) (rl.Texture2D, bool) {
-	if key == "" {
-		return rl.Texture2D{}, false
-	}
-	ct := entity.CharacterType(key)
-	if placeholderPortraits[ct] || !entity.IsRegistered(ct) {
-		return rl.Texture2D{}, false
-	}
-	if tex, ok := portraitCache[ct]; ok {
-		return tex, tex.ID != 0
-	}
-	def := entity.GetCharacter(ct)
-	if def.ReferenceImagePath == "" {
-		portraitCache[ct] = rl.Texture2D{}
-		return rl.Texture2D{}, false
-	}
-	tex := rl.LoadTexture(assets.Path(def.ReferenceImagePath))
-	portraitCache[ct] = tex
-	return tex, tex.ID != 0
 }
 
 // drawDialogueHint tells each machine what it can do: the host advances, a

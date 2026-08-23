@@ -34,6 +34,14 @@ func (mr *MapRenderer) Load() {
 		if ts.ImagePath == "" {
 			continue
 		}
+		// Dois tilesets do mesmo mapa podem citar a MESMA imagem. `Acquire`
+		// conta cada chamada, mas `mr.Textures` e indexado por caminho e
+		// guardaria uma entrada so — o `Unload` devolveria uma referencia para
+		// duas tomadas, e a textura ficaria presa na VRAM para o resto da
+		// sessao. Uma referencia por caminho, entao.
+		if _, already := mr.Textures[ts.ImagePath]; already {
+			continue
+		}
 		tex := AcquireTexture(ts.ImagePath)
 		if !rl.IsTextureValid(tex) {
 			ReleaseTexture(ts.ImagePath)
@@ -78,6 +86,12 @@ func (mr *MapRenderer) Unload() {
 	for _, m := range mr.Manifests {
 		m.Unload()
 	}
+	// Zerados depois de devolvidos: um `Unload` chamado duas vezes no mesmo
+	// renderer (um destino que nao carrega e deixa o mundo antigo de pe, por
+	// exemplo) devolveria referencias que ele ja nao tem, e ai a textura sairia
+	// da VRAM com alguem ainda desenhando com ela.
+	mr.Terrain = nil
+	mr.Manifests = nil
 }
 
 // viewport is what the camera shows, in world units and in cells. Every draw

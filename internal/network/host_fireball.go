@@ -3,6 +3,7 @@ package network
 import (
 	"encoding/json"
 
+	"github.com/WandenDourado/Legiao/internal/collision"
 	"github.com/WandenDourado/Legiao/internal/entity"
 	"github.com/WandenDourado/Legiao/internal/skill"
 
@@ -28,9 +29,10 @@ func (h *Host) HandleSkill(playerID string, tx, ty int) {
 	skill.SpawnFireball(h.Skills, playerID, start, dir)
 }
 
-// SetCollisionRects provides obstacle rectangles used by skill projectiles.
-func (h *Host) SetCollisionRects(rects []rl.Rectangle) {
-	h.collisionRects = rects
+// SetSolid provides the blocked space used by skill projectiles. Called once
+// per map load, alongside EntityManager.Solid, with the same CollisionGrid.
+func (h *Host) SetSolid(s collision.Solid) {
+	h.solid = s
 }
 
 // handleFireballTick advances fire projectiles and broadcasts the resulting
@@ -38,7 +40,7 @@ func (h *Host) SetCollisionRects(rects []rl.Rectangle) {
 // skill.StepFireballs); players (self and allies) take NO fire damage.
 func (h *Host) handleFireballTick(dt float32) {
 	impacts, dead := skill.StepFireballs(
-		h.Skills, h.EntityManager.GetAllEnemies(), h.collisionRects, dt)
+		h.Skills, h.EntityManager.GetAllEnemies(), h.solid, dt)
 	for _, id := range dead {
 		h.EntityManager.RemoveEnemy(id)
 	}

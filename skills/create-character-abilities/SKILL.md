@@ -187,8 +187,38 @@ Every effect needs an entrance, a life, and an exit:
 | Rajada de Flechas (arqueiro) | `skill/arrow.go`, `arrow_manager.go` | solid-shapes-first (reads as a real arrow); cone/fan math in `VolleyDirections`; atomic unique IDs; one-shot spawn sync |
 | Escudo Sagrado (paladina) | `skill/shield.go`, `shield_manager.go` | follow-the-owner anchor; counter-rotating arcs; squashed orbit motes; HP-scaled intensity; hit flash; shatter exit; combat-event sync |
 
+## Performance: read `doc/skill_performance.md` FIRST
+
+**Mandatory before writing a single line of a new spell.** It is not style
+guidance — it is the seven rules that keep a spell from halving the frame rate,
+each one written from a defect that actually shipped.
+
+The short version, so you know what you are being sent to read:
+
+1. **Never** take `[]rl.Rectangle` for obstacle tests. Take `collision.Solid`
+   and use `blocked` (`internal/skill/obstacle.go`). The flat list is O(map);
+   the grid is O(1).
+2. **Every** `Draw` starts with `visible` / `visibleAny`
+   (`internal/skill/view.go`), before `BeginBlendMode`. Particles cull
+   individually, not by emitter.
+3. Write the STEADY-STATE count (birth rate x lifetime) in the constant's
+   comment. Not "one meteor" — fifty-six.
+4. Pairwise interaction is O(n^2): accumulate the pushes, apply once per
+   entity.
+5. `DrawCircleGradient` is a ~36-triangle fan. Budget particles accordingly.
+6. Do not broadcast one message per spawned entity. Seed, batch, or derive.
+7. No `rl.Load*` inside a frame — preload at map load.
+
+Two ultimates broke these and had to be rewritten: the Necromante's Spectral
+Legion (rule 1) and the Mago's Meteor Rain (rules 2, 5 and 6). The measured
+diagnosis is in `doc/performance.md` §4⁹⁄₁₀.
+
 ## Definition of done
 
+0. The checklist in `doc/skill_performance.md` passes, INCLUDING the measured
+   step: cast the spell on the heaviest map it can appear in, with F3 open, and
+   confirm the frame stays under target. `magias: N desenhadas / 0 puladas` on
+   a large map means the culling is missing.
 1. `go build ./cmd/desktop` and `go vet ./...` pass (on the user's machine if
    the sandbox lacks Go).
 2. Cast works from the desktop Q-key path AND the Android skill button path

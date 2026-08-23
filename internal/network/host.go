@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 
 	"github.com/WandenDourado/Legiao/internal/ability"
+	"github.com/WandenDourado/Legiao/internal/collision"
 	"github.com/WandenDourado/Legiao/internal/entity"
 	"github.com/WandenDourado/Legiao/internal/skill"
 	"github.com/WandenDourado/Legiao/internal/tilemap"
@@ -63,6 +64,10 @@ type Host struct {
 	// derruba fica derrubado (ver sentries.go). Zerado a cada carregamento de
 	// mapa e a cada reinicio de fase.
 	sentriesArmed int
+	// sentriesAwake diz que as gargulas desta fase ja podem atirar. Falso ate
+	// o grupo alcancar o degrau de territorio que o mapa declara, e nunca
+	// volta a ser falso dentro da mesma corrida. Ver sentry_wake.go.
+	sentriesAwake bool
 	// stageCannonPosts sao os postos `enemy_cannon_*` do mapa em jogo (mapa
 	// 6), guardados para RestoreCannons repor no reinicio de fase.
 	stageCannonPosts []tilemap.SpawnPoint
@@ -72,8 +77,12 @@ type Host struct {
 	// World bounds for spawn positions and projectile validation
 	WorldBounds world.Bounds
 	PlayerSpawn rl.Vector2
-	// Collision rectangles (walls/obstacles) for skill projectile checks.
-	collisionRects []rl.Rectangle
+	// solid e o espaco bloqueado do mapa, para os testes de obstaculo das
+	// magias (bola de fogo, flecha, espectro). E a MESMA porta que o jogador e
+	// o monstro ja usavam (`EntityManager.Solid`); antes as magias recebiam uma
+	// LISTA PLANA de todos os retangulos e varriam a lista inteira por teste —
+	// ver o comentario de `blocked` em skill/legion.go.
+	solid collision.Solid
 	// Per-player cooldown remaining for the Sanctuary skill.
 	sanctuaryCooldowns map[string]float32
 	// Per-(player|skill) cooldowns for registry-cast skills, keyed
@@ -413,7 +422,6 @@ func (h *Host) UpdateSimulation(dt float32) {
 	// Revive whoever finished their countdown (frozen during a Game Over).
 	h.tickRespawns(dt)
 	h.tickInvulnerability(dt)
-	h.tickLastStand()
 
 	// Free any slot whose ReconnectGrace ran out. Before the game-over check
 	// below, so a slot that just expired stops holding the party hostage in

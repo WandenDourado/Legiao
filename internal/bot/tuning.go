@@ -63,6 +63,20 @@ const (
 	// Arqueiro.
 	arqueiroKeepRange    = 600.0
 	arqueiroRetreatUnder = 320.0
+	// celestialMemory e por quanto tempo o Arqueiro lembra que ja gastou uma
+	// Flecha Celestial num alvo, em segundos.
+	//
+	// Existe porque a suprema dele tem DUAS cargas e a recarga so arma depois
+	// da segunda (ability.Charged, network/host_skill_gate.go): entre um
+	// disparo e o outro `View.UltimateReady` continua verdadeiro, e sem
+	// memoria o bot reavaliava "qual e a gargula mais perto" no quadro
+	// seguinte, achava a MESMA — a flecha ainda estava no ar — e gastava a
+	// segunda carga nela. Duas flechas, uma torre.
+	//
+	// 3 s e o voo maximo de uma flecha: 4800 de alcance a 1600 por segundo
+	// (skill/celestial.go). Passado esse tempo, um alvo ainda de pe quer
+	// dizer que a flecha errou, e ai ele PODE voltar a mirar nele.
+	celestialMemory = 3.0
 
 	// Mago.
 	magoKeepRange  = 450.0

@@ -91,6 +91,14 @@ func (mt *Meteor) Advance(dt float32) (impactedNow, finished bool) {
 // Draw renders the meteor: ground target marker, falling streak with fiery
 // head, and the impact flash + shockwave ring.
 func (mt *Meteor) Draw() {
+	// Culling primeiro, e ANTES do BeginBlendMode: a chuva cobre o mapa
+	// inteiro e a tela mostra uma fracao dele. Duas pontas porque as duas sao
+	// desenhadas longe uma da outra — a marca no chao e a rocha, que nasce a
+	// 780 unidades dali. O raio da rocha cobre o rastro de 300 mais o brilho
+	// de 88; o do alvo cobre o anel de impacto.
+	if !visibleAny(mt.Target, MeteorImpactRadius*1.2, mt.HeadPos(), 400) {
+		return
+	}
 	rl.BeginBlendMode(rl.BlendAdditive)
 	defer rl.EndBlendMode()
 

@@ -358,52 +358,31 @@ func (c *Client) handleMessage(msg Message) {
 			ClientSkills.AddMeteor(skill.NewMeteor(pos))
 		case "angelic_area":
 			skill.ActivateAngelic(ClientSkills, ue.OwnerID, pos)
-			noteLastStandNPC(ue.OwnerID, pos)
 		case "celestial_arrows":
 			skill.SpawnCelestialArrow(ClientSkills, ue.OwnerID, pos,
 				rl.NewVector2(ue.DirX, ue.DirY))
 		case "divine_avatar":
 			skill.ActivateAvatar(ClientSkills, ue.OwnerID, pos)
-			// So importa quando o dono e o NPC do ultimo suspiro do mapa 6 —
-			// para uma jogadora de verdade lancando a propria suprema,
-			// isLastStandNPC(ue.OwnerID) e falso e isto nao faz nada.
-			noteLastStandNPC(ue.OwnerID, pos)
 		case "graveyard":
 			skill.SpawnGraveyard(ClientSkills, ue.OwnerID, pos,
 				rl.NewVector2(ue.DirX, ue.DirY))
 		case "spectral_legion":
 			skill.ActivateLegion(ClientSkills, ue.OwnerID, pos)
-			// A magia do heroi invocado chega pela mesma mensagem que a de um
-			// jogador; o DONO e que diz qual e qual. E assim que o cliente
-			// aprende que ha um NPC em campo, sem mensagem nova de protocolo
-			// para uma coisa que acontece uma vez por fase.
-			noteLastStandNPC(ue.OwnerID, pos)
 		case "specter_die":
 			// One specter perished on the host: mirror it locally.
 			ClientSkills.KillLegionSpecterNear(ue.OwnerID, pos)
 		case "legion_end":
 			ClientSkills.DissolveLegion(ue.OwnerID)
-			if isLastStandNPC(ue.OwnerID) {
-				setLastStandNPC(rl.Vector2{}, false)
-			}
 		case "angelic_end":
 			// O altar do cliente normalmente expira sozinho pelo tempo dele;
 			// ClearOwner cobre o caso em que o host encerrou mais cedo (um
 			// bot tomado por um humano no meio da ultimate — host_bot_takeover.go).
-			// Sem ela a Sacerdotisa invocada ficaria desenhada sobre um
-			// altar que ja apagou.
 			ClientSkills.ClearOwner(ue.OwnerID)
-			if isLastStandNPC(ue.OwnerID) {
-				setLastStandNPC(rl.Vector2{}, false)
-			}
 		case "avatar_end":
 			// Mesma ideia: o avatar do cliente normalmente expira sozinho
 			// pelo tempo dele (ClientSkills.UpdateAvatars); ClearOwner cobre
 			// o encerramento antecipado por uma tomada de posse.
 			ClientSkills.ClearOwner(ue.OwnerID)
-			if isLastStandNPC(ue.OwnerID) {
-				setLastStandNPC(rl.Vector2{}, false)
-			}
 		}
 
 	case MsgMelee:

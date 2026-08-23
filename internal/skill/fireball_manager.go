@@ -3,8 +3,8 @@ package skill
 import (
 	"sync"
 
+	"github.com/WandenDourado/Legiao/internal/collision"
 	"github.com/WandenDourado/Legiao/internal/entity"
-	"github.com/WandenDourado/Legiao/internal/tilemap"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -13,15 +13,15 @@ import (
 // (fireballs, ground fire, explosions, sanctuaries). It lives in the `skill`
 // package so the entity package stays focused on players/enemies/projectiles.
 type Manager struct {
-	Fireballs  map[string]*Fireball
+	Fireballs   map[string]*Fireball
 	FireGrounds []*FireGround
-	Explosions []*Explosion
-	Sanctuaries  map[string]*Sanctuary
+	Explosions  []*Explosion
+	Sanctuaries map[string]*Sanctuary
 	sanctuaryFX map[string]*SanctuaryFX
 	Arrows      map[string]*Arrow
 	// arrowVolleys holds the pending follow-up waves of arrow-volley casts.
 	arrowVolleys []*volleyBurst
-	Shields     map[string]*Shield
+	Shields      map[string]*Shield
 	// Swords holds active Paladina basic-attack sweeps.
 	Swords map[string]*SwordSweep
 	// Ultimate-skill collections. They share ultMutex: ultimates are rare
@@ -38,9 +38,9 @@ type Manager struct {
 	Thorns []*Thorn
 	Fog    *DarkFog
 
-	Graveyards map[string]*Graveyard
-	Legions    map[string]*Legion
-	necroMutex sync.RWMutex
+	Graveyards  map[string]*Graveyard
+	Legions     map[string]*Legion
+	necroMutex  sync.RWMutex
 	fireMutex   sync.RWMutex
 	sanctMutex  sync.RWMutex
 	arrowMutex  sync.RWMutex
@@ -53,17 +53,17 @@ type Manager struct {
 // NewManager creates an empty skill manager.
 func NewManager() *Manager {
 	return &Manager{
-		Fireballs:  make(map[string]*Fireball),
+		Fireballs:   make(map[string]*Fireball),
 		Sanctuaries: make(map[string]*Sanctuary),
-		Arrows:     make(map[string]*Arrow),
-		Shields:    make(map[string]*Shield),
-		Swords:     make(map[string]*SwordSweep),
-		Meteors:    make(map[string]*Meteor),
-		Angelics:   make(map[string]*AngelicArea),
-		Celestials: make(map[string]*CelestialArrow),
-		Avatars:    make(map[string]*Avatar),
-		Graveyards: make(map[string]*Graveyard),
-		Legions:    make(map[string]*Legion),
+		Arrows:      make(map[string]*Arrow),
+		Shields:     make(map[string]*Shield),
+		Swords:      make(map[string]*SwordSweep),
+		Meteors:     make(map[string]*Meteor),
+		Angelics:    make(map[string]*AngelicArea),
+		Celestials:  make(map[string]*CelestialArrow),
+		Avatars:     make(map[string]*Avatar),
+		Graveyards:  make(map[string]*Graveyard),
+		Legions:     make(map[string]*Legion),
 	}
 }
 
@@ -154,12 +154,12 @@ func (m *Manager) RemoveFireballsNear(pos rl.Vector2, radius float32) {
 // damage to enemies. Returns the world positions of impacts and the ids of
 // enemies that died, so the caller can broadcast visuals / remove the dead.
 // Player health is NOT mutated here (network layer does that, outside `skill`).
-func StepFireballs(m *Manager, enemies []*entity.Enemy, collisionRects []rl.Rectangle, dt float32) ([]rl.Vector2, []string) {
+func StepFireballs(m *Manager, enemies []*entity.Enemy, solid collision.Solid, dt float32) ([]rl.Vector2, []string) {
 	impacts := make([]rl.Vector2, 0)
 	dead := make([]string, 0)
 	for _, fb := range m.GetAllFireballs() {
 		alive := fb.Update(dt)
-		hitObstacle := tilemap.IsColliding(fb.Position, fb.Radius*2, fb.Radius*2, collisionRects)
+		hitObstacle := blocked(solid, fb.Position, fb.Radius*2)
 		hitEnemy := firstEnemyHit(enemies, fb.Position, fb.Radius)
 		if alive && !hitObstacle && hitEnemy == "" {
 			continue

@@ -1,8 +1,8 @@
 package skill
 
 import (
+	"github.com/WandenDourado/Legiao/internal/collision"
 	"github.com/WandenDourado/Legiao/internal/entity"
-	"github.com/WandenDourado/Legiao/internal/tilemap"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -97,7 +97,7 @@ func (m *Manager) stepArrowVolleysLocked(dt float32) {
 // StepArrows advances arrows on the host and resolves impacts against enemies
 // and obstacles. Each arrow damages a single enemy then disappears. Returns
 // the ids of enemies that died so the caller can remove/broadcast them.
-func StepArrows(m *Manager, enemies []*entity.Enemy, collisionRects []rl.Rectangle, dt float32) []string {
+func StepArrows(m *Manager, enemies []*entity.Enemy, solid collision.Solid, dt float32) []string {
 	// Fire any wave that came due (host side of the 3x burst).
 	m.arrowMutex.Lock()
 	m.stepArrowVolleysLocked(dt)
@@ -106,7 +106,7 @@ func StepArrows(m *Manager, enemies []*entity.Enemy, collisionRects []rl.Rectang
 	dead := make([]string, 0)
 	for _, a := range m.GetAllArrows() {
 		alive := a.Update(dt)
-		hitObstacle := tilemap.IsColliding(a.Position, ArrowHitRadius*2, ArrowHitRadius*2, collisionRects)
+		hitObstacle := blocked(solid, a.Position, ArrowHitRadius*2)
 		hitEnemy := firstEnemyHit(enemies, a.Position, ArrowHitRadius)
 		if alive && !hitObstacle && hitEnemy == "" {
 			continue

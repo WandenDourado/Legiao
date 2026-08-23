@@ -1,6 +1,8 @@
 package game
 
 import (
+	"math"
+
 	"github.com/WandenDourado/Legiao/internal/world"
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -14,10 +16,10 @@ type Camera2DState struct {
 func NewCamera(sw, sh float32) Camera2DState {
 	return Camera2DState{
 		Camera: rl.Camera2D{
-			Offset: rl.NewVector2(sw/2, sh/2),
-			Target: rl.NewVector2(0, 0),
+			Offset:   rl.NewVector2(sw/2, sh/2),
+			Target:   rl.NewVector2(0, 0),
 			Rotation: 0,
-			Zoom:   1.0,
+			Zoom:     1.0,
 		},
 	}
 }
@@ -47,7 +49,33 @@ func (c *Camera2DState) Update(target rl.Vector2, sw, sh float32, bounds world.B
 	} else {
 		c.Camera.Target.Y = clamp(c.Camera.Target.Y, halfH, bounds.Height-halfH)
 	}
+
+	// ANCORAGEM EM PIXEL (C2 de doc/performance.md), depois do clamp.
+	//
+	// O terreno nao define filtro de textura, entao usa o padrao do raylib:
+	// POINT, vizinho mais proximo. Com a camera em coordenada fracionaria — e
+	// ela ficava, porque `Target` recebia a posicao float do jogador e
+	// `Offset` e `sw/2`, meio pixel em largura impar — o chao era amostrado
+	// com um deslocamento que mudava continuamente: ele SALTAVA de texel em
+	// texel enquanto arvores, monstros e o jogador deslizavam suavemente por
+	// cima. As duas camadas discordavam sobre onde o mundo esta, e o olho le
+	// isso como a imagem se partindo enquanto se caminha — facil de confundir
+	// com screen tearing, mas nao e: tearing acontece parado tambem, e este
+	// artefato so aparece em movimento.
+	//
+	// Arredondar as duas pontas faz o deslocamento de amostragem ficar
+	// CONSTANTE. O preco e o mundo andar em passos de 1 px, que a 200 u/s e
+	// imperceptivel e e o que jogo 2D faz.
+	c.Camera.Target.X = roundPx(c.Camera.Target.X)
+	c.Camera.Target.Y = roundPx(c.Camera.Target.Y)
+	c.Camera.Offset.X = roundPx(c.Camera.Offset.X)
+	c.Camera.Offset.Y = roundPx(c.Camera.Offset.Y)
 }
+
+// roundPx arredonda para o pixel mais proximo. Existe separado porque as
+// quatro chamadas acima tem de usar exatamente a mesma regra: arredondar alvo
+// e offset de formas diferentes reintroduz a fracao que a ancoragem veio tirar.
+func roundPx(v float32) float32 { return float32(math.Round(float64(v))) }
 
 func clamp(v, min, max float32) float32 {
 	if v < min {

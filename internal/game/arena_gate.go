@@ -73,10 +73,17 @@ func (w *World) UpdateArenaGate(p *entity.Player) {
 		changed = w.Collision.SetFootprintsEnabledOverlapping(g.exitGateArea(), false) || changed
 	}
 	if changed && network.CurrentHost != nil {
-		network.CurrentHost.SetCollisionRects(w.Collision.Rects())
-		// The mesh only covers what it saw at map load; a gate toggling in
-		// game has to be told directly, or the pack keeps navigating
-		// against a door that already moved.
+		// As MAGIAS nao precisam ser avisadas. Desde 22/08/2026 elas leem a
+		// propria `CollisionGrid` (`Host.SetSolid`, uma vez por mapa), e o
+		// portao muda os apoios DENTRO dela: quem le pela grade ja ve a
+		// mudanca no quadro seguinte. Antes elas liam uma lista plana de
+		// retangulos derivada da grade, e era essa copia que tinha de ser
+		// remontada aqui — a linha que existia neste ponto.
+		//
+		// A malha de navegacao NAO e assim: ela e derivada uma vez no
+		// carregamento e nao observa a grade. Um portao que abre em jogo tem
+		// de avisa-la, ou a horda continua navegando contra uma porta que ja
+		// saiu do lugar.
 		network.CurrentHost.RebuildNavArea(g.exitGateArea())
 	}
 

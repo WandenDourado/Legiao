@@ -39,6 +39,7 @@ Single entry point for AI agents. Read this file first. Do not read every doc by
 | Progressão da campanha, ultimate por fase, cena de resgate | `doc/combat_rules.md` |
 | Desktop build/run | `doc/running_desktop.md` |
 | Desempenho: custo de render, VRAM, banda de rede, otimizacao | `doc/performance.md` |
+| Criar ou revisar magia/skill: custo por quadro, culling, colisao | `doc/skill_performance.md` (OBRIGATORIO) |
 | Product scope or feature intent | `doc/overview.md` |
 
 `doc/changelog.md` is history, not prerequisite reading. Use it only when investigating regressions or appending a new entry.

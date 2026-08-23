@@ -150,6 +150,11 @@ func (w *World) ApplyToHost() {
 	// tambem le esse estado para desenhar o botao da ultimate travado, e um
 	// cliente que nao souber mostraria um botao que o host vai recusar.
 	network.SetUnlockedUltimates(UltimatesGrantedOn(w.Path))
+	// Pelo mesmo motivo e no mesmo lugar: quem tranca o portal de um mapa de
+	// emboscada enquanto ela nao acontece e uma regra que o CLIENTE tambem
+	// desenha (game.PortalsUnlocked roda nas duas maquinas), entao ela e
+	// declarada aqui, acima da checagem de host. Ver network/climax_pending.go.
+	network.SetClimaxMap(w.Path)
 
 	host := network.CurrentHost
 	if host == nil {
@@ -177,7 +182,10 @@ func (w *World) ApplyToHost() {
 	// from the map that was just loaded, or monsters keep colliding with the
 	// previous map's obstacles.
 	host.EntityManager.Solid = w.Collision
-	host.SetCollisionRects(w.Collision.Rects())
+	// A MESMA grade para os dois, e nao uma lista plana derivada dela para as
+	// magias: um espectro da Legiao testava obstaculo contra os ~1.400
+	// retangulos do mapa 2, trinta vezes por quadro. Ver skill/legion.go.
+	host.SetSolid(w.Collision)
 
 	// The navigation mesh is derived from the same collision, once per map
 	// load — not once per frame. Bots and monsters read it through

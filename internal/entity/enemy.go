@@ -583,6 +583,18 @@ func (e *Enemy) ApplySlow(factor, duration float32) {
 
 // TakeDamage applies damage to the enemy. Returns true if the enemy died.
 func (e *Enemy) TakeDamage(damage float32) bool {
+	// LEVAR DANO E NOTAR. A porta de ameaca (enemy_territory.go) acorda o posto
+	// quando alguem chega ao alcance de acerta-lo; esta e a garantia de que
+	// nenhum caminho de dano escapa dela — magia de area, flecha celestial,
+	// espectro, um tiro de um angulo que a geometria nao previu. Se o golpe
+	// chegou, o guarda foi encontrado, e um guarda encontrado vai atras.
+	//
+	// Aqui, e nao em cada origem de dano, porque este e o funil por onde todo
+	// dano a inimigo passa — e porque um caminho novo de dano nao pode depender
+	// de alguem lembrar de avisar a IA.
+	if e.Guard.Active() {
+		e.chasing = true
+	}
 	e.Health -= damage
 	if e.Health <= 0 {
 		e.Health = 0

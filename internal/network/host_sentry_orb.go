@@ -36,6 +36,29 @@ func (h *Host) handleSentryOrbTick(dt float32, attackedEnemies map[string]bool) 
 	// global e uma esfera lenta (SentryOrbSpeed 300), a cadencia normal de
 	// AttackCooldown sozinha empilharia uma dezena de esferas perseguindo o
 	// mesmo jogador antes da primeira chegar.
+	//
+	// So a LANCADA passa pela porta de despertar (sentry_wake.go): antes de o
+	// grupo alcancar o degrau que a fase declara, a gargula esta em campo, e
+	// desenhada e pode morrer — ela so nao atira. O passo 2 corre sempre, ou
+	// uma esfera ja no ar ficaria congelada no meio da tela.
+	if h.sentriesMayFire() {
+		h.launchSentryOrbs(attackedEnemies)
+	}
+
+	// 2. Avanca as esferas e resolve o que elas encostam.
+	for _, id := range skill.StepSentryOrbs(dt, targets) {
+		// Expirou por tempo: some sem estouro, porque nao acertou nada.
+		skill.RemoveSentryOrb(true, id, false)
+		h.broadcastSentryOrb("expire", id, "", rl.Vector2{}, 0)
+	}
+	h.resolveSentryOrbHits()
+	skill.UpdateSentryBursts(true, dt)
+}
+
+// launchSentryOrbs da a cada gargula pronta — e sem esfera no ar — um alvo e
+// uma esfera. Metade do passo 1 de handleSentryOrbTick, separada so para a
+// porta de despertar caber numa linha la em cima.
+func (h *Host) launchSentryOrbs(attackedEnemies map[string]bool) {
 	for _, e := range h.EntityManager.GetAllEnemies() {
 		if e.Type != entity.EnemyTypeCastleSentry || !e.IsActive {
 			continue
@@ -57,15 +80,6 @@ func (h *Host) handleSentryOrbTick(dt float32, attackedEnemies map[string]bool) 
 		id := skill.SpawnSentryOrb(true, "", e.ID, targetID, origin, targetPos, ttl)
 		h.broadcastSentryOrb("cast", id, targetID, origin, ttl)
 	}
-
-	// 2. Avanca as esferas e resolve o que elas encostam.
-	for _, id := range skill.StepSentryOrbs(dt, targets) {
-		// Expirou por tempo: some sem estouro, porque nao acertou nada.
-		skill.RemoveSentryOrb(true, id, false)
-		h.broadcastSentryOrb("expire", id, "", rl.Vector2{}, 0)
-	}
-	h.resolveSentryOrbHits()
-	skill.UpdateSentryBursts(true, dt)
 }
 
 // livingPlayerPositions monta o mapa player_id -> posicao dos vivos, que e o

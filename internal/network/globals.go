@@ -94,7 +94,40 @@ func GetAllPlayers() map[string]PlayerState {
     return result
 }
 
-// UpdatePlayerState updates or adds a player in the shared state
+// UpdateLocalPlayerState publishes the LOCALLY PREDICTED state of the player
+// at this machine, keeping the fields the HOST owns and this machine only
+// mirrors.
+//
+// O laco do jogo republica o jogador local a cada quadro (game/loop.go), e ele
+// monta esse PlayerState a partir do que a maquina dele sabe: posicao, quadro
+// de animacao, vida. Ele NAO sabe se o host decidiu que este corpo esta parado
+// dentro de um portal — `InPortal` e `Absent` sao veredictos do host, que
+// chegam no snapshot a 20 Hz.
+//
+// Usar UpdatePlayerState aqui substituia a entrada INTEIRA sessenta vezes por
+// segundo, apagando os dois veredictos entre um snapshot e o proximo. O efeito
+// em jogo era exatamente o relato: quem entrava no portal continuava sendo
+// desenhado e o aviso "Aguardando o grupo" piscava, porque `LocalPlayerInPortal`
+// (game.SyncLocalPlayer le dali) alternava entre verdadeiro e falso a cada
+// quadro. Ver host_portal_presence.go.
+func UpdateLocalPlayerState(p PlayerState) {
+    RemotePlayersMutex.Lock()
+    defer RemotePlayersMutex.Unlock()
+    if RemotePlayers == nil {
+        RemotePlayers = make(map[string]PlayerState)
+    }
+    if known, ok := RemotePlayers[p.PlayerID]; ok {
+        p.InPortal = known.InPortal
+        p.Absent = known.Absent
+    }
+    RemotePlayers[p.PlayerID] = p
+}
+
+// UpdatePlayerState updates or adds a player in the shared state.
+//
+// E a porta de quem TEM autoridade sobre a entrada inteira: o host publicando
+// o proprio snapshot e o cliente aplicando o que recebeu. Para o estado que a
+// maquina local apenas prediz, use UpdateLocalPlayerState.
 func UpdatePlayerState(p PlayerState) {
     RemotePlayersMutex.Lock()
     defer RemotePlayersMutex.Unlock()
@@ -102,6 +135,25 @@ func UpdatePlayerState(p PlayerState) {
         RemotePlayers = make(map[string]PlayerState)
     }
     RemotePlayers[p.PlayerID] = p
+}
+
+// LeaveLocalPortal drops the local player's portal-wait — both the flag the
+// game loop reads and the mirrored snapshot game.SyncLocalPlayer reads it back
+// from.
+//
+// Os DOIS, e nao so a flag: desde que o laco parou de reescrever a entrada
+// inteira a cada quadro (UpdateLocalPlayerState), o espelho sobrevive ao
+// quadro, entao limpar so a flag a deixaria ser reposta no quadro seguinte e o
+// jogador ficaria congelado ate o host recalcular a presenca. Ver
+// game/portal_cancel.go.
+func LeaveLocalPortal() {
+    LocalPlayerInPortal = false
+    RemotePlayersMutex.Lock()
+    if p, ok := RemotePlayers[LocalPlayerID]; ok {
+        p.InPortal = false
+        RemotePlayers[LocalPlayerID] = p
+    }
+    RemotePlayersMutex.Unlock()
 }
 
 // RemovePlayerState removes a player from the shared state
