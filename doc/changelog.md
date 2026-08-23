@@ -1,164 +1,97 @@
 # Changelog
 
-## 2026-08-23 (2) — A linha do setor virou escudo do jogador
+## 2026-08-23 — Paredes VERTICAIS do castelo: os corredores do 4, 5 e 6 ganharam parede
 
-**Relato:** *"os jogadores estao conseguindo matar os monstros de longe, sem
-precisar entrar no posto"* (mapa 3).
+Os tres mapas de castelo com corredor nao tinham arte de parede nenhuma nas
+laterais: `world_04`, `world_05` e `world_06` tinham so a faixa de colisao
+pintada, e o corredor terminava no cascalho do lado de fora. A parede horizontal
+aprovada nao resolve isso, e nao e questao de girar a peca.
 
-**Causa:** `Guard.covers` exigia o jogador DENTRO do retangulo do setor para o
-guarda sequer olhar. As faixas do mapa 3 tem **1280 px** de altura e a flecha
-alcanca **1120**: dava para ficar na faixa de tras, atirar por cima da linha e
-limpar o posto seguinte um a um. O raio de visao de 2600 nao ajudava — ele nem
-chegava a ser perguntado, porque a pergunta do setor vinha antes e ja devolvia
-"nao".
+- **A projecao decide.** O painel horizontal (`walls_wall_01`, 241x158 px)
+  desenha a face SUL de frente, e o topo aparece so como faixa de 10 px. Nessa
+  projecao, uma parede que corre norte-sul tem as faces leste e oeste de perfil
+  — largura zero. O que sobra e o TOPO da parede visto de cima, com a face
+  frontal aparecendo so na ponta SUL. E o que o kit novo desenha.
+  Consequencia aceita e medida: um trecho vertical de 70 px ao lado de um painel
+  de 158 px de altura le como mureta baixa. Nao e defeito da arte — e o que essa
+  projecao produz. Mais presenca exigiria um kit com face lateral em obliqua
+  paralela, que sao dois kits (leste e oeste) e nao um.
+- **`castle_walls_vertical` (7 pecas).** `wall_v_cap_n`, `wall_v_middle_a/_b`
+  (2 celulas), `wall_v_middle_a/_b_short` (1 celula), `wall_v_cap_s` e
+  `wall_v_pier`. Qualquer trecho de N celulas fecha como
+  cap_n + middles + cap_s, com pilastra a cada 4 celulas.
+- **A folha veio com tres defeitos, e nenhum precisou de geracao nova**
+  (`work/tiled-assets/build_castle_walls_vertical.py` reproduz o atlas):
+  middles arrematados nas duas pontas (cintura de 20 px em cada junta, cortados
+  entre juntas de bloco); folha clara e quente demais (lum 95,7 / p90 132,7
+  contra 52,4 / 93,9 do painel aprovado, corrigida por casamento de histograma
+  — o `match_biome_tint.py` trava em +-12% e o desvio era ~80%); e as duas
+  fileiras da folha em escalas diferentes.
+- **Os 4 cantos gerados ficaram de fora.** O braco horizontal deles nao e a
+  parede horizontal aprovada: sem pilastra, sem o perfil de cimalha 10+8, fiada
+  de 18 px contra 17. Precisam ser remontados por composicao a partir do painel
+  aprovado, como as juncoes da cerca foram. Ate la, todo trecho colocado
+  termina em tampa, que e o que um corredor precisa.
+- **Ancora: canto SUDOESTE do footprint.** No `cap_s` ela fica na base da
+  FAIXA, nao na base da arte — os 158 px de face sao altura, nao chao, a mesma
+  leitura que o painel horizontal ja faz com os 47 px de rodape dele.
+- **`collision: false` no manifesto, de proposito.** Todo trecho colocado hoje
+  fica dentro da faixa de colisao ja pintada (o lado de fora do mapa, 4 celulas
+  de espessura). Um footprint de 70 px la dentro nao bloqueia nada novo e faz o
+  `validate_map.py` acusar dupla colisao em cada uma das 264 pecas. Se um
+  trecho for colocado em chao livre um dia, e uma linha no manifesto.
+- **Colocado por `work/tiled-assets/place_walls.py`**, que e onde os trechos de
+  cada mapa estao declarados: `world_06` (o corredor inteiro, 50 celulas dos
+  dois lados), `world_04` (salao de 55 celulas, vestibulo norte, escadaria) e
+  `world_05` (corredor de 53 celulas e a entrada norte). O salao oval do
+  `world_05` ficou de fora: e curvo, e o kit e reto.
 
-**Correcao — nao foi mexer no raio nem apagar o setor**, foi acrescentar uma
-SEGUNDA porta de aquisicao, mais curta que a primeira:
+**A conferir no jogo (F3):** andar o `world_06` de ponta a ponta e olhar as
+juntas dos trechos e o encontro com a fileira de colunas; no `world_04`, o
+encontro da parede vertical com a fileira horizontal na altura da escadaria
+(linha 12) — e ali que falta o canto. `props` no F3 sobe ~24 por parede visivel.
 
-| Porta | Pergunta | Raio | Respeita o retangulo? |
-|---|---|---|---|
-| Setor | "entrou no pedaco que eu guardo, e eu o vejo?" | 2600 (3400 no orc) | sim |
-| **Ameaca** | "consegue me **acertar** daqui?" | ~1370 | **nao** |
+**Defeito separado, encontrado e NAO corrigido:** no `world_07` as 44 pecas de
+parede e coluna estao numa objectgroup chamada `structures_back`, mas o
+`castle_manifest` esta registrado na camada `buildings` — entao elas nunca sao
+desenhadas. A arena esta sem parede na tela hoje.
 
-Mais restritiva em distancia, mais permissiva em geometria — as duas coisas
-juntas sao o ponto. A acumulacao faixa por faixa continua valendo (um guarda nao
-acorda por alguem longe noutra faixa), mas **um posto nao deixa de ser defendido
-porque quem atira ficou do lado de fora**.
+## 2026-08-22 (4) — Chuva de Meteoros sem culling; camera ancorada em pixel; doc de custo de magia
 
-O raio sai de `entity.LongestAttackReach()` — velocidade x tempo de vida do
-projetil, nao um numero escrito a mao. Para isso, dois numeros cravados dentro
-de `NewProjectile` viraram constantes com nome: `ProjectileLifetime` (2,0 s) e
-`ArrowLifetime` (1,6 s).
+Terceira rodada do mesmo levantamento, agora na ultimate do Mago. O defeito e
+irmao do da Legiao Espectral, por outra porta: nao e colisao, e DESENHO.
 
-**E levar dano virou notar.** `Enemy.TakeDamage` marca o guarda como engajado,
-qualquer que seja a origem do golpe. A porta de ameaca cobre a geometria
-previsivel; esta e a rede embaixo dela — magia de area, flecha celestial, um
-angulo que ninguem previu. Fica no `TakeDamage` porque ele e o FUNIL por onde
-todo dano a inimigo passa (dez pontos de chamada, verificados), e porque um
-caminho novo de dano nao pode depender de alguem lembrar de avisar a IA.
+- **A chuva desenhava o mapa inteiro.** `MeteorRainInterval = 0.025` com 1,4 s
+  de vida por meteoro da ~56 no ar ao mesmo tempo, cada um alimentando um
+  rastro; em regime sao ~2.550 particulas vivas, e cada particula e um
+  `DrawCircleGradient` (leque de ~36 triangulos no rlgl) — ~92.000 triangulos
+  por quadro so de particula, em blending aditivo, em 4K. E os alvos sao
+  sorteados no MAPA INTEIRO: no `world_02`, 83% do que era desenhado ficava
+  fora da tela. `internal/skill/view.go` traz `SetDrawView` + `visible` /
+  `visibleAny`, aplicados em `meteor.go`, `particle.go`, `explosion.go` e
+  `fire_ground.go`. O renderer publica a MESMA janela que o mapa e os inimigos
+  ja usavam.
+- **O painel do F3 conta:** `magias: N desenhadas / M puladas pelo culling`.
+  Um `M` parado em zero num mapa grande e culling faltando — o instrumento que
+  teria pego este defeito na revisao.
+- **`doc/skill_performance.md` (novo).** Sete regras com as contas que as duas
+  ultimates quebraram, checklist de revisao e como medir no F3. Rota adicionada
+  ao `AGENTS.md` como OBRIGATORIA para magia nova, e a
+  `create-character-abilities` ganhou a secao que manda ler antes de escrever a
+  primeira linha.
+- **C2 implementado: camera ancorada em pixel.** O relato de "imagem quebrando
+  ao caminhar" mesmo com vsync ligado nao era tearing: era a Causa 3 da §4½,
+  documentada desde 09/08 e nunca corrigida. O terreno usa filtro POINT e a
+  camera ficava em coordenada fracionaria, entao o chao saltava de texel em
+  texel enquanto os sprites deslizavam. `Camera2DState.Update` arredonda
+  `Target` e `Offset` depois do clamp.
+- **O F3 responde a pergunta do vsync.** Cabecalho mostra `vsync ON/OFF` e o
+  refresh do monitor, lidos de `rl.IsWindowState` — o estado REAL da janela e
+  nao o que a `Config` pediu, porque um perfil de driver com vsync forcado em
+  off ganha do jogo.
 
-### A armadilha que quase entrou junto
-
-O raio de ameaca e uma **variavel de pacote**, e os personagens entram no
-registro por um `init()`. Go inicializa toda variavel de pacote **antes** de
-rodar qualquer `init()`, entao a primeira versao — que varria `AllCharacters()`
-para achar o maior alcance — teria calculado sobre um registro vazio: alcance 0,
-raio de 250 px, e o defeito de volta **em silencio**, sem nada acusar.
-
-`LongestAttackReach` percorre as **constantes** dos projeteis. Quem cobra que o
-elenco caiba nelas e um teste, que roda depois do `init()`.
-
-### Um teste mudou de lado
-
-`TestGuardIgnoresTrespassersOutsideItsSector` afirmava que "quem esta do outro
-lado da barricada nao e problema deste monstro" a 600 px do posto. Essa frase
-deixou de ser verdadeira de proposito: ela agora exige o alvo fora do setor **e**
-fora do alcance. O caso que ela cobria virou o teste irmao,
-`TestGuardDefendsItsPostAgainstSomeoneShootingFromOutsideTheSector`.
-
-## 2026-08-23 — O portal abria antes da emboscada; o ultimo suspiro perdeu os NPCs
-
-Nove ajustes pedidos em jogo. Tres deles sao a mesma historia contada de tres
-lugares, entao vale comecar por ela.
-
-### A fase 3 travava, e o portal era a causa
-
-**Sintoma:** o grupo chegava a fortaleza e a horda infinita nao comecava.
-
-**Causa:** o `world_03` nao tem um unico marcador `enemy_spawn_*` — de
-proposito, a jogabilidade dele e de guarnicao. Entao `WaveState.Total` fica em
-zero, e `game.PortalsUnlocked` lia isso como "mapa quieto, nao tranque a
-saida": **o portal se materializava no primeiro quadro da fase**. Bastava um
-jogador entrar nele para a fase parar de vez — quem espera dentro de um portal
-e congelado e nem desenhado (`host_portal_presence.go`), e a porta do climax
-exige TODOS os vivos dentro da zona da fortaleza. Aquele corpo nunca chegava, a
-emboscada nunca armava, e nada na tela dizia por que.
-
-**Correcao, em dois lugares porque sao dois defeitos:**
-
-- `network/climax_pending.go` (novo): enquanto um mapa ainda DEVE a emboscada
-  roteirizada (`climaxRuns`), ele nao e um mapa quieto — e um mapa cuja luta
-  ainda nao comecou, e o portal fica trancado como em qualquer corrida de
-  hordas. Instalada a emboscada, `WaveState.Total > 0` e a regra normal volta a
-  valer sozinha; por isso o cliente nao precisa de mensagem nova de protocolo —
-  ele descobre o mapa no carregamento igual ao host.
-- `game/climax_gate.go`: quem esta dentro de um portal nao conta para a porta
-  do climax, nem para segurar nem para abrir. Hoje e cinto e suspensorio, mas a
-  porta nao deve depender de o portal estar fechado para funcionar.
-
-### O personagem nao sumia no portal e o aviso piscava
-
-Mesmo tema, outro defeito. `game/loop.go` republicava o jogador local a cada
-quadro com `network.UpdatePlayerState`, que **substitui a entrada inteira** —
-apagando `InPortal` e `Absent`, que sao veredictos do host e chegam no snapshot
-a 20 Hz. Sessenta quadros por segundo apagando, vinte por segundo repondo: o
-corpo continuava desenhado e "Aguardando o grupo" piscava.
-
-Agora existe `network.UpdateLocalPlayerState`, que preserva os campos que a
-maquina local apenas espelha, e `network.LeaveLocalPortal`, que o ESC/SAIR usa
-para limpar a flag **e** o espelho de uma vez (so a flag seria reposta no quadro
-seguinte).
-
-### Os NPCs do ultimo suspiro sairam
-
-O "heroi invocado" existia para um caso que nao existe mais: ninguem no grupo
-jogando com a classe da fase. Desde que toda classe vaga virou um BOT
-(`host_bots.go`), a cena sempre encontra um corpo de verdade para reerguer.
-
-Foram embora `summonHeroNPC`, `tickLastStand`, `LastStandNPC`,
-`game/last_stand_npc.go` e cinco campos de `lastStandHero` (`npcID`, `cast`,
-`alive`, `anchor`, `endSignal`) que so serviam para um personagem invocado ser
-dono de um efeito. O que a fase ainda declara e QUEM se ergue e QUAL suprema
-devolver carregada.
-
-Junto foi o **julgamento celestial do mapa 4** (`castCastleJudgment`), que era o
-outro item do relato: mesmo com um Arqueiro em campo, a cena disparava as
-flechas nas sentinelas sozinha. Agora nao — a cena reergue o Arqueiro (humano ou
-bot), devolve a suprema carregada e destravada, e **quem atira e ele**. O bot ja
-sabe cacar gargula (`bot/arqueiro.go`). O julgamento do mapa 6
-(`castCannonJudgment`) FICOU: o Avatar dos Deuses e imunidade total, nao um
-ataque a distancia, entao sem ele o resgate devolveria o grupo vivo dentro do
-mesmo corredor bombardeado.
-
-### As duas flechas do Arqueiro iam para a mesma torre
-
-A suprema dele tem duas cargas e a recarga so arma depois da segunda
-(`ability.Charged`), entao entre um disparo e o outro `UltimateReady` continua
-verdadeiro — o bot reavaliava "qual e a gargula mais perto", achava a MESMA (a
-flecha ainda estava no ar) e gastava a segunda carga nela. Duas flechas, uma
-torre, quando uma flecha ja resolve (40 de dano perfurante contra 40 de vida).
-
-`arqueiroBrain` ganhou uma memoria de 3 s por alvo — o voo maximo de uma flecha
-(4800 de alcance a 1600/s). Passado esse tempo, um alvo ainda de pe quer dizer
-que ela errou, e ai ele pode voltar a mirar nele. Um tiro que atravessa DUAS
-torres alinhadas marca as duas.
-
-### As gargulas do mapa 4 nao atiram mais desde o vestibulo
-
-`network/sentry_wake.go` (novo): a fase declara a partir de qual degrau de
-territorio (`tilemap.Zone.Tier`) as sentinelas dela abrem fogo. O mapa 4 declara
-o **degrau 3**, a boca do saguao — que e onde a emboscada arma e onde o anuncio
-"As sentinelas despertaram" acontece. Antes disso elas estao em campo, sao
-desenhadas e podem morrer; so nao atiram.
-
-Uma vez acordadas, nao dormem mais (mesmo principio de `Enemy.chasing`): recuar
-nao pode ser uma forma de desligar a fase. Um corpo caido la na frente tambem
-nao acorda ninguem — a fase reage a quem esta avancando. Mapa fora da tabela
-atira desde o primeiro quadro, que e o certo para os mapas 5 e 7, onde as
-gargulas entram por horda e a fase ja escolheu o momento delas.
-
-### Numeros
-
-| O que | De | Para | Por que |
-|---|---|---|---|
-| `MeteorImpactDamage` | 100 | **480** | Uma pedra tira 80% da vida do Orc (600). Os 100 vinham de quando o inimigo mais duro do jogo tinha 100 de vida: desde o orc de guarnicao a chuva passava por cima do elenco pesado sem arranhar. Duas acertam de morte; uma sozinha nunca resolve. |
-| `MeteorRainInterval` | 0,025 s | **0,015 s** | ~40/s para ~67/s. A chuva e a unica suprema que nao escolhe alvo — sorteia pontos no mapa inteiro —, entao o que ela controla de verdade nao e quanto cada pedra tira, e sim quantas caem perto de alguem. **Custa quadro**: os simultaneos sobem de ~56 para ~93, cada um com o proprio emissor de particulas. Se o F3 acusar, e este numero que afrouxa primeiro, nao o dano. |
-| Sentinela `AttackDamage` | 14 | **25** | Quatro esferas derrubam um personagem (100 de vida), em vez de oito. A uma esfera por vez, oito acertos era uma ameaca que o grupo absorvia andando. |
-| Senhora das Trevas `Health` | 400 | **2000** | Ela deixou de ser o chefe no fim de uma corrida de cinco hordas e virou quem comanda a ARENA: a vida dela nao e um bolo de dificuldade, e o CRONOMETRO da fase (a corrida so para quando ela cai). Com 400, o cerco final acabava antes de a fase mostrar do que e capaz. |
-
-As tres relacoes acima estao travadas em `network/balance_test.go`: um numero de
-equilibrio que so significa alguma coisa em relacao a outro numero precisa de um
-teste que defenda a RELACAO, nao o valor.
+Nao foi mexido, de proposito: `MeteorRainInterval` e `MeteorRainDuration` sao
+decisao de design. Culling nao muda um pixel do que o jogador ve.
 
 ## 2026-08-22 (3) — Correcao confirmada em jogo; retratos precarregados; vsync ligado
 

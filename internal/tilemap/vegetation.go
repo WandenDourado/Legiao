@@ -29,6 +29,11 @@ var manifestSources = []struct {
 	// Castelo da Senhora das Trevas (mapa 4): atlas preparado a partir das
 	// folhas-fonte no pipeline work/castle-assets.
 	{"assets/castle_manifest.json", "buildings"},
+	// Paredes verticais do castelo (corredores dos mapas 4, 5 e 6). Folha
+	// propria porque um trecho norte-sul e desenhado de cima, e nao de frente:
+	// as faces leste e oeste ficam de perfil nesta projecao, entao o que se ve
+	// e a capa da parede, com a face frontal so na ponta sul.
+	{"assets/castle_walls_vertical_manifest.json", "buildings"},
 	// As defesas de campo (mapa 3) vivem em `props`: nao sao vegetacao nem
 	// construcao fixa, e a camada separada deixa a auditoria tratar as tres
 	// por regras diferentes.
