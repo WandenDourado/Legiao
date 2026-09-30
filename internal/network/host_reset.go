@@ -20,6 +20,7 @@ func (h *Host) ResetStage() {
 	// reset, senao a fase recomeca com alguem invencivel.
 	ResetLastStand()
 	clearInvulnerability()
+	clearRespawnGrace()
 	// A concessao da corrida (ver progression.go) tambem NAO sobrevive ao
 	// reinicio: SetUnlockedUltimates so e chamado numa troca de mapa, e o F5
 	// fica no mesmo mapa. Sem isto uma fase perdida DEPOIS do resgate

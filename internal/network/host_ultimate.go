@@ -14,6 +14,7 @@ import (
 // handleUltimateTick advances every ultimate on the host for this frame.
 func (h *Host) handleUltimateTick(dt float32) {
 	h.tickMeteors(dt)
+	h.tickMeteorSigils(dt)
 	h.tickAngelics(dt)
 	h.tickCelestials(dt)
 	h.tickAvatars(dt)
@@ -32,6 +33,23 @@ func (h *Host) tickMeteors(dt float32) {
 		h.EntityManager.RemoveEnemy(id)
 		h.broadcastCombatEvent("death", id, "enemy", 0, "")
 	}
+}
+
+// tickMeteorSigils keeps the burning pentagram glued to its caster and ages
+// it. Mesma forma de tickAvatars, e pelo mesmo motivo: o selo e ancorado no
+// dono, entao ele precisa da posicao que so o host tem a cada quadro.
+//
+// Nao ha nada a transmitir aqui. O selo foi anunciado uma vez no lancamento
+// (ability/ultimates.go) e envelhece igual dos dois lados; mandar a posicao
+// dele pelo fio seria repetir, quadro a quadro, uma coordenada que o snapshot
+// do jogador ja carrega.
+func (h *Host) tickMeteorSigils(dt float32) {
+	h.playersMutex.RLock()
+	for id, p := range h.players {
+		h.Skills.SetMeteorSigilAnchor(id, rl.NewVector2(float32(p.X), float32(p.Y)))
+	}
+	h.playersMutex.RUnlock()
+	h.Skills.UpdateMeteorSigils(dt)
 }
 
 // tickAngelics fires the one-time resurrection when an altar appears,

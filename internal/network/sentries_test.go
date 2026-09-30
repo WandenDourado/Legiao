@@ -110,6 +110,38 @@ func TestSentriesArriveAfterThePhaseHasIntroducedItself(t *testing.T) {
 	}
 }
 
+// TestWorld07SentryPostsMatchTheStepCadence confere que os 10 postos do mapa
+// (item 2, 31/08/2026, doc/plan_world07_arena_tuning.md) sao alcancados
+// EXATAMENTE pela sequencia Sentries:2 (a entrada) + bossSentryStep(4) a cada
+// ciclo de 70 s — 2, 6, 10 — sem sobrar um pedido que passe do total. Um
+// pedido que passasse do total nao quebraria nada (armSentries corta e
+// loga), mas passaria a logar excesso a CADA ciclo dali em diante, e essa
+// pergunta ficou em aberto no plano (§10, item 1): manter 10 postos, ou abrir
+// mais no mapa. Este teste trava a escolha atual — manter 10 — contra
+// alguem mudar um dos dois lados sem lembrar do outro.
+func TestWorld07SentryPostsMatchTheStepCadence(t *testing.T) {
+	const mapPath = "assets/maps/world_07.json"
+	posts := len(SentryPostsFor(mapPath))
+	if posts != 10 {
+		t.Fatalf("%s declara %d postos; o plano de afinacao pressupoe 10", mapPath, posts)
+	}
+
+	defs := WaveDefsFor(mapPath)
+	if len(defs) == 0 || defs[0].Sentries <= 0 {
+		t.Fatal("o cerco da arena precisa declarar Sentries na horda de entrada")
+	}
+
+	total := defs[0].Sentries
+	for total < posts {
+		total += bossSentryStep
+	}
+	if total != posts {
+		t.Errorf("Sentries(%d) + multiplos de bossSentryStep(%d) chega a %d, nao aos "+
+			"%d postos do mapa; algum ciclo vai pedir mais gargula do que sobra e "+
+			"logar excesso pelo resto da luta", defs[0].Sentries, bossSentryStep, total, posts)
+	}
+}
+
 // sentryNamesInMap devolve os sufixos dos marcadores enemy_sentry_* do arquivo.
 // Le o JSON direto, sem passar pelo tilemap, pelo mesmo motivo que
 // `postNamesInMap`: o arquivo e a fonte, e um bug no leitor nao pode esconder

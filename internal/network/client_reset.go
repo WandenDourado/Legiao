@@ -5,6 +5,8 @@ package network
 // so the two do not disagree for the frames until the next full state update.
 
 import (
+	"github.com/WandenDourado/Legiao/internal/tilemap"
+
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -32,6 +34,13 @@ func (c *Client) applyStageReset(rp ResetPayload) {
 	// entao um cliente que nao re-armasse continuaria vendo a saida aberta
 	// depois do F5. Ver climax_pending.go.
 	RearmClimaxPending()
+
+	// E os canhoes do corredor voltam inteiros na tela — arte e barra —,
+	// espelhando o RestoreCannons que o host acabou de fazer: nem a peca em
+	// ruinas nem uma barra pela metade podem sobreviver ao F5 numa maquina e
+	// na outra nao.
+	tilemap.ClearWreckedPieces()
+	ResetCannonBars()
 
 	GameOver = false
 	LocalPlayerDead = false

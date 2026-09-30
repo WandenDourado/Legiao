@@ -21,7 +21,7 @@ const (
 	// LegionLeashRadius is how far from the owner a specter may hunt.
 	LegionLeashRadius float32 = 650
 	// SpecterSpeed is the hunting speed (fast — faster than any enemy).
-	SpecterSpeed float32 = 340
+	SpecterSpeed float32 = 340 * gameSpeed
 
 	// The three numbers below decide the duel the ultimate is built around,
 	// and they were tuned against the world_02 pack after it was played.

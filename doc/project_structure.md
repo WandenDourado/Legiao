@@ -1,27 +1,50 @@
 # Project Structure
 
-## Entry Points
+## Top-Level Layout
 
 | Path | Responsibility |
 |---|---|
 | `AGENTS.md` | Single agent entrypoint, hard rules, doc routing, skill discovery. |
+| `cmd/` | Executables: desktop, Android and the online relay server. |
+| `internal/` | All game code (Go packages, see below). |
+| `assets/` | Everything the game loads at runtime — and only that. The Android build copies this whole folder into the APK. |
+| `art/source/` | Original generated art sheets (`*_source.png`), never overwritten — audit trail of the art pipeline. Not loaded by the game and not bundled into the APK. |
+| `doc/` | Current-state reference docs (how the system works now). |
+| `plans/` | Only exists while a task plan is in progress; delete the plan once executed (see `AGENTS.md`). |
+| `skills/`, `.claude/skills/` | Agent skills (art pipeline, maps, abilities, Android build). |
+| `infra/oci/` | Terraform for the online relay VM (Oracle Cloud). |
+| `work/` | Local, **unversioned** scratch for the art/map pipeline (`.gitignore`). |
+
+## Entry Points
+
+| Path | Responsibility |
+|---|---|
 | `cmd/desktop/main.go` | Desktop launcher, calls `game.Run(game.DefaultConfig())`. |
 | `cmd/android/build/main.go` | Android launcher used by the Gradle/raylib build. |
+| `cmd/relay/main.go` | Online relay server (joins players over the internet without an open port). Deployed with `infra/oci/`. |
 
 ## Main Packages
 
 | Path | Responsibility |
 |---|---|
+| `internal/ability/` | Character abilities as data-driven, pluggable definitions (ultimates, cooldowns). |
+| `internal/apprestart/` | Reabre o jogo do zero (Android, JNI) — usado para aplicar a resolução de desenho. No-op no desktop. |
 | `internal/assets/` | `assets.Path()` abstraction for desktop vs Android asset paths. |
+| `internal/bot/` | Class AIs that fill a vacant character slot (steering, targeting). |
 | `internal/collision/` | Shared movement resolution (footprint vs solid space) used by players and monsters. |
 | `internal/dialogue/` | Narrative scripts loaded from `assets/dialogues/` and the cursor over a running scene. |
-| `internal/entity/` | Player, enemy, projectile data and drawing helpers. |
-| `internal/game/` | Main run loop orchestration, input processing, camera, rendering, collision. |
-| `internal/input/` | Touch state, aim joystick, platform-specific control drawing. |
-| `internal/network/` | TCP host/client, UDP/TCP discovery, protocol, shared snapshots. |
-| `internal/system/` | Reusable game systems: combat, movement, spawn, upgrade. |
+| `internal/entity/` | Player, enemy, projectile data and drawing helpers (death FX, invulnerability blink). |
+| `internal/game/` | Main run loop orchestration, input processing, camera, rendering. |
+| `internal/input/` | Touch state, aim joystick, action lock, platform-specific control drawing. |
+| `internal/nav/` | Route layer between deciding *where* to go (bots/monsters) and walking there. |
+| `internal/network/` | Host/client, LAN discovery, online rooms, protocol, shared snapshots. |
+| `internal/relay/` | Online relay protocol, server and host/join sides. |
+| `internal/resume/` | Bilhete de volta à partida (`resume.json`, uso único, 4 min) gravado antes de um reinício do app. |
+| `internal/settings/` | Local, per-machine preferences (audio, video, controls, interface) and their storage. |
+| `internal/skill/` | Runtime skill effects (projectiles, areas, sigils) and their drawing. |
+| `internal/sound/` | Stage music (one looping track per map), SFX bank and audio buses. |
 | `internal/tilemap/` | Tiled JSON/TMJ/TSX loading, tileset rendering, collision extraction (células pintadas + retângulos de manifesto). |
-| `internal/ui/` | Menu and HUD. |
+| `internal/ui/` | Menus, HUD, settings screen, dialogue box, victory screen. |
 | `internal/world/` | Map-derived bounds. |
 
 ## Assets
@@ -29,11 +52,13 @@
 | Path | Responsibility |
 |---|---|
 | `assets/dialogues/` | One narrative script file per map, named after the map. |
-| `assets/maps/` | Runtime maps bundled into Android APK. |
-| `assets/tilesets/` | Tileset image and TSX files. |
-| `assets/sprites/` | Sprite sheets and per-character `reference.png` files used by character selection. |
+| `assets/maps/` | Runtime maps (`world_01` … `world_07`). |
+| `assets/tilesets/` | Runtime tileset atlases and TSX files. Source sheets live in `art/source/tilesets/`. |
+| `assets/*_manifest.json` | Manifest per atlas: crop rectangles and measured collision footprints. |
+| `assets/sprites/` | Folhas de sprite e, por personagem, `reference.png` (card de seleção, 1024x1536) e `portrait.png` (caixa de diálogo, 1152x1280). Ver `doc/dialogue.md`. |
+| `assets/sounds/` | Stage music and SFX (`doc/audio.md`). |
+| `assets/ui/` | HUD action-button icons. |
 | `assets/shaders/` | GLSL pairs per platform (`*_330` desktop, `*_100` Android ES 2.0): terrain blending and the grayscale pass used for dead players. |
-| `maps/` | Source copies of maps; runtime should prefer `assets/maps/`. |
 
 ## Android Build Tree
 
@@ -43,23 +68,27 @@
 | `cmd/android/build/android/AndroidManifest.xml` | Android app manifest and permissions. |
 | `cmd/android/build/android/build.gradle` | Android module build config. |
 | `cmd/android/build/android/assets/` | Generated/copied APK asset tree. |
-| `cmd/android/build/android/libs/` | Generated native libraries. |
+| `cmd/android/build/android/libs/` | Generated native libraries (`liblegiao.so`, not versioned; only `.gitkeep` per ABI). |
 
 ## Agent Skills
 
 | Path | Responsibility |
 |---|---|
-| `skills/legiao-android-build/` | Android APK/AAB build workflow for agents. |
+| `skills/legiao-android-build/` | Android APK/AAB build workflow for agents (mirrored in `.claude/skills/`). |
 | `skills/create-character-sprites/` | Directional character sprite generation, validation, sheet assembly, and metadata workflow for agents. |
 | `skills/create-tiled-map/` | Zoneamento, bioma, densidade e auditoria de mapa. Decide *onde as coisas ficam*. |
 | `skills/create-tiled-assets/` | Atlas, manifesto medido, keying e footprint. Decide *como as coisas existem*. |
 | `skills/install-character-sprites/` | Registers validated character sprite output as a selectable Legiao character. |
-| `mcp/legiao-android-build/` | MCP compatibility notes for the Android build skill. |
+| `skills/create-character-abilities/` | New spell/ability end to end (skill/ability/network layers). |
+| `skills/preview-skill-effects/` | HTML/canvas preview of a spell's procedural drawing. |
+| `skills/remove-magenta-matte/` | Removes leftover magenta matte from generated art. |
+| `skills/create-enemy-sprites/`, `skills/audit-character-sprites/` | Enemy sprite generation; character sprite audit. |
 
 ## Ferramentas offline (`work/`)
 
 Scripts que rodam fora do jogo. Não fazem parte do binário; existem para
-decidir por medição em vez de por impressão.
+decidir por medição em vez de por impressão. `work/` **não é versionada**
+(está no `.gitignore`): os scripts abaixo existem só na máquina de quem os criou.
 
 | Path | Responsibility |
 |---|---|
@@ -77,7 +106,7 @@ decidir por medição em vez de por impressão.
 | Need | Location |
 |---|---|
 | New entity or draw helper | `internal/entity/` |
-| New game rule | `internal/system/` |
+| New game rule | The owning package (`internal/network/` for host-authoritative rules, `internal/skill/` / `internal/ability/` for spells) |
 | New network message | `internal/network/protocol.go` plus host/client handlers |
 | New multiplayer host behavior | Small focused file in `internal/network/` |
 | New menu/HUD behavior | `internal/ui/` |

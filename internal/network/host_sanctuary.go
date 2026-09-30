@@ -25,19 +25,12 @@ func (h *Host) HandleSanctuarySkill(playerID string) {
 	h.sanctuaryCooldowns[playerID] = skill.SanctuaryCooldown
 }
 
-// castSanctuary resolves the sanctuary center (in front of the caster in the
-// direction they face), spawns it in the skill Manager and broadcasts the
-// visual spawn to all clients.
+// castSanctuary spawns the aura ON the caster and broadcasts the spawn so
+// clients start drawing it. Nao ha mais direcao nem distancia a resolver: a
+// aura e ancorada na Sacerdotisa e handleSanctuaryTick a reancora todo quadro.
 func (h *Host) castSanctuary(playerID string) {
 	p := h.players[playerID]
-	dir := rl.Vector2Normalize(rl.NewVector2(p.VelX, p.VelY))
-	if dir.X == 0 && dir.Y == 0 {
-		dir = rl.NewVector2(0, 1) // default facing if stationary
-	}
-	center := rl.Vector2Add(
-		rl.NewVector2(float32(p.X), float32(p.Y)),
-		rl.Vector2Scale(dir, skill.SanctuaryOffset),
-	)
+	center := rl.NewVector2(float32(p.X), float32(p.Y))
 	skill.SpawnSanctuary(h.Skills, playerID, center)
 	h.broadcastSanctuary(playerID, center)
 }
@@ -58,6 +51,7 @@ func (h *Host) broadcastSanctuary(ownerID string, center rl.Vector2) {
 // heals living allies inside the area, and ticks cooldowns. Healing is
 // authoritative here and synced to clients via "heal" combat events.
 func (h *Host) handleSanctuaryTick(dt float32) {
+	h.anchorSanctuaries()
 	allies := h.allyHealTargets()
 	events := h.Skills.UpdateSanctuaries(dt, allies)
 	for _, ev := range events {
@@ -76,6 +70,27 @@ func (h *Host) handleSanctuaryTick(dt float32) {
 				h.sanctuaryCooldowns[id] = 0
 			}
 		}
+	}
+}
+
+// anchorSanctuaries cola cada aura no dono dela antes de a cura ser cobrada.
+//
+// A ORDEM E A REGRA INTEIRA: reancorar DEPOIS de curar cobraria a cura deste
+// quadro no circulo do quadro passado, e com a Sacerdotisa andando (ainda por
+// cima 25% mais rapido) a borda medida ficaria sempre um passo atras do que o
+// jogador ve na tela. E a mesma razao de tickAvatars ancorar antes de
+// UpdateAvatars.
+//
+// O dono morto perde a aura em ClearOwner (skill/clear_owner.go), junto com
+// todo o resto que estava preso a ele; aqui basta seguir quem esta de pe.
+func (h *Host) anchorSanctuaries() {
+	h.playersMutex.RLock()
+	defer h.playersMutex.RUnlock()
+	for id, p := range h.players {
+		if p.IsDead {
+			continue
+		}
+		h.Skills.SetSanctuaryAnchor(id, rl.NewVector2(float32(p.X), float32(p.Y)))
 	}
 }
 

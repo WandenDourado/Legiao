@@ -49,6 +49,19 @@ type Foe struct {
 	HitCentre rl.Vector2
 }
 
+// CannonPost e um canhao de pe, do jeito que um bot precisa ve-lo.
+//
+// Sem vida e sem ID: o bot nao escolhe ENTRE canhoes por estado, ele vai no
+// mais perto e bate ate cair. Dar-lhe a vida do posto so criaria a tentacao de
+// "terminar aquele que ja esta ferido" atravessando o corredor de novo.
+type CannonPost struct {
+	// Pos e a linha do chao do posto, para andar ate ela.
+	Pos rl.Vector2
+	// HitCentre e o que a espada precisa alcancar — o meio do plinto, nao o
+	// pe da pedra. Mesma distincao de Foe.HitCentre, pela mesma razao.
+	HitCentre rl.Vector2
+}
+
 // View is everything a Brain is allowed to know when deciding what to do
 // this tick. It is built fresh by the host every time tickBots runs.
 type View struct {
@@ -106,6 +119,16 @@ type View struct {
 	// grant is still true, and the bot should not wait out its normal
 	// reaction delay before using it.
 	RescueRecent bool
+	// Cannons sao os postos de canhao AINDA DE PE do mapa em jogo (so o
+	// corredor do mapa 6 tem). Chegam por fora de Foes porque um canhao NAO
+	// e um `entity.Enemy`: nao anda, nao caca ninguem, e nenhuma selecao de
+	// alvo comum pode encosta-lo — a mesma razao pela qual a sentinela
+	// precisou do IsSentry, levada as ultimas consequencias.
+	//
+	// Existe porque so a Paladina consegue derruba-los (espada), e sem esta
+	// lista um grupo sem Paladina humana ficaria preso no corredor para
+	// sempre: o bot dela nao teria como nem saber que eles estao la.
+	Cannons []CannonPost
 	// UltimateRange is the current class's ultimate projectile range, when
 	// that ultimate has one (skill.CelestialRange for the Arqueiro; zero
 	// otherwise). internal/bot never imports internal/skill (plan §B4,

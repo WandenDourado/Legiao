@@ -1,0 +1,89 @@
+{
+ "atlas": "assets/tilesets/castle_cannons.png",
+ "pieces": {
+  "cannon_west": {
+   "source": {
+    "x": 8,
+    "y": 8,
+    "width": 184,
+    "height": 285
+   },
+   "anchor": {
+    "x": 91.0,
+    "y": 285
+   },
+   "role": "structures_back",
+   "collision": true,
+   "mount": "floor",
+   "collisionFootprint": {
+    "offsetX": -74.0,
+    "offsetY": -80,
+    "width": 148,
+    "height": 80
+   }
+  },
+  "cannon_east": {
+   "source": {
+    "x": 200,
+    "y": 8,
+    "width": 183,
+    "height": 286
+   },
+   "anchor": {
+    "x": 91.0,
+    "y": 286
+   },
+   "role": "structures_back",
+   "collision": true,
+   "mount": "floor",
+   "collisionFootprint": {
+    "offsetX": -74.0,
+    "offsetY": -80,
+    "width": 148,
+    "height": 80
+   }
+  },
+  "cannon_west_wrecked": {
+   "source": {
+    "x": 8,
+    "y": 302,
+    "width": 218,
+    "height": 254
+   },
+   "anchor": {
+    "x": 107.5,
+    "y": 254
+   },
+   "role": "structures_back",
+   "collision": true,
+   "mount": "floor",
+   "collisionFootprint": {
+    "offsetX": -74.0,
+    "offsetY": -80,
+    "width": 148,
+    "height": 80
+   }
+  },
+  "cannon_east_wrecked": {
+   "source": {
+    "x": 234,
+    "y": 302,
+    "width": 221,
+    "height": 255
+   },
+   "anchor": {
+    "x": 107.0,
+    "y": 255
+   },
+   "role": "structures_back",
+   "collision": true,
+   "mount": "floor",
+   "collisionFootprint": {
+    "offsetX": -74.0,
+    "offsetY": -80,
+    "width": 148,
+    "height": 80
+   }
+  }
+ }
+}

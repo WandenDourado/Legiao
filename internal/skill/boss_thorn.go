@@ -18,13 +18,23 @@ import (
 
 const (
 	// ThornTelegraph e a janela de desvio, e ela NAO e um numero solto: sao os
-	// 1,8 s do laco `attack_windup` (bracos cruzados tremendo) mais os 0,30 s
+	// 0,9 s do laco `attack_windup` (bracos cruzados tremendo) mais os 0,30 s
 	// ate o passo do agachamento no `attack_strike` (indice 2 do PlayOrder,
 	// terceiro passo a 0,10 s). Mexer aqui sem mexer no `bossDodgeWindow` ou no
 	// ritmo da folha desalinha o golpe da animacao.
-	ThornTelegraph float32 = 2.1
+	//
+	// Afinado de 2,1 para 1,2 em 31/08/2026 (doc/plan_world07_arena_tuning.md):
+	// contra um jogador a 200 px/s e um raio de 110 px, 2,1 s de aviso sobravam
+	// 1,55 s de folga depois dos 0,55 s que bastam para sair do circulo — o
+	// desvio tinha virado automatico em vez de decisao.
+	//
+	// TestBossDodgeWindowMatchesThornTelegraph
+	// (entity/enemy_boss_anim_test.go) trava que `bossDodgeWindow` continua
+	// sendo este numero menos 0,30. `entity` nao pode importar `skill` (ciclo),
+	// entao o teste guarda o valor como literal — mudou aqui, mude la tambem.
+	ThornTelegraph float32 = 1.2
 	// ThornRise e o tempo que as lascas levam para sair do chao.
-	ThornRise float32 = 0.16
+	ThornRise float32 = 0.10
 	// ThornLinger e quanto elas ficam de pe depois de cravar.
 	ThornLinger float32 = 0.9
 	// ThornRadius e o raio de acerto, e tambem o raio EXATO que a marca desenha:

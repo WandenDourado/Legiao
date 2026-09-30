@@ -6,19 +6,39 @@
       "trigger": "on_map_start",
       "lines": [
         {
-          "speaker": "Paladina",
-          "portrait": "paladina",
-          "text": "Estamos no covil da Senhora das Trevas. A atmosfera é densa."
+          "speaker": "",
+          "portrait": "",
+          "text": "Os aventureiros se encontram em um corredor que parece levar a uma arena."
         },
         {
           "speaker": "Arqueiro",
           "portrait": "arqueiro",
-          "text": "Eu sinto milhares de olhos sobre nós nas sombras."
+          "text": "Não vou mentir, estou preocupado. Eles estão escondidos, mas posso pressenti-los. Esta área está repleta de monstros. Sinto milhares de olhos sobre nós, escondidos nas sombras."
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Você tem razão. Eles estão cientes da nossa chegada e elaboraram uma estratégia. Provavelmente estão planejando nos encurralar. Talvez devêssemos recuar..."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "NÃO! Jamais hei de recuar diante do mal! O Divino me guia e me dá forças."
         },
         {
           "speaker": "Sacerdotisa",
           "portrait": "sacerdotisa",
-          "text": "Que a luz nos proteja. Não podemos recuar agora."
+          "text": "Irmã, concordo que os deuses jamais nos abandonarão em uma missão justa, mas precisamos ser cautelosos, pois o mal age de forma traiçoeira."
+        },
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "Recuar seria uma escolha sábia, mas já não temos tempo. O que quer que os Orcs estejam tramando neste castelo precisa ser impedido, e não há tempo para pedir reforços."
+        },
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "Sabemos que os monstros estão escondidos nas sombras, esperando para nos emboscar. Sejamos mais espertos do que eles e trabalhemos como um time."
         }
       ]
     },
@@ -27,19 +47,24 @@
       "trigger": "on_last_stand",
       "lines": [
         {
+          "speaker": "",
+          "portrait": "",
+          "text": "Um mar de monstros cerca os aventureiros naquela que parece ser uma arena."
+        },
+        {
           "speaker": "Paladina",
           "portrait": "paladina",
-          "text": "São muitos! Nós não vamos conseguir segurar todos!"
+          "text": "Continuem lutando! Não desistam!"
         },
         {
           "speaker": "Arqueiro",
           "portrait": "arqueiro",
-          "text": "As sombras não param de surgir, é o nosso fim..."
+          "text": "Minha energia celestial já está se esvaindo. Não sei por quanto tempo mais conseguirei lançar flechas."
         },
         {
           "speaker": "Mago",
           "portrait": "mago",
-          "text": "Não hoje. Afastem-se!"
+          "text": "Eu cuido disso. Protejam-se!"
         },
         {
           "speaker": "Necromante",
@@ -50,6 +75,27 @@
           "speaker": "Mago",
           "portrait": "mago",
           "text": "É o único jeito de limpar esse salão. Que os céus caiam sobre eles!"
+        }
+      ]
+    },
+    {
+      "id": "world_05_hordas_limpas",
+      "trigger": "on_waves_cleared",
+      "lines": [
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "Vocês estão sentindo isso...? Parece que o ar está mais denso. A energia sombria está mais forte."
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Não pode ser... Esses Orcs estúpidos não fizeram isso! Não consigo acreditar que isso esteja acontecendo..."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Já disse para parar de fazer suposições! Seguiremos até a origem de todo esse mal!"
         }
       ]
     }

@@ -34,6 +34,11 @@ type HostLike interface {
 	// BroadcastSkillDir is BroadcastSkill for aimed skills that also need the
 	// launch direction replicated on clients (e.g., arrow volley).
 	BroadcastSkillDir(skillID string, ownerID string, origin, dir rl.Vector2)
+	// HealPlayerFraction devolve ao conjurador a fracao pedida da vida MAXIMA
+	// dele, sem passar do teto, e anuncia a cura. Entrou na interface porque o
+	// Escudo Sagrado passou a curar ao ser lancado: uma magia que mexe na vida
+	// de quem a lancou precisa pedir isso ao host, que e quem manda na vida.
+	HealPlayerFraction(playerID string, fraction float32)
 }
 
 // PlayerStateView is a read-only snapshot a skill may need about the caster.
@@ -60,11 +65,30 @@ type Skill interface {
 // registry maps skill ID -> implementation.
 var registry = map[string]Skill{}
 
+// drawOrder e a ordem em que as magias sao DESENHADAS, e existe porque
+// `registry` e um mapa.
+//
+// Percorrer um mapa em Go da uma ordem aleatoria a cada passagem. No desenho
+// isso significava que a familia de magias que ficava por cima mudava a 60
+// vezes por segundo: duas habilidades conjuradas uma em cima da outra
+// piscavam, trocando qual aparecia na frente (relato do Gui, 27/08/2026 — o
+// mesmo defeito dos jogadores empilhados em game/renderer.go e das colecoes
+// de efeito em skill/draw_order.go).
+//
+// A ordem e a de REGISTRO, que em Go e fixa em tempo de compilacao (os `init`
+// de um pacote correm na ordem dos arquivos). Ou seja: a ordem em que as
+// magias se declaram e a camada em que elas ficam, e quem quiser mudar a
+// camada muda o registro — em vez de depender do sorteio do quadro.
+var drawOrder []string
+
 // characterAbilities maps character type -> ordered list of skill IDs.
 var characterAbilities = map[entity.CharacterType][]string{}
 
 // RegisterSkill adds a skill implementation to the global registry.
 func RegisterSkill(s Skill) {
+	if _, dup := registry[s.ID()]; !dup {
+		drawOrder = append(drawOrder, s.ID())
+	}
 	registry[s.ID()] = s
 }
 
@@ -126,7 +150,9 @@ func CastByID(skillID string, ctx *CastContext) bool {
 // Used by the renderer so newly added skills are drawn without touching the
 // draw code.
 func DrawAll(m *skill.Manager) {
-	for _, s := range registry {
-		s.Draw(m)
+	// drawOrder, e nao `registry`: a ordem de desenho tem de ser a mesma todo
+	// quadro. Ver o comentario de drawOrder.
+	for _, id := range drawOrder {
+		registry[id].Draw(m)
 	}
 }

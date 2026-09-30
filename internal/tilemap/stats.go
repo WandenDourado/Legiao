@@ -21,13 +21,15 @@ type Stats struct {
 	// o batch do rlgl, entao este numero E o numero de draw calls do terreno -
 	// e era 18.844 por quadro no world_03.
 	ShaderBinds int
+	// QuadsOccluded sao os quads de terreno que NAO foram desenhados porque a
+	// camada de cima daquela celula ja e opaca. E o par de TerrainQuads: sem
+	// ele, a oclusao e uma mudanca que nao muda um pixel, nao muda o numero de
+	// draw calls e portanto nao aparece em lugar nenhum se parar de funcionar.
+	QuadsOccluded int
 	// Tiles sao os tiles comuns desenhados (ground_detail, foreground...).
 	Tiles int
 	// Props sao as pecas de manifesto desenhadas (arvore, casa, cerca, muralha).
 	Props int
-	// TrailQuads sao os quads de fita de trilha emitidos. Cada quad custa 12
-	// chamadas de cgo, entao ele conta separado dos quads de terreno.
-	TrailQuads int
 	// CellsVisited sao as celulas que os lacos por celula chegaram a visitar.
 	// Comparado com TerrainQuads, mostra quanto do laco e trabalho e quanto e
 	// varredura.

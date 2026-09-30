@@ -28,6 +28,7 @@ func SyncLocalPlayer(p *entity.Player) {
 	}
 	p.Health = state.Health
 	p.RespawnIn = state.RespawnIn
+	p.Invuln = state.Invuln
 	network.LocalRespawnIn = state.RespawnIn
 
 	switch {
@@ -36,6 +37,9 @@ func SyncLocalPlayer(p *entity.Player) {
 	case !state.IsDead && p.IsDead:
 		p.Respawn(1, float32(state.X), float32(state.Y))
 		p.Health = state.Health
+		// O folego do renascer: a imunidade o host ja deu; o passo extra e
+		// daqui, porque e esta maquina que move o corpo (local_buffs.go).
+		network.ArmLocalRespawnBoost()
 	}
 	network.LocalPlayerDead = p.IsDead
 	network.LocalPlayerInPortal = state.InPortal

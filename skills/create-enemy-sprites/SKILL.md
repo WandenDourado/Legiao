@@ -168,6 +168,8 @@ Each of these comes from a specific failed generation.
 
 ## Resolution and filtering
 
+Residual pink after keying (edge fringe, matte trapped in gaps, violet paint that must survive): read `doc/matte_magenta.md`; for large art (reference, portrait) use `skills/remove-magenta-matte`.
+
 Two settings decide whether the sprite looks crisp or blocky in game, and both
 were originally wrong.
 

@@ -2,22 +2,32 @@ package network
 
 // Os tres relogios da Senhora das Trevas.
 //
-// Eles nao cabiam em `AttackCooldown`, que e UM numero: espinhao a cada 15 s e
-// nevoa a cada 60 s sao independentes, e a horda tem o proprio ritmo na maquina
-// de hordas. Cada um vive aqui com o seu contador.
+// Eles nao cabiam em `AttackCooldown`, que e UM numero: espinhao, nevoa e a
+// horda (esta ultima BossDriven, ver host_waves.go) sao eventos com relogio
+// proprio. Cada um vive aqui com o seu contador.
 //
-// UM ALINHAMENTO A CADA 7 MINUTOS, E ELE E DE PROPOSITO. 60 e 70 tem MMC 420, e
-// o 15 do espinhao divide os dois: a cada 420 s nevoa, horda e golpe caem
-// juntos. Nao e defeito do desenho — e o que da a uma luta longa uma onda em
-// vez de uma parede constante.
+// Ate 30/08/2026 o alinhamento era A CADA 7 MINUTOS, de proposito: 15 s de
+// espinhao, 60 s de nevoa e 70 s de horda tem MMC 420, entao a cada 420 s os
+// tres caiam juntos. Esse alinhamento MORREU em 31/08/2026
+// (doc/plan_world07_arena_tuning.md): espinhao passou para 10 s e nevoa para
+// 30 s, e a horda deixou de ter relogio proprio — ela dispara junto da nevoa
+// (bossFogEvery), entao os dois passam a bater no MESMO instante, a cada 30 s.
+// A gargula (bossSentryEvery, 70 s) e o UNICO relogio que fica fora dessa
+// fase de proposito: se ela tambem batesse a cada 30 s, o reforco das torres
+// viraria so mais um item da mesma batida em vez de uma pressao a parte.
 //
-// Tudo aqui e do host, e por enquanto SO do host: nada disto e replicado. Num
-// cliente a chefe fica em idle e nem a marca do espinhao nem a nevoa aparecem —
-// o dano chega pelos eventos de combate, mas sem aviso nenhum. Fechar isso
-// exige o `Anim` da chefe e dois eventos novos no protocolo, e esta anotado
-// como a lacuna que falta antes de a fase ser jogavel em rede.
+// Ate 31/08/2026 tudo aqui era do host, e SO do host: nada disto era
+// replicado, e um cliente via a chefe em idle sem marca de espinhao nem
+// nevoa — o dano chegava pelos eventos de combate, mas sem aviso nenhum
+// (doc/plan_correcoes_mobile_e_rede.md, item 6). MsgBossFog e MsgBossThorn
+// (protocol.go) fecham essa lacuna: broadcastBossFog e broadcastBossThorn
+// abaixo sao a metade do host desse conserto, irmas de broadcastSentryOrb e
+// broadcastCannonBall — magia de MONSTRO, entao nao viaja em MsgSkill.
 
 import (
+	"encoding/json"
+	"log"
+
 	"github.com/WandenDourado/Legiao/internal/entity"
 	"github.com/WandenDourado/Legiao/internal/skill"
 
@@ -26,13 +36,23 @@ import (
 
 const (
 	// bossThornEvery e o periodo do espinhao.
-	bossThornEvery float32 = 15.0
-	// bossFogEvery e o periodo da conjuracao.
-	bossFogEvery float32 = 60.0
+	//
+	// Afinado de 15 para 10 em 31/08/2026 (doc/plan_world07_arena_tuning.md):
+	// o ciclo da fase passou a bater a cada bossFogEvery (30 s), e o espinhao
+	// mais frequente e o que enche esse intervalo com pressao continua em vez
+	// de deixa-lo vazio entre uma nevoa e outra.
+	bossThornEvery float32 = 10.0
+	// bossFogEvery e o periodo da conjuracao. Afinado de 60 para 30 em
+	// 31/08/2026: e o relogio de fase agora — a horda (BossDriven, ver
+	// host_waves.go) dispara junto dela, no mesmo quadro.
+	bossFogEvery float32 = 30.0
 	// bossFirstBeat atrasa o primeiro de cada um. O grupo acabou de atravessar
 	// um portal: levar um golpe antes de a camera assentar nao ensina nada.
 	bossFirstBeat float32 = 6.0
-	// bossSentryEvery e o periodo com que uma gargula nova sobe a cada lado.
+	// bossSentryEvery e o periodo com que gargulas novas sobem. Fica em 70 s
+	// DE PROPOSITO, fora do compasso de 30 s do resto da fase: e o unico
+	// reforco que nao bate junto com nevoa/horda/espinhao, para nao virar so
+	// mais um item da mesma batida.
 	//
 	// Ela NAO vem de `WaveDef.Sentries`, e o motivo e a forma da fase: aquele
 	// campo e por HORDA, e a arena tem uma horda so, infinita — declarar
@@ -40,10 +60,11 @@ const (
 	// virar relogio, e o periodo e o mesmo da leva para que cada cerco novo
 	// chegue com uma torre nova.
 	bossSentryEvery float32 = 70.0
-	// bossSentryStep e quantas sobem por ciclo: uma a oeste e uma a leste. A
-	// ordem dos postos em `sentryPosts` ja alterna os lados, entao dois por
-	// ciclo e exatamente "uma em cada portao".
-	bossSentryStep = 2
+	// bossSentryStep e quantas sobem por ciclo. Dobrado de 2 para 4 em
+	// 31/08/2026: duas a oeste e duas a leste. A ordem dos postos em
+	// `sentryPosts` ja alterna os lados par a impar, entao tomar 4 nomes
+	// seguidos continua dando 2+2 por portao.
+	bossSentryStep = 4
 	// bossCastLead e o aviso da nevoa: a danca (`cast_loop`) roda este tempo
 	// antes de a nevoa entrar no ar. E o que torna a coordenacao possivel em
 	// vez de sorte — o grupo ve e corre para o altar.
@@ -56,6 +77,11 @@ type bossClocks struct {
 	fog     float32
 	sentry  float32
 	casting float32 // > 0 enquanto a danca roda e a nevoa ainda nao entrou
+	// contactTick acumula o tempo para o anel de contato (host_boss_contact.go).
+	// Comeca em 0 pelo mesmo motivo dos outros: bossClocks{} zerado por
+	// ResetBossClocks e um cronometro novo, e o primeiro tick chega
+	// BossContactTickEvery segundos depois da chefe nascer.
+	contactTick float32
 }
 
 // ResetBossClocks rearma os relogios. Uma tentativa nova e uma luta nova.
@@ -80,9 +106,14 @@ func (h *Host) updateBoss(dt float32) {
 	}
 	boss, alive := h.livingBoss()
 
-	// Espinhoes e nevoa ja no ar continuam resolvendo mesmo com a chefe morta:
-	// o que ela lancou antes de cair ainda esta acontecendo, e apagar isso no
-	// quadro da morte devolveria ao grupo uma vitoria que ele ainda nao teve.
+	// Espinhoes e nevoa resolvem AQUI, antes do `if !alive`, so para o
+	// quadro em que a chefe cai: o que ja estava para cravar neste tique
+	// ainda crava. Depois disso nao sobra nada para resolver —
+	// clearThreatsOnVictory (host_boss_victory.go) apaga os dois no mesmo
+	// quadro da queda. Ate 27/09/2026 eles continuavam no ar depois da morte
+	// ("apagar isso devolveria ao grupo uma vitoria que ele ainda nao
+	// teve"), e foi exatamente isso que matou o grupo depois do dialogo
+	// final — ver plans/plan_playtest_27_09.md §1.
 	h.resolveThorns(dt)
 	h.resolveFog(dt)
 
@@ -90,9 +121,26 @@ func (h *Host) updateBoss(dt float32) {
 		return
 	}
 
+	// O anel de contato (item 5, doc/plan_world07_arena_tuning.md) e uma
+	// propriedade do CORPO: ao contrario do espinhao e da nevoa, ele nao
+	// continua depois que a chefe cai, entao mora AQUI, depois do `if !alive`,
+	// e nao ao lado das duas chamadas acima.
+	h.resolveBossContact(dt, boss)
+
 	if h.boss.casting > 0 {
 		if h.boss.casting -= dt; h.boss.casting <= 0 {
-			skill.ActivateDarkFog(h.Skills, h.arenaBounds())
+			bounds := h.arenaBounds()
+			skill.ActivateDarkFog(h.Skills, bounds)
+			h.broadcastBossFog("cast", bounds)
+			// A horda da arena e BossDriven (host_waves.go): ela nao tem
+			// relogio proprio, ela espera a nevoa. Pedir aqui, no MESMO
+			// quadro em que a nevoa entra no ar, e o que faz o compasso da
+			// fase bater junto — updateWaves chama Waves.Update antes de
+			// updateBoss, entao o pedido so e atendido no quadro seguinte
+			// (16 ms, invisivel).
+			if h.Waves != nil {
+				h.Waves.ReleaseBatchNow()
+			}
 		}
 	}
 
@@ -121,13 +169,22 @@ func (h *Host) updateBoss(dt float32) {
 // A foto e o contrato da habilidade: os espinhoes nascem onde os jogadores
 // estavam quando ela levantou os bracos, e nao seguem ninguem. Um espinho que
 // perseguisse tiraria do desvio a condicao de decisao.
+//
+// A foto e do PE, nao do centro do sprite (27/09/2026,
+// plans/plan_playtest_27_09.md §2). O espinhao e um decalque de CHAO, e o
+// jogador le "estou dentro?" pelo pe. Com a foto no centro do quadro, o pe
+// ficava ~103 px abaixo do centro da marca e a borda de baixo do circulo
+// passava rente a sola: quem fugia para baixo tirava o pe do circulo em
+// poucos pixels, mas o centro seguia dentro por mais cem — e levava o golpe
+// achando que tinha saido. playersInsideThorn mede pelo mesmo ponto.
 func (h *Host) castThorns(boss *entity.Enemy) {
-	positions := h.getAlivePlayerPositions()
+	positions := h.alivePlayerFeet()
 	if len(positions) == 0 {
 		return
 	}
 	boss.TriggerStrike()
 	skill.SpawnThorns(h.Skills, positions)
+	h.broadcastBossThorn(positions)
 }
 
 // resolveThorns envelhece os espinhoes e cobra o dano dos que irromperam.
@@ -150,8 +207,30 @@ func (h *Host) playersInsideThorn(t *skill.Thorn) []string {
 		if p.IsDead {
 			continue
 		}
-		if t.Contains(rl.NewVector2(float32(p.X), float32(p.Y))) {
+		if t.Contains(playerFeet(p)) {
 			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// playerFeet e onde o pe de um jogador pisa no mundo: PlayerState.X/Y e o
+// centro do quadro do sprite, e entity.GroundPoint desce ate a sola pela
+// FootLine do personagem — a mesma regra que a colisao de movimento e o
+// portal ja usam. Caller holds playersMutex (or owns p).
+func playerFeet(p *PlayerState) rl.Vector2 {
+	pos := rl.NewVector2(float32(p.X), float32(p.Y))
+	return entity.GroundPoint(pos, entity.GetCharacter(entity.CharacterType(p.Character)))
+}
+
+// alivePlayerFeet e a foto do espinhao: o pe de cada jogador vivo.
+func (h *Host) alivePlayerFeet() []rl.Vector2 {
+	h.playersMutex.RLock()
+	defer h.playersMutex.RUnlock()
+	out := make([]rl.Vector2, 0, len(h.players))
+	for _, p := range h.players {
+		if !p.IsDead {
+			out = append(out, playerFeet(p))
 		}
 	}
 	return out
@@ -159,7 +238,17 @@ func (h *Host) playersInsideThorn(t *skill.Thorn) []string {
 
 // resolveFog cobra o dano continuo da nevoa.
 func (h *Host) resolveFog(dt float32) {
+	wasActive := h.Skills.FogActive()
 	times, dmg := h.Skills.AdvanceFog(dt)
+	if wasActive && !h.Skills.FogActive() {
+		// A propria contagem de AdvanceFog zerou o ponteiro (TTL esgotado, e
+		// nao um F5/portal — esses ja limpam via ClearBossEffects e nao
+		// precisam de aviso, os clientes tambem limpam sozinhos nesses
+		// casos). O cliente tem o mesmo relogio e chegaria ao mesmo lugar
+		// sozinho, mas um evento explicito evita a nevoa sumir um quadro
+		// antes ou depois em cada maquina por causa de jitter de rede.
+		h.broadcastBossFog("expire", rl.Rectangle{})
+	}
 	if times <= 0 {
 		return
 	}
@@ -209,6 +298,11 @@ func (h *Host) applyBossDamage(playerID string, dmg float32, silent bool) {
 	}
 	if leftover, hpAfter, had := h.Skills.AbsorbShieldDamage(playerID, dmg); had {
 		h.broadcastShieldEvent(playerID, hpAfter)
+		// hpAfter zerado com `had` verdadeiro so pode ser ESTE golpe:
+		// AbsorbShieldDamage recusa escudo ja quebrado.
+		if hpAfter <= 0 {
+			h.burstBrokenShield(playerID)
+		}
 		if leftover <= 0 {
 			return
 		}
@@ -255,4 +349,41 @@ func (h *Host) livingBoss() (*entity.Enemy, bool) {
 func (h *Host) arenaBounds() rl.Rectangle {
 	b := h.WorldBounds
 	return rl.NewRectangle(0, 0, b.Width, b.Height)
+}
+
+// broadcastBossFog replica um evento de nevoa da chefe aos clientes. Mesmo
+// padrao de broadcastSentryOrb/broadcastCannonBall: so o "cast" carrega dado
+// (os limites), o "expire" e so o aviso.
+func (h *Host) broadcastBossFog(event string, bounds rl.Rectangle) {
+	payload := BossFogPayload{
+		EventType: event,
+		X:         int(bounds.X),
+		Y:         int(bounds.Y),
+		W:         bounds.Width,
+		H:         bounds.Height,
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("[Host] falha ao serializar evento de nevoa da chefe: %v", err)
+		return
+	}
+	h.broadcast(Message{Type: MsgBossFog, Payload: data})
+}
+
+// broadcastBossThorn replica a rajada de espinhos da chefe aos clientes: os
+// mesmos pontos que castThorns acabou de marcar no host, numa unica
+// mensagem — a foto tem que chegar inteira, ou a rajada nasceria espalhada
+// por varios quadros de rede no cliente.
+func (h *Host) broadcastBossThorn(centers []rl.Vector2) {
+	points := make([]BossThornPoint, len(centers))
+	for i, c := range centers {
+		points[i] = BossThornPoint{X: int(c.X), Y: int(c.Y)}
+	}
+	payload := BossThornPayload{Points: points}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("[Host] falha ao serializar evento de espinhos da chefe: %v", err)
+		return
+	}
+	h.broadcast(Message{Type: MsgBossThorn, Payload: data})
 }

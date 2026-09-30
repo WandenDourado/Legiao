@@ -18,37 +18,9 @@ func DrawJoystickVisual(ts TouchState, centerX, centerY, baseRadius, knobRadius 
 	}
 }
 
-// DrawAimJoystick renders the aim joystick (action button) with aim direction feedback.
-func DrawAimJoystick(aj AimJoystick, centerX, centerY, radius float32) {
-	center := rl.NewVector2(centerX, centerY)
-
-	if aj.IsActive {
-		// Aim mode: draw base at touch origin, direction line, and aim indicator
-		rl.DrawCircleV(aj.Origin, radius, rl.Fade(rl.Orange, 0.4))
-		rl.DrawCircleLinesV(aj.Origin, radius, rl.Orange)
-
-		// Direction line from origin to current finger position
-		rl.DrawLineV(aj.Origin, aj.Current, rl.Yellow)
-
-		// Aim indicator circle at finger position
-		indicatorRadius := radius * 0.4
-		rl.DrawCircleV(aj.Current, indicatorRadius, rl.Fade(rl.Red, 0.8))
-
-		// Small arrow showing aim direction
-		aimEnd := rl.Vector2Add(aj.Origin, rl.Vector2Scale(aj.AimDir, radius*1.5))
-		rl.DrawLineV(aj.Origin, aimEnd, rl.Red)
-	} else {
-		// Resting state: draw as a simple action button
-		color := rl.Fade(rl.Red, 0.7)
-		rl.DrawCircleV(center, radius, color)
-		rl.DrawCircleLinesV(center, radius, rl.White)
-
-		// Draw "FIRE" text
-		text := "FIRE"
-		textWidth := rl.MeasureText(text, 14)
-		rl.DrawText(text,
-			int32(center.X)-textWidth/2,
-			int32(center.Y)-7,
-			14, rl.White)
-	}
-}
+// DrawAimJoystick used to live here. The fire button is now drawn by
+// ui.DrawActionButton, together with the two ability buttons, because the
+// three are one cluster to the player and drawing them in two packages let
+// them drift apart. This package cannot import ui (ui imports this one), so
+// the renderer builds the ui.ActionButtonState from the AimJoystick's own
+// fields instead. See internal/ui/action_button.go.

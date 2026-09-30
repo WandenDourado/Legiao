@@ -6,24 +6,24 @@
       "trigger": "on_map_start",
       "lines": [
         {
-          "speaker": "Paladina",
-          "portrait": "paladina",
-          "text": "Ouvi relatos que essa vila vem enfrentando problemas com monstros."
+          "speaker": "",
+          "portrait": "",
+          "text": "Um grupo de aventureiros chega a um vilarejo para investigar um relato sobre atividades de monstros."
         },
         {
-          "speaker": "Mago",
-          "portrait": "mago",
-          "text": "Certamente isso deve ser trabalho da Senhora das Trevas. Sua influência vem se espalhando cada vez mais."
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Chegamos ao local. Os aldeões desta vila relataram ataques de monstros. Nosso objetivo é proteger o vilarejo e identificar a causa do problema."
         },
         {
           "speaker": "Sacerdotisa",
           "portrait": "sacerdotisa",
-          "text": "Pela glória dos deuses, precisamos proteger essa vila."
+          "text": "Sinto uma energia ruim se aproximando..."
         },
         {
           "speaker": "Paladina",
           "portrait": "paladina",
-          "text": "Devemos proteger essa vila. Investiguem cada perímetro e aniquilem qualquer monstro que aparecer em seu caminho."
+          "text": "Devemos proteger esta vila. Investiguem cada perímetro e aniquilem qualquer monstro que aparecer em seu caminho."
         }
       ]
     },
@@ -34,22 +34,22 @@
         {
           "speaker": "Arqueiro",
           "portrait": "arqueiro",
-          "text": "Esse foi o último."
+          "text": "Esse foi o último!"
         },
         {
           "speaker": "Necromante",
           "portrait": "necromante",
-          "text": "Sinto uma energia sombria vindo do Norte."
+          "text": "Sinto uma energia sombria se aproximando do Norte."
         },
         {
           "speaker": "Mago",
           "portrait": "mago",
-          "text": "Relatórios indicam que nessa direção tem maior atuação da Senhora das Trevas. Precisamos ter cuidado."
+          "text": "De acordo com o relatório, ao Norte existe uma fortaleza desativada, e o caminho até ela atualmente está repleto de monstros."
         },
         {
           "speaker": "Paladina",
           "portrait": "paladina",
-          "text": "Seguiremos para o Norte."
+          "text": "Se essa energia sombria for a causa desses ataques, devemos pôr um fim nisso. Seguiremos para o Norte."
         }
       ]
     }

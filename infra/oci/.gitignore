@@ -1,0 +1,8 @@
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log
+# Binario gerado de cmd/relay (GOOS=linux GOARCH=amd64 CGO_ENABLED=0)
+legiao-relay

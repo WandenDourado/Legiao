@@ -17,6 +17,7 @@ Keep this file short. Put package maps in `project_structure.md` and feature beh
 | `collision` | The single movement-vs-obstacle rule (footprint, sliding, detour) shared by every walking entity. |
 | `world` | World bounds derived from map data. |
 | `nav` | The route layer between deciding WHERE an agent goes and what a single step lets it do: a walkability mesh built from `collision.Solid`, A* + string-pulled paths, and a per-agent `Follower`. Pure — imports only `collision`, `world`, `rl.Vector2`; never `network`, `game` or `entity`. |
+| `settings` | Local per-machine preferences (Settings screen): the model, per-field clamp, and JSON persistence. Imports nothing else in this repo — every other package that needs a value imports `settings`, never the other way around. Never touches `network`. |
 
 ## Hard Rules
 
@@ -26,6 +27,16 @@ Keep this file short. Put package maps in `project_structure.md` and feature beh
 - Use `assets.Path()` for every `rl.Load*` path.
 - Use build tags for platform-specific behavior.
 - Use `world.Bounds` for world logic; never screen constants for map, camera, projectile, spawn, or collision bounds.
+
+## Pixels de interface
+
+Todo número fixo de interface em espaço de tela (tamanho base de fonte,
+margem, espessura, teto ou piso de painel) é pixel da tela NATIVA e passa por
+`ui.Px` — ou já entra por `ui.TextSize`/`FitTextSize`/`PixelScale`, que
+aplicam o mesmo fator. Sem isso, em 540p numa tela de 1080 o número ocupa o
+dobro da tela (Configurações > Gráficos > Resolução, 29/09/2026). Proporções
+da tela (`sh*0.08`) não precisam. Espaço de MUNDO (dentro da câmera) nunca
+passa por `Px`: a câmera já compensa.
 
 ## Entity/System Pattern
 

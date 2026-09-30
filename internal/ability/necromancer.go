@@ -32,7 +32,10 @@ func (GraveyardSkill) Cast(ctx *CastContext) {
 	ctx.Host.BroadcastSkillDir("graveyard", ctx.PlayerID, origin, dir)
 }
 
-func (GraveyardSkill) Draw(m *skill.Manager) { m.DrawGraveyards() }
+// Draw entrega SO a sobreposicao (maos e almas). O chao do cemiterio sai desta
+// fila e e desenhado antes dos corpos, como o selo do Mago — ver o cabecalho de
+// skill/graveyard_draw.go e a chamada a DrawGraveyardGrounds em game/renderer.go.
+func (GraveyardSkill) Draw(m *skill.Manager) { m.DrawGraveyardOverlays() }
 
 // --- Necromante R: Legião Espectral ---
 

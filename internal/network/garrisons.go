@@ -159,7 +159,7 @@ var world03Garrison = []GarrisonSquad{
 // mais dificil.
 //
 // O que ela NAO responde e o que vem de fora do raio, e e por isso que a
-// mudanca de verdade desta fase nao esta nesta tabela: sao as quatro gargulas
+// mudanca de verdade desta fase nao esta nesta tabela: sao as duas gargulas
 // de `sentries.go`, alcance 1900, em campo desde a chegada. A guarnicao aqui
 // sobe de 37 para 67 para o corredor nao ser atravessado em passo de caminhada
 // enquanto elas atiram, mas quem faz a fase doer sao elas.

@@ -135,8 +135,9 @@ func (ab *AttackButton) Draw() {
 // SkillTapMaxDuration mirrors the AimJoystick tap duration threshold.
 const SkillTapMaxDuration = 0.150
 
-// NoTouch mirrors input.NoTouch since this package cannot import input
-// (input imports the game package, which imports ui — would be a cycle).
+// NoTouch mirrors input.NoTouch as an int32. Not a cycle guard — this package
+// does import input, right above — just the typed spelling the touch IDs
+// need.
 const NoTouch = int32(-1)
 
 // SkillButton represents the on-screen "fireball" skill button (Android).
@@ -147,11 +148,14 @@ type SkillButton struct {
 	Position  rl.Vector2
 	Radius    float32
 	IsPressed bool
-	Color     rl.Color
-	// Label is drawn at the button center ("Q" for the primary skill, "R"
-	// for the ultimate). Accent tints the aim-mode feedback circle/line.
-	Label      string
-	Accent     rl.Color
+	// Label is the fallback drawn at the button centre when the icon file is
+	// missing ("Q" for the primary skill, "R" for the ultimate).
+	Label string
+	// Icon is the glyph the button actually shows. There is no per-button
+	// colour any more — see ui.ActionNeutral.
+	Icon ActionIcon
+	// Slot is which member of the cluster this is, for the shared aim lock.
+	Slot input.ActionSlot
 	// IsUltimate selects the ultimate slot geometry in Layout().
 	IsUltimate bool
 	screenH    float32 // cached screen height for the drag threshold
@@ -164,13 +168,13 @@ type SkillButton struct {
 	CooldownTotal float32
 
 	// Touch/aim state (Android only)
-	TouchID   int32
-	Origin    rl.Vector2
-	Current   rl.Vector2
-	IsActive  bool
+	TouchID    int32
+	Origin     rl.Vector2
+	Current    rl.Vector2
+	IsActive   bool
 	IsDragging bool
-	StartTime time.Time
-	SkillDir  rl.Vector2 // last configured cast direction (persists across taps)
+	StartTime  time.Time
+	SkillDir   rl.Vector2 // last configured cast direction (persists across taps)
 }
 
 // NewSkillButton creates an unpositioned skill button. Call Layout(sw, sh)
@@ -178,9 +182,9 @@ type SkillButton struct {
 // matches the drawn circle, even after rotation/resize.
 func NewSkillButton() *SkillButton {
 	return &SkillButton{
-		Color:    rl.Fade(rl.Orange, 0.7),
 		Label:    "Q",
-		Accent:   rl.Orange,
+		Icon:     IconSkill,
+		Slot:     input.SlotSkill,
 		TouchID:  NoTouch,
 		SkillDir: rl.NewVector2(0, 1), // default: cast down
 	}
@@ -191,9 +195,9 @@ func NewSkillButton() *SkillButton {
 // it (see input.ComputeAndroidControlGeom).
 func NewUltimateButton() *SkillButton {
 	return &SkillButton{
-		Color:      rl.Fade(rl.Gold, 0.75),
 		Label:      "R",
-		Accent:     rl.Gold,
+		Icon:       IconUltimate,
+		Slot:       input.SlotUltimate,
 		IsUltimate: true,
 		TouchID:    NoTouch,
 		SkillDir:   rl.NewVector2(0, 1), // default: cast down
@@ -221,7 +225,12 @@ func (sb *SkillButton) Layout(sw, sh float32) {
 // Touch-based; mirrors AimJoystick: drag aims, tap casts the saved direction.
 // The SkillDir is preserved across touches so a subsequent tap (no drag)
 // casts in the last aimed direction rather than a fresh default.
-func (sb *SkillButton) Update() bool {
+//
+// lock is the cluster's single-gesture rule: this button refuses a new touch
+// while another one is being aimed, and owns the gesture itself while it is.
+// Without it an aim drag that passed over this button armed it, and letting go
+// cast a spell the player never asked for. See input.ActionLock.
+func (sb *SkillButton) Update(lock *input.ActionLock) bool {
 	castNow := false
 
 	touchCount := rl.GetTouchPointCount()
@@ -230,7 +239,8 @@ func (sb *SkillButton) Update() bool {
 		touchPos := rl.GetTouchPosition(i)
 
 		// New touch inside the skill button — activate
-		if !sb.IsActive && rl.CheckCollisionPointCircle(touchPos, sb.Position, sb.Radius) {
+		if !sb.IsActive && rl.CheckCollisionPointCircle(touchPos, sb.Position, sb.Radius) &&
+			lock.Claim(sb.Slot) {
 			sb.TouchID = touchID
 			sb.Origin = touchPos
 			sb.Current = touchPos
@@ -278,43 +288,51 @@ func (sb *SkillButton) Update() bool {
 			sb.IsDragging = false
 			sb.IsPressed = false
 			sb.TouchID = NoTouch
+			lock.Release(sb.Slot)
 		}
 	}
 
 	return castNow
 }
 
-// Draw renders the skill button. When the player is aiming (dragging), it
-// shows a direction line and arrow so they can see where the projectile will
-// go, mirroring the attack button's aim feedback.
-func (sb *SkillButton) Draw() {
-	color := sb.Color
-	if sb.IsPressed {
-		color = rl.Fade(sb.Accent, 0.9)
-	}
-
+// Cancel drops an in-flight aim and frees the cluster, WITHOUT casting.
+//
+// For the frames the button stops being updated at all: a finished run, a body
+// frozen inside a portal, an ultimate that stopped being available mid-aim.
+// Release is normally detected by scanning touches, so a path that returns
+// before that scan would leave the button armed and the cluster locked.
+func (sb *SkillButton) Cancel(lock *input.ActionLock) {
 	if sb.IsActive {
-		// Aim mode: base at touch origin + direction line + arrow
-		rl.DrawCircleV(sb.Origin, sb.Radius, rl.Fade(sb.Accent, 0.4))
-		rl.DrawCircleLinesV(sb.Origin, sb.Radius, sb.Accent)
-		rl.DrawLineV(sb.Origin, sb.Current, rl.Yellow)
-		aimEnd := rl.Vector2Add(sb.Origin, rl.Vector2Scale(sb.SkillDir, sb.Radius*1.5))
-		rl.DrawLineV(sb.Origin, aimEnd, sb.Accent)
-	} else {
-		rl.DrawCircleV(sb.Position, sb.Radius, color)
-		rl.DrawCircleLinesV(sb.Position, sb.Radius, rl.White)
+		lock.Release(sb.Slot)
 	}
+	sb.IsActive = false
+	sb.IsDragging = false
+	sb.IsPressed = false
+	sb.TouchID = NoTouch
+}
 
-	text := sb.Label
-	textWidth := rl.MeasureText(text, 16)
-	rl.DrawText(text,
-		int32(sb.Position.X)-textWidth/2,
-		int32(sb.Position.Y)-8,
-		16, rl.White)
-
-	// The recharge counter goes over the button itself: on a phone there is
-	// no room for a separate bar, and the finger is already there.
-	DrawCooldownOverlay(sb.Position, sb.Radius, sb.Cooldown, sb.CooldownTotal)
+// Draw renders the skill button through the cluster's shared appearance.
+// locked comes from the aim lock: true means another button owns the gesture
+// and this one is not answering.
+//
+// The button no longer moves to the touch origin while aiming. It used to, and
+// with the buttons stacked in a column that was harmless; in a cluster a
+// button that jumps under the finger lands on top of its neighbours and the
+// player loses track of what is where. The drag line and the ground chevron
+// (ui.AimIndicator) carry the direction instead.
+func (sb *SkillButton) Draw(locked bool) {
+	DrawActionButton(ActionButtonState{
+		Center:        sb.Position,
+		Radius:        sb.Radius,
+		Icon:          sb.Icon,
+		Label:         sb.Label,
+		Aiming:        sb.IsActive,
+		Origin:        sb.Origin,
+		Current:       sb.Current,
+		Locked:        locked,
+		Cooldown:      sb.Cooldown,
+		CooldownTotal: sb.CooldownTotal,
+	})
 }
 
 // SetCooldown feeds the button the authoritative recharge state for the frame.
@@ -323,19 +341,37 @@ func (sb *SkillButton) SetCooldown(remaining, total float32) {
 	sb.CooldownTotal = total
 }
 
+// hudScale is the accessibility multiplier from Configuracoes > Interface >
+// Escala do HUD e do Texto (0.8..settings.HUDScaleMax).
+//
+// Era lido SO aqui, e essa era a queixa: o jogador aumentava a escala e a
+// barra de vida crescia sozinha enquanto o resto do texto continuava igual.
+// Desde 20/09/2026 ele e o multiplicador de todo o texto do HUD, atraves de
+// TextSize/FitTextSize (text.go).
+var hudScale float32 = 1.0
+
+// SetHUDScale applies the HUD scale preference. Expects an already-clamped
+// value (settings.Settings.HUDScale, 0.8..settings.HUDScaleMax). E lido por
+// todo o texto do HUD atraves de text.go, e nao so pela barra de vida.
+func SetHUDScale(v float32) { hudScale = v }
+
 // DrawHealthBar draws the player's health bar in the top-left corner.
 // All dimensions are derived from the current screen size so the bar
-// scales correctly on any resolution (fullscreen, windowed, etc.).
+// scales correctly on any resolution (fullscreen, windowed, etc.), times
+// the player's chosen HUD scale.
 func DrawHealthBar(health, maxHealth float32) {
 	sw := float32(rl.GetScreenWidth())
-	barWidth := sw * 0.20
-	barHeight := float32(20)
-	x := float32(10)
-	y := float32(60)
-	fontSize := int32(sw * 0.015)
-	if fontSize < 14 {
-		fontSize = 14
-	}
+	barWidth := sw * 0.20 * hudScale
+	// Os numeros fixos sao pixels da tela nativa (Px, text.go): em 540p a
+	// barra nao pode ficar com o dobro da altura relativa.
+	barHeight := Px(20) * hudScale
+	x := Px(10)
+	y := Px(60)
+	// 0.015 -> 0.019 e piso 14 -> MinTextSize (18), em 20/09/2026: numa janela
+	// 1280x720 o "HP/HP" saia a 19 px, e era um dos textos que os testadores
+	// citaram. A razao ja carrega hudScale, entao aqui e FitTextSize (so o
+	// piso) e nao TextSize — ver text.go.
+	fontSize := FitTextSize(sw * 0.019 * hudScale)
 
 	// Background
 	rl.DrawRectangle(int32(x), int32(y), int32(barWidth), int32(barHeight), rl.Fade(rl.DarkGray, 0.8))
@@ -356,9 +392,9 @@ func DrawHealthBar(health, maxHealth float32) {
 	rl.DrawRectangle(int32(x), int32(y), fillWidth, int32(barHeight), healthColor)
 
 	// Border
-	rl.DrawRectangleLinesEx(rl.NewRectangle(float32(x), float32(y), barWidth, barHeight), 2, rl.White)
+	rl.DrawRectangleLinesEx(rl.NewRectangle(float32(x), float32(y), barWidth, barHeight), max(Px(2), 1), rl.White)
 
 	// Text
 	healthText := fmt.Sprintf("%.0f/%.0f", health, maxHealth)
-	rl.DrawText(healthText, int32(x)+int32(barWidth)+10, int32(y), fontSize, rl.White)
+	rl.DrawText(healthText, int32(x+barWidth+Px(10)), int32(y), fontSize, rl.White)
 }

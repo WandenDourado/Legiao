@@ -40,6 +40,9 @@ func RequestLocalReset(spawn rl.Vector2) {
 	// Aqui, e nao em applyStageReset, pelo mesmo motivo que stageGeneration
 	// esta aqui: este e o unico ponto por onde os DOIS papeis passam.
 	ResetInterpolation()
+	// E o folego do renascer (local_buffs.go) tambem nao atravessa o
+	// reinicio: a tentativa nova comeca no passo normal nos dois papeis.
+	ClearLocalRespawnBoost()
 }
 
 // StageGeneration is how many times the stage has been restarted. State that

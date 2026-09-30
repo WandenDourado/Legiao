@@ -166,3 +166,26 @@ func TestClimaxUsesTheStrongestEnemy(t *testing.T) {
 		}
 	}
 }
+
+// TestClimaxOrcIsNotAMinorityAgainstSlime: um grau mais firme do que
+// TestClimaxUsesTheStrongestEnemy. Nao basta o cerco TER orc — o slime e
+// exatamente o que as ultimates da campanha (Legiao Espectral, Area Angelical)
+// apagam de graca, entao slime em maioria alonga a horda sem pressionar: e o
+// corpo que faz a fase parecer dificil no HUD e facil na tela. Esta propriedade
+// impede a proxima afinacao de "resolver dificuldade" recolocando massa barata
+// no cerco em vez de subir o orc.
+func TestClimaxOrcIsNotAMinorityAgainstSlime(t *testing.T) {
+	for mapPath, defs := range climaxRuns {
+		for _, def := range defs {
+			if !def.Endless {
+				continue
+			}
+			orc := def.Composition[entity.EnemyTypeGarrison]
+			slime := def.Composition[entity.EnemyTypeBasic]
+			if orc < slime {
+				t.Errorf("%s (%s): o cerco tem %d orc contra %d slime; o orc "+
+					"nao pode ser minoria diante do slime", mapPath, def.Name, orc, slime)
+			}
+		}
+	}
+}

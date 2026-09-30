@@ -23,10 +23,21 @@ func (MeteorRainSkill) Cooldown() float32 { return skill.MeteorRainCooldown }
 
 func (MeteorRainSkill) Cast(ctx *CastContext) {
 	skill.StartMeteorRain(ctx.Host.SkillManager(), ctx.PlayerID, rl.Vector2{})
-	// No activation broadcast needed: every meteor is replicated individually
-	// as it spawns, which is what clients actually render.
+	// O SELO E A UNICA COISA DESTA SUPREMA QUE PRECISA DE DONO NO FIO.
+	//
+	// Os meteoros continuam sem: cada um viaja como um alvo no mapa e ninguem
+	// precisa saber de quem ele e para desenha-lo cair. O pentagrama e o
+	// oposto — ele so quer dizer alguma coisa se estiver aos pes de UM
+	// jogador —, e por isso ele viaja com o ownerID, uma vez, no lancamento.
+	// Depois disso os dois lados o envelhecem pelo mesmo relogio.
+	skill.ActivateMeteorSigil(ctx.Host.SkillManager(), ctx.PlayerID, ctx.Position)
+	ctx.Host.BroadcastSkill("meteor_sigil", ctx.PlayerID, ctx.Position)
 }
 
+// So os meteoros. O SELO NAO E DESENHADO AQUI: `ability.DrawAll` roda depois
+// dos corpos, e uma estrela aditiva por cima do mago lavava o rosto e a roupa
+// dele (relato do Gui, 10/09/2026). Ele e decalque de chao, entao vai antes
+// dos corpos, junto com o portal — ver `DrawMeteorSigils` em game/renderer.go.
 func (MeteorRainSkill) Draw(m *skill.Manager) { m.DrawMeteors() }
 
 // --- Sacerdotisa: Área Angelical ---

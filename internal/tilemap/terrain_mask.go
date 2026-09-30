@@ -136,3 +136,34 @@ func cornerMask(layer Layer, x, y, material int) []float32 {
 		linked(layer, x, y, -1, 1, material),
 	}
 }
+
+// neighbourOffsets sao os oito vizinhos de uma celula, na mesma ordem em que
+// edgeMask e cornerMask os consultam (N, L, S, O, depois NO, NE, SE, SO).
+var neighbourOffsets = [8][2]int{
+	{0, -1}, {1, 0}, {0, 1}, {-1, 0},
+	{-1, -1}, {1, -1}, {1, 1}, {-1, 1},
+}
+
+// fullyLinked diz se os OITO vizinhos desta celula tambem carregam material.
+//
+// Quando carregam, esta celula nao tem borda nenhuma para desbotar: `side()`
+// devolve 1 nos quatro lados (o `mix(..., 1.0, linked)`), nenhum dos quatro
+// termos de canto entra (todos exigem um canto DESLIGADO), e o dither e pesado
+// por `mask*(1-mask)`, que zera em mask = 1. A mascara sai 1,0 EXATA.
+//
+// Como as texturas de material nao tem canal alfa (sao RGB: o alfa da amostra e
+// 1,0), o quad desta celula fica OPACO — e um quad opaco esconde por completo
+// tudo que foi desenhado sob ele. Ver `TerrainRenderer.hidden`, que e a unica
+// coisa que usa isto e a razao de existir.
+//
+// Fora do mapa conta como ligado, pelo mesmo motivo que em `linked`: nao ha
+// chao la fora para dissolver, e desbotar na borda do mundo so exporia a grama
+// base como uma orla.
+func fullyLinked(layer Layer, x, y, material int) bool {
+	for _, offset := range neighbourOffsets {
+		if linked(layer, x, y, offset[0], offset[1], material) == 0 {
+			return false
+		}
+	}
+	return true
+}

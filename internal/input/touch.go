@@ -1,6 +1,7 @@
 package input
 
 import (
+	"math"
 	"time"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -9,9 +10,9 @@ import (
 const NoTouch = -1
 
 // AndroidControlGeom is the single source of truth for on-screen control
-// geometry on Android. Using one function for the attack hit-rect, the skill
+// geometry on Android. Using one function for the attack hit-area, the skill
 // button layout, and the drawn visuals guarantees the touch hit-areas always
-// match what the player sees and that the two buttons never overlap.
+// match what the player sees and that the buttons never overlap.
 type AndroidControlGeom struct {
 	AttackCenterX float32
 	AttackCenterY float32
@@ -19,45 +20,112 @@ type AndroidControlGeom struct {
 	SkillCenterX  float32
 	SkillCenterY  float32
 	SkillRadius   float32
-	// Ultimate button: sits above the skill button, never overlapping it.
+	// Ultimate button: another point on the same orbit as the skill button.
 	UltCenterX float32
 	UltCenterY float32
 	UltRadius  float32
 }
 
+// The action buttons form a CLUSTER: the basic attack is the big one in the
+// middle and the abilities orbit it, instead of the old vertical column of
+// three same-sized circles.
+//
+// The column was reachable but unreadable — three identical circles stacked in
+// a line say nothing about which one is the main action, and the thumb had to
+// travel the full height of the stack to reach the ultimate. Orbiting puts the
+// attack under the resting thumb and both abilities one short sweep away, and
+// the size difference alone says which button is the one pressed constantly.
+const (
+	// attackRadiusFrac sizes the centre button against screen height. Larger
+	// than the old 0.06 because it is now the anchor of the cluster and the
+	// only button pressed dozens of times a minute.
+	attackRadiusFrac = 0.085
+	// skillRadiusRatio and orbitGapRatio are expressed against the attack
+	// radius, not against the screen, so the whole cluster scales as one
+	// object and the gaps never change shape between devices.
+	skillRadiusRatio = 0.62
+	orbitGapRatio    = 0.30
+	// skillAngleQ and skillAngleR place the two abilities on the orbit, in
+	// degrees, screen space (0 = right, 90 = down, so 200 and 252 are
+	// left-and-up and up-and-slightly-left). Both sit ABOVE the attack
+	// button, on the side the right thumb sweeps towards: below or to the
+	// right of it is either off-screen or under the palm.
+	skillAngleQ = 200.0
+	skillAngleR = 252.0
+)
+
 // ComputeAndroidControlGeom derives all control positions from the current
-// screen size. The skill button sits above the attack button with a fixed gap
-// so its circle never intersects the attack hit-rect, even on large screens.
+// screen size.
+//
+// The orbit radius is attack + skill + gap, so the ability circles can never
+// intersect the attack circle whatever the screen. The 52 degrees between the
+// two abilities is what keeps THEM apart: at this orbit radius that is a chord
+// of ~1.68 attack-radii between centres, against the ~1.24 the two circles
+// occupy.
 func ComputeAndroidControlGeom(sw, sh float32) AndroidControlGeom {
-	attackR := sh * 0.06
-	attackCX := sw * 0.85
+	// actionButtonScale (0.8..1.3) e leftHanded vem da tela de Configuracoes
+	// (control_prefs.go); multiplicam a geometria base, nunca a substituem.
+	attackR := sh * attackRadiusFrac * actionButtonScale
+	attackCX := sw * 0.855
+	if leftHanded {
+		attackCX = sw * (1 - 0.855)
+	}
 	attackCY := sh * 0.80
-	skillR := attackR
-	skillCX := attackCX
-	// Place the skill button above the attack button by 3 radii + a gap so
-	// the two circles never overlap (previously the gap was only 2r-25px,
-	// which overlapped on tall screens and made the fire button "steal" the
-	// skill touch).
-	skillCY := attackCY - 3*attackR - 20
-	// The ultimate button stacks above the skill button with the same gap
-	// rule so the three circles form a clean, non-overlapping column.
-	ultR := attackR
-	ultCY := skillCY - 3*attackR - 20
+	skillR := attackR * skillRadiusRatio
+	orbitR := attackR + skillR + attackR*orbitGapRatio
+
+	// Canhoto espelha os angulos da orbita tambem (180-graus), nao so o
+	// centro do cluster: sem isso as habilidades continuariam orbitando
+	// para o lado ERRADO em relacao ao novo centro, em vez de repetir, do
+	// outro lado da tela, o mesmo gesto de varredura do polegar.
+	qAngle, rAngle := float32(skillAngleQ), float32(skillAngleR)
+	if leftHanded {
+		qAngle, rAngle = 180-qAngle, 180-rAngle
+	}
+	qx, qy := orbitPoint(attackCX, attackCY, orbitR, qAngle)
+	rx, ry := orbitPoint(attackCX, attackCY, orbitR, rAngle)
+
 	return AndroidControlGeom{
 		AttackCenterX: attackCX,
 		AttackCenterY: attackCY,
 		AttackRadius:  attackR,
-		SkillCenterX:  skillCX,
-		SkillCenterY:  skillCY,
+		SkillCenterX:  qx,
+		SkillCenterY:  qy,
 		SkillRadius:   skillR,
-		UltCenterX:    attackCX,
-		UltCenterY:    ultCY,
-		UltRadius:     ultR,
+		UltCenterX:    rx,
+		UltCenterY:    ry,
+		UltRadius:     skillR,
 	}
 }
 
-// AttackRect returns the fire-button hit-rect (a square matching the drawn
-// circle's bounding box) for touch activation.
+// orbitPoint is a point on the cluster's orbit, angle in degrees.
+func orbitPoint(cx, cy, r, angleDeg float32) (float32, float32) {
+	rad := float64(angleDeg) * math.Pi / 180
+	return cx + r*float32(math.Cos(rad)), cy + r*float32(math.Sin(rad))
+}
+
+// AttackCenter is the fire button's centre as a vector.
+func (g AndroidControlGeom) AttackCenter() rl.Vector2 {
+	return rl.NewVector2(g.AttackCenterX, g.AttackCenterY)
+}
+
+// SkillCenter and UltCenter are the two ability buttons' centres.
+func (g AndroidControlGeom) SkillCenter() rl.Vector2 {
+	return rl.NewVector2(g.SkillCenterX, g.SkillCenterY)
+}
+
+// UltCenter is the ultimate button's centre.
+func (g AndroidControlGeom) UltCenter() rl.Vector2 {
+	return rl.NewVector2(g.UltCenterX, g.UltCenterY)
+}
+
+// AttackRect is the fire button's bounding box.
+//
+// It is NOT the hit-area any more — the buttons sit on an orbit now, and a
+// square's corners reach 1.41 radii out, towards circles whose inner edge is
+// at 1.30. Everything that decides "did the player press fire" tests the
+// CIRCLE (see AimJoystick.Update). This box survives only for TouchState,
+// whose attack tracking is a leftover that nothing downstream reads.
 func (g AndroidControlGeom) AttackRect() rl.Rectangle {
 	return rl.NewRectangle(
 		g.AttackCenterX-g.AttackRadius,
@@ -104,8 +172,8 @@ func SkillTapMaxDrag(sh float32) float32 {
 type TouchState struct {
 	JoystickTouchID int32
 	AttackTouchID   int32
-	JoystickOrigin   rl.Vector2
-	JoystickCurrent  rl.Vector2
+	JoystickOrigin  rl.Vector2
+	JoystickCurrent rl.Vector2
 	IsAttacking     bool
 	MaxRadius       float32
 }
@@ -125,32 +193,42 @@ func NewTouchState() TouchState {
 // Quick tap = fire in current facing direction.
 // Press + drag = aim joystick; release = fire in aimed direction.
 type AimJoystick struct {
-	TouchID   int32
-	Origin    rl.Vector2
-	Current   rl.Vector2
-	IsActive  bool
+	TouchID    int32
+	Origin     rl.Vector2
+	Current    rl.Vector2
+	IsActive   bool
 	IsDragging bool
-	StartTime time.Time
-	AimDir    rl.Vector2
+	StartTime  time.Time
+	AimDir     rl.Vector2
 }
 
 // NewAimJoystick creates a new AimJoystick with default values.
 func NewAimJoystick() AimJoystick {
 	return AimJoystick{
-		TouchID:  NoTouch,
-		AimDir:   rl.NewVector2(0, 1), // default: aim down
+		TouchID: NoTouch,
+		AimDir:  rl.NewVector2(0, 1), // default: aim down
 	}
 }
 
 // Update processes touch input for the aim joystick.
 // Returns true if the player should fire (on release).
-// attackRect defines the zone where the aim joystick can be activated.
+//
+// geom carries the whole control cluster: the fire button is hit-tested as a
+// CIRCLE (its drawn shape), because with the abilities orbiting it a square's
+// corners would reach past their inner edge and the fire button would steal
+// touches meant for them.
+//
+// lock is the cluster's single-gesture rule: this button refuses a new touch
+// while an ability owns the gesture, and owns it itself while aiming. See
+// ActionLock.
+//
 // sw/sh are the current screen dimensions, used to derive a screen-relative
 // drag threshold so a quick tap is not mistaken for an aim-drag on high-DPI
 // screens.
-func (aj *AimJoystick) Update(attackRect rl.Rectangle, ts TouchState, skillCenter rl.Vector2, skillRadius float32, sw, sh float32) bool {
+func (aj *AimJoystick) Update(geom AndroidControlGeom, ts TouchState, lock *ActionLock, sw, sh float32) bool {
 	fireNow := false
 	maxDrag := AimTapMaxDrag(sh)
+	center := geom.AttackCenter()
 
 	// Scan all active touches to find one in the attack zone
 	touchCount := rl.GetTouchPointCount()
@@ -158,16 +236,11 @@ func (aj *AimJoystick) Update(attackRect rl.Rectangle, ts TouchState, skillCente
 		touchID := rl.GetTouchPointId(i)
 		touchPos := rl.GetTouchPosition(i)
 
-		// New touch in attack zone — activate aim joystick.
-		// The skill button sits above the fire button; if a touch lands in
-		// both the attack rect and the skill circle, the skill button owns
-		// it (checked first via the skillCenter exclusion below) so the fire
-		// button never "steals" the skill touch.
-		if !aj.IsActive && rl.CheckCollisionPointRec(touchPos, attackRect) {
-			// Only claim this touch if the movement joystick doesn't own it
-			// and it is not inside the skill button circle.
-			if ts.JoystickTouchID != touchID &&
-				!rl.CheckCollisionPointCircle(touchPos, skillCenter, skillRadius) {
+		// New touch on the fire button — activate the aim joystick, unless
+		// the movement joystick already owns this touch or an ability is
+		// mid-aim.
+		if !aj.IsActive && rl.CheckCollisionPointCircle(touchPos, center, geom.AttackRadius) {
+			if ts.JoystickTouchID != touchID && lock.Claim(SlotAttack) {
 				aj.TouchID = touchID
 				aj.Origin = touchPos
 				aj.Current = touchPos
@@ -230,10 +303,26 @@ func (aj *AimJoystick) Update(attackRect rl.Rectangle, ts TouchState, skillCente
 			aj.IsActive = false
 			aj.IsDragging = false
 			aj.TouchID = NoTouch
+			lock.Release(SlotAttack)
 		}
 	}
 
 	return fireNow
+}
+
+// Cancel drops an in-flight aim and frees the cluster, WITHOUT firing.
+//
+// For the frames the button stops being updated at all: a finished run, a body
+// frozen inside a portal, a switch back to desktop controls. Release is
+// normally detected by scanning touches, so a path that returns before that
+// scan would leave the joystick armed and the cluster locked.
+func (aj *AimJoystick) Cancel(lock *ActionLock) {
+	if aj.IsActive {
+		lock.Release(SlotAttack)
+	}
+	aj.IsActive = false
+	aj.IsDragging = false
+	aj.TouchID = NoTouch
 }
 
 // Update processes all active touches and updates the state.

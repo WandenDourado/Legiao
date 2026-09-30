@@ -7,7 +7,7 @@ If the source already has meaningful transparency and no magenta background,
 it is passed through unchanged.
 
 Usage:
-  python key_matte.py assets/tilesets/village_buildings_source.png --output assets/tilesets/village_buildings.png
+  python key_matte.py art/source/tilesets/village_buildings_source.png --output assets/tilesets/village_buildings.png
   python key_matte.py source.png --output atlas.png --tolerance 90 --despill 2
 """
 import argparse

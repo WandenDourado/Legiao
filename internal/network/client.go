@@ -25,6 +25,10 @@ type Client struct {
 	conn   net.Conn
 	writer *bufio.Writer
 	reader *bufio.Reader
+	// inflatePending: drainStaleSnapshots leu o marcador MsgCompress e parou
+	// ali; readLoop troca para o leitor deflate antes da proxima linha. So a
+	// goroutine de leitura toca nele.
+	inflatePending bool
 }
 
 // clientIdentity recompoe os campos que o host para de mandar depois do
@@ -36,8 +40,17 @@ type Client struct {
 var clientIdentity = newIdentityCache()
 
 // ConnectClient connects to a host at the given address (ip:port).
+//
+// COM PRAZO, e o prazo importa mais do que parece: uma porta FECHADA responde
+// na hora (RST), mas uma porta bloqueada por firewall de ENTRADA simplesmente
+// descarta o SYN. Sem prazo, o `net.Dial` nesse caso ficava pendurado o tempo
+// limite do sistema operacional — uns dois minutos no Android — e durante ele
+// a maquina desenhava um jogo de papel cliente sem conexao nenhuma
+// (client_connect.go explica o resto do sintoma). O mesmo dialTimeout do
+// caminho de reconexao: a rede e a mesma, e um host em LAN completa o aperto
+// de mao em milissegundos ou nao completa.
 func ConnectClient(addr string) (*Client, error) {
-	conn, err := net.Dial("tcp", addr)
+	conn, err := dialGame(addr, dialTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -46,6 +59,10 @@ func ConnectClient(addr string) (*Client, error) {
 	// Starts the silence clock fresh for THIS connection, not whenever a
 	// previous session's last message happened to arrive (client_liveness.go).
 	resetLiveness()
+	// E a primeira geracao de fase que este processo vai ver ainda nao tem
+	// nada para ser comparada contra — ver a nota em client_stage_reconcile.go
+	// sobre por que uma RECONEXAO (rejoin, reconnect.go) nao faz o mesmo.
+	resetStageReconcileBaseline()
 	go c.readLoop(conn)
 	return c, nil
 }
@@ -82,9 +99,17 @@ func (c *Client) readLoop(conn net.Conn) {
 		if !ok {
 			continue
 		}
+		if msg.Type == MsgCompress { // daqui em diante o fluxo e deflate
+			reader = c.startInflate(reader)
+			continue
+		}
 		// Coalesce whatever snapshot backlog is already sitting in the
 		// buffer before handling — see client_backlog.go.
 		c.handleMessage(c.drainStaleSnapshots(msg))
+		if c.inflatePending { // o marcador apareceu durante a drenagem
+			c.inflatePending = false
+			reader = c.startInflate(reader)
+		}
 	}
 }
 
@@ -113,7 +138,10 @@ func (c *Client) handleMessage(msg Message) {
 		// Guarda o instante para a interpolacao. Passa nil de inimigos: este
 		// snapshot nao fala deles, e sobrescrever com vazio faria a horda
 		// piscar entre as duas mensagens.
-		recordSnapshot(snap, nil)
+		recordSnapshot(snap, nil, state.HostT)
+		// Se um MsgReset ou um MsgGameOver ficou pelo caminho, este snapshot
+		// e quem corrige — ver client_stage_reconcile.go.
+		c.reconcileStageState(state, snap)
 
 	case MsgEnemyUpdate:
 		var enemyUpdate EnemyUpdatePayload
@@ -132,10 +160,18 @@ func (c *Client) handleMessage(msg Message) {
 		RemoteEnemies = snap
 		RemoteEnemiesMutex.Unlock()
 		SetWaveState(enemyUpdate.Wave)
-		recordSnapshot(nil, snap)
+		applyBossState(enemyUpdate.Boss)
+		setSentriesAwake(enemyUpdate.SentriesAwake)
+		recordSnapshot(nil, snap, enemyUpdate.HostT)
 
 	case MsgProjectileUpdate:
 		c.handleProjectileUpdate(msg.Payload)
+
+	case MsgPong:
+		handlePong(msg.Payload)
+
+	case MsgJoinRejected:
+		handleJoinRejected(msg.Payload)
 
 	case MsgCombatEvent:
 		var combat CombatEventPayload
@@ -363,6 +399,11 @@ func (c *Client) handleMessage(msg Message) {
 				rl.NewVector2(ue.DirX, ue.DirY))
 		case "divine_avatar":
 			skill.ActivateAvatar(ClientSkills, ue.OwnerID, pos)
+		case "meteor_sigil":
+			// O pentagrama do Mago. Chega UMA vez, no lancamento, e daqui em
+			// diante envelhece sozinho no relogio do cliente — ao contrario
+			// dos meteoros acima, que chegam um por um.
+			skill.ActivateMeteorSigil(ClientSkills, ue.OwnerID, pos)
 		case "graveyard":
 			skill.SpawnGraveyard(ClientSkills, ue.OwnerID, pos,
 				rl.NewVector2(ue.DirX, ue.DirY))
@@ -382,6 +423,9 @@ func (c *Client) handleMessage(msg Message) {
 			// Mesma ideia: o avatar do cliente normalmente expira sozinho
 			// pelo tempo dele (ClientSkills.UpdateAvatars); ClearOwner cobre
 			// o encerramento antecipado por uma tomada de posse.
+			ClientSkills.ClearOwner(ue.OwnerID)
+		case "meteor_sigil_end":
+			// E o selo da chuva, pela mesma razao das duas linhas acima.
 			ClientSkills.ClearOwner(ue.OwnerID)
 		}
 
@@ -417,10 +461,10 @@ func (c *Client) handleMessage(msg Message) {
 			ClientSkills = skill.NewManager()
 		}
 		center := rl.NewVector2(float32(sp.X), float32(sp.Y))
-		// One sanctuary per caster (owner == id). Skip if already present.
-		if _, ok := ClientSkills.Sanctuaries[sp.SanctuaryID]; ok {
-			return
-		}
+		// Uma aura por conjuradora: SpawnSanctuary RENOVA a que ja existe em
+		// vez de empilhar uma segunda, entao o relancamento reinicia o
+		// relogio no cliente como reiniciou no host. Ler o mapa direto daqui
+		// (sem o mutex do Manager) era o que este ponto fazia antes.
 		skill.SpawnSanctuary(ClientSkills, sp.OwnerID, center)
 
 	case MsgSentryOrb:
@@ -472,6 +516,49 @@ func (c *Client) handleMessage(msg Message) {
 		case "expire":
 			skill.RemoveCannonBall(false, cb.BallID, false)
 		}
+
+	case MsgCannonState:
+		// A vida dos canhoes mudou: a barra encolhe e, no zero, a decoracao do
+		// posto passa a desenhar em ruinas. So leitura — a arma sempre foi do
+		// host, e o cliente nunca a simulou.
+		var cs CannonStatePayload
+		if err := json.Unmarshal(msg.Payload, &cs); err != nil {
+			log.Printf("client failed to unmarshal cannon state: %v", err)
+			return
+		}
+		applyCannonState(cs.Posts)
+
+	case MsgBossFog:
+		var bf BossFogPayload
+		if err := json.Unmarshal(msg.Payload, &bf); err != nil {
+			log.Printf("client failed to unmarshal boss fog: %v", err)
+			return
+		}
+		if ClientSkills == nil {
+			ClientSkills = skill.NewManager()
+		}
+		switch bf.EventType {
+		case "cast":
+			bounds := rl.NewRectangle(float32(bf.X), float32(bf.Y), bf.W, bf.H)
+			skill.ActivateDarkFog(ClientSkills, bounds)
+		case "expire":
+			skill.ExpireFog(ClientSkills)
+		}
+
+	case MsgBossThorn:
+		var bt BossThornPayload
+		if err := json.Unmarshal(msg.Payload, &bt); err != nil {
+			log.Printf("client failed to unmarshal boss thorn: %v", err)
+			return
+		}
+		if ClientSkills == nil {
+			ClientSkills = skill.NewManager()
+		}
+		centers := make([]rl.Vector2, len(bt.Points))
+		for i, p := range bt.Points {
+			centers[i] = rl.NewVector2(float32(p.X), float32(p.Y))
+		}
+		skill.SpawnThorns(ClientSkills, centers)
 
 	default:
 		log.Printf("[Client] Received message type: %s", msg.Type)

@@ -19,23 +19,30 @@ func loadCharacterPreviews(characters []entity.CharacterDef) []characterPreview 
 		if isReference {
 			path = character.ReferenceImagePath
 		}
+		tex := rl.LoadTexture(assets.Path(path))
+		// A arte entra com 1536 px de altura e e desenhada com uns 340 no
+		// card: uma reducao de ~4,5x. Sem filtro o raylib amostra por vizinho
+		// mais proximo e o card serrilha e "chia" ao redimensionar a janela —
+		// era esse o cansaco visual, nao a conta de escala, que sempre
+		// preservou a proporcao.
+		rl.SetTextureFilter(tex, rl.FilterBilinear)
 		previews[i] = characterPreview{
-			texture:     rl.LoadTexture(assets.Path(path)),
+			texture:     tex,
 			isReference: isReference,
 		}
 	}
 	return previews
 }
 
-func drawCharacterPreview(preview characterPreview, def entity.CharacterDef, centerX, topY float32) rl.Rectangle {
+func drawCharacterPreview(preview characterPreview, def entity.CharacterDef, centerX, topY, maxWidth, maxHeight float32) rl.Rectangle {
 	source := rl.NewRectangle(0, 0, float32(preview.texture.Width), float32(preview.texture.Height))
 	if !preview.isReference {
 		source.Width = float32(def.FrameWidth)
 		source.Height = float32(def.FrameHeight)
 	}
 
-	scale := float32(320) / source.Width
-	if heightScale := float32(360) / source.Height; heightScale < scale {
+	scale := maxWidth / source.Width
+	if heightScale := maxHeight / source.Height; heightScale < scale {
 		scale = heightScale
 	}
 	destination := rl.NewRectangle(

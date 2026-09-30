@@ -50,9 +50,27 @@ var world03Climax = []WaveDef{
 		// porque e a criatura mais forte que existe, e lobo para o cerco ter
 		// velocidade — so orc a 130 de velocidade daria ao grupo espaco para
 		// circular indefinidamente, e circular nao pode ser uma saida.
+		//
+		// AFINACAO DE DIFICULDADE (27/08/2026): 8 orc + 8 lobo, teto 18 e leva
+		// de 5 a cada 1,0 s NAO derrubava o grupo de cinco. Eles limpavam a
+		// reposicao inteira e ficavam ali, acima dos 30% de vida, com a
+		// emboscada `Endless` girando para sempre — ou seja, a cena da
+		// Sacerdotisa nunca abria e a fase nao terminava. E o MESMO defeito
+		// que o climax do mapa 4 ja teve (ver world04Climax), e a correcao
+		// segue a mesma ordem de diais: teto primeiro, composicao depois,
+		// cadencia por ultimo.
+		//
+		//   - O orc dobra (8 -> 16). Aqui o grupo tem UMA suprema, a Legiao
+		//     Espectral, e o orc e justamente o que ela nao compra (cinco
+		//     limpam a Legiao; entity/orc_legion_test.go). Ele e o que continua
+		//     de pe depois do lancamento.
+		//   - O lobo sobe menos (8 -> 12): ele existe para o cerco ter
+		//     velocidade, nao para ser a massa. A 240 ele passa o jogador
+		//     (200), e sem matilha um grupo cercado so por orc lento circula
+		//     indefinidamente — circular nao pode ser uma saida.
 		Composition: map[entity.EnemyType]int{
-			entity.EnemyTypeGarrison: 8,
-			entity.EnemyTypeFast:     8,
+			entity.EnemyTypeGarrison: 16,
+			entity.EnemyTypeFast:     12,
 		},
 		// Nao para ate a Sacerdotisa erguer o altar.
 		Endless: true,
@@ -70,13 +88,20 @@ var world03Climax = []WaveDef{
 		// que resolve isso sem precisar de mais corpos por quadro: os trinta
 		// espectros nao ENCERRAM a emboscada, so compram sessenta segundos.
 		// Passados eles a pressao volta inteira, e o grupo cai.
-		MaxConcurrent: 18,
-		// Uma leva a cada 1.0 s, cinco por leva. Eram 2 s e tres, e em jogo o
-		// cerco chegava devagar demais para parecer emboscada: o grupo tinha
-		// tempo de matar cada leva antes da seguinte, e a pressao — que e o que
-		// leva o grupo aos 25% de vida e abre a cena — nunca se acumulava.
-		SpawnInterval: 1.0,
-		BatchSize:     5,
+		//
+		// 18 -> 28 (27/08/2026): o teto e o dial da DIFICULDADE, e a
+		// composicao sozinha so decide quanto tempo a horda dura. Com 18
+		// simultaneos contra cinco jogadores, o grupo matava mais rapido do
+		// que a emboscada repunha e nunca perdia terreno.
+		MaxConcurrent: 28,
+		// Uma leva a cada 0,8 s, SETE por leva. Eram 2 s e tres, depois 1,0 s e
+		// cinco, e em jogo o cerco continuava chegando em conta-gotas: o grupo
+		// tinha tempo de matar cada leva antes da seguinte, e a pressao — que e
+		// o que leva o grupo abaixo de 30% de vida e abre a cena — nunca se
+		// acumulava. A leva maior e mais rapida e a mesma correcao que o
+		// climax do mapa 4 ja levou.
+		SpawnInterval: 0.8,
+		BatchSize:     7,
 		Announcement:  "Eles vieram de cima da muralha",
 	},
 }
@@ -93,23 +118,47 @@ var world03Climax = []WaveDef{
 // cura a 20/s sobre um numero finito de monstros e uma questao de esperar —, e
 // uma cena que o grupo consegue evitar nao e uma cena.
 //
-// Quem torna a queda inevitavel apesar do altar nao esta nesta composicao: sao
-// as quatro gargulas, batendo a 1900 de fora do raio de 720. E e exatamente por
-// isso que a suprema entregue aqui e a do Arqueiro — 40 de dano perfurante
-// contra os 40 de vida delas.
+// Quem torna a queda inevitavel apesar do altar nao esta so nesta composicao:
+// sao as duas gargulas (`sentries.go`), batendo de fora do raio de 720. E e
+// exatamente por isso que a suprema entregue aqui e a do Arqueiro — 40 de dano
+// perfurante contra os 40 de vida delas.
+//
+// AFINACAO DE DIFICULDADE (25/08/2026): 8 orc + 12 lobo + 8 slime, teto 22 e
+// leva de 5 a cada 1,1s nao derrubava o grupo inteiro abaixo dos 30% de vida
+// ao mesmo tempo — a Area Angelical (raio 720, 20/s, 12s, ressuscita) segurava
+// tudo que essa composicao enfileirava DENTRO do raio dela, e a cena do
+// Arqueiro nunca abria.
+//
+//   - A massa migra para o orc (8 -> 14): e a unica criatura calibrada contra
+//     uma suprema (cinco limpam a Legiao Espectral; orc_legion_test.go). E o
+//     que sobra de pe depois das duas ultimates da fase.
+//   - O lobo sobe (12 -> 14): a 240 ele passa o jogador (200); sem matilha, um
+//     grupo com so orc lento circula indefinidamente, e circular nao pode ser
+//     uma saida.
+//   - O slime cai (8 -> 6): e exatamente o que as duas supremas apagam de
+//     graca. Slime na reposicao alonga a horda sem pressionar.
+//   - Leva maior e mais rapida (5/1,1s -> 7/0,9s): a mesma correcao que o
+//     climax do mapa 3 ja levou — com levas espacadas o grupo mata cada uma
+//     antes da seguinte, e a pressao que leva aos 30% nunca se acumula.
+//   - Teto sobe (22 -> 30) para o saguao aguentar a leva maior sem esvaziar
+//     entre uma e outra.
+//
+// `Endless` continua: `TestClimaxIsUnwinnableWithoutTheRescue` existe
+// justamente para pegar quem troca reposicao por um total maior achando que
+// esta subindo a dificuldade.
 var world04Climax = []WaveDef{{
 	Name: "O salao se fecha",
 	// Composicao de REPOSICAO, nao total: com `Endless` ela volta inteira para
 	// a fila cada vez que esvazia.
 	Composition: map[entity.EnemyType]int{
-		entity.EnemyTypeGarrison: 8,
-		entity.EnemyTypeFast:     12,
-		entity.EnemyTypeBasic:    8,
+		entity.EnemyTypeGarrison: 14,
+		entity.EnemyTypeFast:     14,
+		entity.EnemyTypeBasic:    6,
 	},
 	Endless:       true,
-	MaxConcurrent: 22,
-	SpawnInterval: 1.1,
-	BatchSize:     5,
+	MaxConcurrent: 30,
+	SpawnInterval: 0.9,
+	BatchSize:     7,
 	Announcement:  "As sentinelas despertaram",
 }}
 
@@ -130,11 +179,19 @@ var world04Climax = []WaveDef{{
 // nao um acrescimo, e o posto que ja foi usado nao volta.
 // world07Waves: o cerco da arena final. UMA horda, e ela nao acaba.
 //
-// A forma vem do relogio que o Gui pediu: uma leva a cada 70 s, do tamanho
-// exato da composicao. Por isso `BatchSize` e o total (28) e `SpawnInterval` e
-// 70 — a leva inteira sai de uma vez pelos dois portoes e a proxima so vem no
-// ciclo seguinte. Uma horda que gotejasse continuamente tiraria da fase o
-// respiro entre levas, que e onde o grupo se reposiciona para a nevoa.
+// Ate 30/08/2026 a forma era um relogio proprio: uma leva a cada 70 s, do
+// tamanho exato da composicao. Em 31/08/2026
+// (doc/plan_world07_arena_tuning.md) a leva virou `BossDriven`: ela perde o
+// relogio proprio e passa a sair no mesmo instante em que a nevoa entra no
+// ar (a cada `bossFogEvery`, hoje 30 s — ver host_boss.go), porque o pedido
+// era "uma horda logo depois de cada nevoa" e um relogio de 30 s solto
+// deriva da nevoa em vez de bater junto dela. `SpawnInterval` fica em 30.0
+// so como documentacao do ritmo esperado; `BossDriven` faz o runner
+// ignora-lo.
+//
+// `BatchSize` continua o total (28): a leva inteira sai de uma vez pelos
+// dois portoes, e nao goteja continuamente — e o respiro entre levas e onde
+// o grupo se reposiciona para a nevoa seguinte.
 //
 // `Endless` porque o unico fim e a morte da chefe. Sem isso a fase acabaria por
 // contagem, e o jogador venceria a arena sem enfrentar quem a comanda.
@@ -146,28 +203,34 @@ var world04Climax = []WaveDef{{
 // A composicao e par em tudo (10/10/8) porque ela se divide entre os dois
 // portoes: 5 slime, 5 lobo, 4 orc de cada lado.
 //
-// `MaxConcurrent` 34 e o teto: 28 da leva mais folga. Sem teto, duas levas nao
-// limpas viram parede, e a fase deixa de ser uma luta contra a chefe para ser
-// uma contra o acumulo.
+// `MaxConcurrent` 34 -> 50 (31/08/2026): com o dobro da cadencia da leva (a
+// cada 30 s, nao mais 70 s) o teto antigo capava a segunda leva antes dela
+// sair — `room = MaxConcurrent - aliveCount` ja chegava perto de zero com a
+// leva anterior ainda em campo. 50 da espaco para duas levas coexistirem
+// (28 + o que sobrou da anterior) sem virar parede. Se o quadro cair com o
+// pico de simulacao (leva cheia + 10 gargulas + a Legiao Espectral + a
+// chefe), o teto desce para 42 antes de qualquer outra coisa
+// (doc/performance.md).
 //
 // As gargulas NAO entram na composicao — elas tem Speed 0 e vivem em posto
 // declarado pelo mapa (ver sentryPosts). `Sentries` e total acumulado.
 var world07Waves = []WaveDef{
 	{
-		Name: "O cerco da senhora",
+		Name: "O cerco da Imperatriz",
 		Composition: map[entity.EnemyType]int{
-			entity.EnemyTypeBasic:     10,
-			entity.EnemyTypeFast:      10,
-			entity.EnemyTypeGarrison:  8,
+			entity.EnemyTypeBasic:    10,
+			entity.EnemyTypeFast:     10,
+			entity.EnemyTypeGarrison: 8,
 		},
 		Endless:       true,
 		EndsWithBoss:  true,
 		Ambush:        true,
-		MaxConcurrent: 34,
-		SpawnInterval: 70.0,
+		BossDriven:    true,
+		MaxConcurrent: 50,
+		SpawnInterval: 30.0,
 		BatchSize:     28,
 		Sentries:      2,
-		Announcement:  "A Senhora das Trevas desperta",
+		Announcement:  "A Imperatriz das Trevas desperta",
 	},
 }
 
@@ -181,7 +244,7 @@ var world05Waves = []WaveDef{
 		MaxConcurrent: 18,
 		SpawnInterval: 2.2,
 		BatchSize:     4,
-		Announcement:  "Horda 1 - Os servos da senhora",
+		Announcement:  "Horda 1 - Os servos da Imperatriz",
 	},
 	{
 		Name: "Horda 2",

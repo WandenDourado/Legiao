@@ -3,138 +3,139 @@ package network
 // Desenhar o passado, para o presente chegar liso.
 //
 // O host publica a 20 Hz (broadcast_rate.go) e a tela desenha a 60: sem nada
-// entre os dois, cada posicao remota daria tres quadros parada e um salto —
-// e o salto so cresce se um snapshot atrasar. O cliente entao NAO desenha o
-// ultimo snapshot recebido: ele desenha interpDelay atras dele, com dois
-// snapshots na mao, interpolando entre os dois.
+// entre os dois, cada posicao remota daria tres quadros parada e um salto. O
+// cliente entao desenha um pouco ATRAS do ultimo snapshot, entre os dois
+// snapshots que cercam esse instante.
 //
-// O atraso e o preco: o que se ve de um jogador remoto esta ~100 ms velho.
-// Isso e correto para este jogo. O host e autoritativo e ja decide todo o
-// combate; o cliente nunca precisou que a posicao remota fosse instantanea,
-// precisou que ela fosse CONTINUA. Suavizar sem atraso exigiria extrapolar, e
-// extrapolacao erra a direcao toda vez que alguem muda de rumo — o defeito
-// vira personagem escorregando e voltando, que e pior que 100 ms.
+// Ate 28/09/2026 isso nao funcionava: guardavam-se so os DOIS ultimos
+// snapshots (50 ms de historia) e desenhava-se 100 ms atras - fora do
+// intervalo. O fator de mistura saia sempre 0 e tudo andava aos saltos de
+// 20 Hz. Alem disso state_update e enemy_update, que chegam juntos, viravam
+// dois snapshots a 0 ms um do outro. Agora:
 //
-// O jogador LOCAL nunca passa por aqui: ele e simulado no proprio quadro.
-// O HOST tambem nao: ele tem o estado de verdade a 60 Hz.
+//   - os snapshots ficam num buffer curto, marcados com o RELOGIO DO HOST
+//     (HostT em state_update/enemy_update), nao com a hora de chegada: o 4G
+//     entrega em rajadas, e usar a chegada transformaria cada rajada num
+//     tranco. As duas mensagens do mesmo tique viram UM snapshot;
+//   - o atraso se adapta a rede (interpolation_clock.go): ~100 ms na LAN,
+//     mais quando a chegada oscila, e muda devagar para nao dar solavanco.
+//
+// Continua valendo: interpola so posicao e velocidade (vida, morte, quadro de
+// animacao e identidade vem do snapshot mais novo), e NUNCA extrapola - se o
+// proximo snapshot atrasa, o boneco para no ultimo ponto conhecido em vez de
+// deslizar para o lugar errado e voltar. O jogador LOCAL e o HOST nao passam
+// por aqui.
 
 import (
 	"sync"
-	"time"
 )
 
-// interpDelay e quanto o desenho fica atras do ultimo snapshot.
-//
-// Dois intervalos de snapshot a 20 Hz sao 100 ms: um para ter sempre um par
-// para interpolar, e a folga do segundo para um pacote atrasado nao esvaziar
-// o buffer. Menos que isso e a interpolacao vira extrapolacao no primeiro
-// engasgo da rede.
-const interpDelay = 100 * time.Millisecond
+// interpBufferLen cobre bem mais que o maior atraso (maxInterpDelay) a 20 Hz.
+const interpBufferLen = 16
 
-// snapshot e um estado recebido e o instante em que chegou.
+// sameTickMs: mensagens com HostT tao proximo sao do mesmo tique.
+const sameTickMs = 5
+
+// snapshot e o estado de um tique do host.
 type snapshot struct {
-	at      time.Time
+	t       int64 // ms no relogio do host (ou de chegada, com host antigo)
 	players map[string]PlayerState
 	enemies map[string]EnemyState
 }
 
 var (
 	interpMutex sync.Mutex
-	// prev e curr sao os dois ultimos snapshots. A interpolacao acontece
-	// entre eles; nada mais e guardado, porque um buffer maior so adiaria o
-	// descarte do que ja nao vai ser desenhado.
-	prevSnap, currSnap *snapshot
+	snaps       []snapshot // em ordem de t, no maximo interpBufferLen
 )
 
-// recordSnapshot guarda o estado recebido para a interpolacao.
-//
-// Recebe os dois mapas juntos porque eles chegam em mensagens diferentes e
-// precisam de um instante comum: interpolar jogador e inimigo em linhas de
-// tempo separadas faria um monstro adiantado bater num jogador atrasado.
-func recordSnapshot(players map[string]PlayerState, enemies map[string]EnemyState) {
+// recordSnapshot guarda o estado recebido. players ou enemies nil = esta
+// mensagem nao fala deles (vem da mensagem irma do mesmo tique, ou do tique
+// anterior). hostT 0 = host antigo, sem relogio: usa a hora de chegada.
+func recordSnapshot(players map[string]PlayerState, enemies map[string]EnemyState, hostT int64) {
 	interpMutex.Lock()
 	defer interpMutex.Unlock()
 
-	next := &snapshot{at: time.Now(), players: players, enemies: enemies}
-	if currSnap != nil && players == nil {
-		next.players = currSnap.players
+	t := observeArrival(hostT)
+	if n := len(snaps); n > 0 {
+		last := &snaps[n-1]
+		if t-last.t <= sameTickMs && t >= last.t-sameTickMs {
+			if players != nil {
+				last.players = players
+			}
+			if enemies != nil {
+				last.enemies = enemies
+			}
+			return
+		}
+		if t < last.t {
+			return // fora de ordem (nao acontece em TCP; defensivo)
+		}
+		if players == nil {
+			players = last.players
+		}
+		if enemies == nil {
+			enemies = last.enemies
+		}
 	}
-	if currSnap != nil && enemies == nil {
-		next.enemies = currSnap.enemies
+	snaps = append(snaps, snapshot{t: t, players: players, enemies: enemies})
+	if len(snaps) > interpBufferLen {
+		snaps = append(snaps[:0], snaps[len(snaps)-interpBufferLen:]...)
 	}
-	prevSnap, currSnap = currSnap, next
 }
 
-// interpAlpha e onde estamos entre prev e curr, de 0 a 1, para o instante que
-// deve aparecer na tela agora.
-//
-// Devolve false quando nao ha par para interpolar (comeco da sessao, ou um
-// snapshot so). O chamador desenha o mais recente cru, que e o comportamento
-// antigo — pior que interpolar, melhor que nao desenhar.
-func interpAlpha() (float32, bool) {
-	if prevSnap == nil || currSnap == nil {
-		return 0, false
+// bracket acha os dois snapshots em volta do instante de desenho e o fator de
+// mistura entre eles. ok falso sem snapshot nenhum.
+func bracket() (a, b *snapshot, alpha float32, ok bool) {
+	n := len(snaps)
+	if n == 0 {
+		return nil, nil, 0, false
 	}
-	span := currSnap.at.Sub(prevSnap.at)
-	if span <= 0 {
-		return 0, false
+	if n == 1 {
+		return &snaps[0], &snaps[0], 1, true
 	}
-	target := time.Now().Add(-interpDelay)
-	alpha := float32(target.Sub(prevSnap.at)) / float32(span)
-	// Preso ao intervalo: passar de 1 seria extrapolar, e e o que acontece
-	// quando o proximo snapshot atrasa. Segurar no ultimo conhecido faz o
-	// personagem PARAR por um instante em vez de deslizar para o lugar errado
-	// e voltar.
-	if alpha < 0 {
-		alpha = 0
+	rt := renderTime()
+	if rt >= snaps[n-1].t { // o proximo atrasou: segura no ultimo, sem extrapolar
+		return &snaps[n-1], &snaps[n-1], 1, true
 	}
-	if alpha > 1 {
-		alpha = 1
+	if rt <= snaps[0].t {
+		return &snaps[0], &snaps[0], 1, true
 	}
-	return alpha, true
+	for i := n - 2; i >= 0; i-- {
+		if snaps[i].t <= rt {
+			a, b = &snaps[i], &snaps[i+1]
+			return a, b, float32(rt-a.t) / float32(b.t-a.t), true
+		}
+	}
+	return &snaps[0], &snaps[0], 1, true
 }
 
-// interpPlayersBuf e interpEnemiesBuf sao os buffers reaproveitados pelas
-// duas funcoes abaixo. Cada uma e chamada mais de uma vez por quadro
-// (renderer.go desenha os jogadores remotos e depois usa a mesma lista para
-// mirar os inimigos), sempre pelo desenho, na mesma goroutine, e sempre
-// consumida antes da proxima chamada — nunca guardada entre quadros. Um mapa
-// novo por chamada e alocacao com 83 inimigos em campo (doc/performance.md).
+// interpPlayersBuf e interpEnemiesBuf sao reaproveitados entre chamadas: um
+// mapa novo por chamada e alocacao com 83 inimigos em campo
+// (doc/performance.md). Sempre consumidos antes da proxima chamada.
 var (
 	interpPlayersBuf = make(map[string]PlayerState)
 	interpEnemiesBuf = make(map[string]EnemyState)
 )
 
 // InterpolatedPlayers e o mapa de jogadores como deve APARECER agora.
-//
-// Interpola so o que e continuo: posicao e velocidade. Vida, morte, quadro de
-// animacao e identidade vem do snapshot mais recente sem misturar — meia morte
-// nao existe, e um quadro de sprite interpolado seria um numero entre dois
-// desenhos.
 func InterpolatedPlayers() map[string]PlayerState {
 	if Role != "client" {
 		return GetAllPlayers()
 	}
 	interpMutex.Lock()
 	defer interpMutex.Unlock()
-
-	alpha, ok := interpAlpha()
-	if !ok || currSnap == nil {
+	a, b, alpha, ok := bracket()
+	if !ok || b.players == nil {
 		return GetAllPlayers()
 	}
 	clear(interpPlayersBuf)
-	for id, cur := range currSnap.players {
-		old, had := prevSnap.players[id]
-		if !had {
-			// Quem acabou de aparecer nao tem de onde vir: desenhar no lugar
-			// dele e melhor que desenhar vindo da origem do mundo.
-			interpPlayersBuf[id] = cur
-			continue
+	for id, cur := range b.players {
+		if old, had := a.players[id]; had && a != b {
+			cur.X = lerpInt(old.X, cur.X, alpha)
+			cur.Y = lerpInt(old.Y, cur.Y, alpha)
+			cur.VelX = lerp(old.VelX, cur.VelX, alpha)
+			cur.VelY = lerp(old.VelY, cur.VelY, alpha)
 		}
-		cur.X = lerpInt(old.X, cur.X, alpha)
-		cur.Y = lerpInt(old.Y, cur.Y, alpha)
-		cur.VelX = lerp(old.VelX, cur.VelX, alpha)
-		cur.VelY = lerp(old.VelY, cur.VelY, alpha)
 		interpPlayersBuf[id] = cur
 	}
 	return interpPlayersBuf
@@ -144,38 +145,34 @@ func InterpolatedPlayers() map[string]PlayerState {
 func InterpolatedEnemies() map[string]EnemyState {
 	interpMutex.Lock()
 	defer interpMutex.Unlock()
-
-	alpha, ok := interpAlpha()
-	if !ok || currSnap == nil {
+	clear(interpEnemiesBuf)
+	a, b, alpha, ok := bracket()
+	if !ok || b.enemies == nil {
 		RemoteEnemiesMutex.Lock()
 		defer RemoteEnemiesMutex.Unlock()
-		clear(interpEnemiesBuf)
 		for id, e := range RemoteEnemies {
 			interpEnemiesBuf[id] = e
 		}
 		return interpEnemiesBuf
 	}
-	clear(interpEnemiesBuf)
-	for id, cur := range currSnap.enemies {
-		old, had := prevSnap.enemies[id]
-		if !had {
-			interpEnemiesBuf[id] = cur
-			continue
+	for id, cur := range b.enemies {
+		if old, had := a.enemies[id]; had && a != b {
+			cur.X = lerpInt(old.X, cur.X, alpha)
+			cur.Y = lerpInt(old.Y, cur.Y, alpha)
 		}
-		cur.X = lerpInt(old.X, cur.X, alpha)
-		cur.Y = lerpInt(old.Y, cur.Y, alpha)
 		interpEnemiesBuf[id] = cur
 	}
 	return interpEnemiesBuf
 }
 
-// ResetInterpolation esquece os snapshots guardados. Chamado quando o mundo
-// mirrorado e limpo (reset de fase): interpolar da posicao antiga para a nova
-// faria todo mundo DESLIZAR do campo de batalha ate o ponto de spawn.
+// ResetInterpolation esquece os snapshots. Chamado quando o mundo espelhado e
+// limpo (reset de fase, reconexao): interpolar da posicao antiga para a nova
+// faria todo mundo DESLIZAR ate o ponto de spawn.
 func ResetInterpolation() {
 	interpMutex.Lock()
 	defer interpMutex.Unlock()
-	prevSnap, currSnap = nil, nil
+	snaps = snaps[:0]
+	resetInterpClock()
 }
 
 func lerp(a, b, t float32) float32 { return a + (b-a)*t }

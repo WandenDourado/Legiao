@@ -48,11 +48,16 @@ func StepMeteorRains(m *Manager, worldW, worldH float32, dt float32) []rl.Vector
 	defer m.ultMutex.Unlock()
 	spawned := make([]rl.Vector2, 0)
 	kept := m.MeteorRains[:0]
+	// Calculado uma vez por chamada, fora do laco de chuvas: os limites do
+	// mundo nao mudam no meio de uma partida, e uma multiplicacao por quadro
+	// nao e custo. Ver MeteorRainIntervalFor (meteor.go) para o porque de
+	// escalar por area em vez de usar um intervalo fixo.
+	interval := MeteorRainIntervalFor(worldW, worldH)
 	for _, r := range m.MeteorRains {
 		r.Remaining -= dt
 		r.accum += dt
-		for r.accum >= MeteorRainInterval && r.Remaining > 0 {
-			r.accum -= MeteorRainInterval
+		for r.accum >= interval && r.Remaining > 0 {
+			r.accum -= interval
 			margin := MeteorImpactRadius * 0.6
 			target := rl.NewVector2(
 				margin+rand.Float32()*(worldW-2*margin),
@@ -122,7 +127,9 @@ func (m *Manager) AdvanceMeteors(dt float32) {
 func (m *Manager) DrawMeteors() {
 	m.ultMutex.RLock()
 	defer m.ultMutex.RUnlock()
-	for _, mt := range m.Meteors {
-		mt.Draw()
+	// Ordem estavel, nao a do mapa: ver draw_order.go. Com ~87 meteoros no ar
+	// ao mesmo tempo, os que se sobrepoem sao muitos.
+	for _, id := range orderedIDs(m.Meteors) {
+		m.Meteors[id].Draw()
 	}
 }

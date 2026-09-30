@@ -14,8 +14,10 @@ const (
 	// Target frames per second
 	TargetFPS = 60
 
-	// Player movement speed (units per second)
-	PlayerSpeed = 200.0
+	// Player movement speed (units per second). 200 e o numero autoral, contra
+	// o qual todos os comentarios de velocidade do pacote se comparam;
+	// GameSpeed (gamespeed.go) aplica o ritmo escolhido por cima dele.
+	PlayerSpeed = 200.0 * GameSpeed
 
 	// Entity sizes (radius for circular collision)
 	PlayerSize = 20.0
@@ -48,6 +50,20 @@ const (
 	// coming back is not a free reset.
 	RespawnDelay         = 30.0 // Seconds before respawn
 	RespawnHealthPercent = 0.30 // 30% health on respawn
+
+	// RespawnGrace e o folego de quem acabou de levantar (playtest de
+	// 27/09/2026, plans/plan_playtest_27_09.md §4): o corpo levanta onde
+	// caiu, e nas fases de horda o lugar onde ele caiu e justamente onde a
+	// horda esta. Sem janela nenhuma, 30% de vida no meio de dez lobos era
+	// morrer de novo antes de conseguir andar. Durante a janela o jogador
+	// nao leva dano (host: GrantInvulnerability em tickRespawns), anda
+	// RespawnGraceSpeed vezes mais rapido (local: network.MoveSpeedMultiplier)
+	// e pisca (InvulnBlinkGray) — o sinal que diz a todos "esta protegido".
+	RespawnGrace float32 = 2.5
+	// RespawnGraceSpeed e o multiplicador de passo durante RespawnGrace.
+	// O Santuario da 1,25; 1,4 poe ~840 px ao alcance em 2,5 s contra 600 do
+	// passo normal — sair de um cerco, nao atravessar a fase.
+	RespawnGraceSpeed float32 = 1.4
 )
 
 // Sprint input thresholds
@@ -74,6 +90,10 @@ type Player struct {
 	// player. It mirrors the authoritative countdown and exists so the HUD
 	// can show it; nothing in the entity package acts on it.
 	RespawnIn float32
+	// Invuln espelha, em segundos, a janela de imunidade que o host concedeu
+	// a este jogador (PlayerState.Invuln). So o desenho le: e o que faz o
+	// corpo piscar (InvulnBlinkGray).
+	Invuln float32
 
 	// Sprite animation fields
 	Texture     rl.Texture2D
@@ -87,12 +107,13 @@ type Player struct {
 
 // NewPlayer creates a new player with default values for the given character type.
 func NewPlayer(spawn rl.Vector2, charType CharacterType) *Player {
+	maxHealth := MaxHealthFor(charType)
 	return &Player{
 		CharType:   charType,
 		Position:   spawn,
 		Velocity:   rl.NewVector2(0, 0),
-		Health:     100,
-		MaxHealth:  100,
+		Health:     maxHealth,
+		MaxHealth:  maxHealth,
 		Speed:      PlayerSpeed,
 		Radius:     PlayerSize,
 		IsDead:     false,

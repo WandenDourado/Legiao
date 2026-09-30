@@ -38,6 +38,8 @@ The game uses TCP for gameplay state and UDP/TCP helpers for LAN discovery.
 | `internal/network/client_travel.go` | Clears the mirrored world when the party changes map. |
 | `internal/network/host_travel.go` | Puts every player on the arrival point after the map changed. |
 | `internal/network/discovery.go` | UDP discovery, query responder, TCP subnet scan fallback. |
+| `internal/network/online_server.go`, `online_config.go`, `host_online.go`, `online_rooms.go` | Jogo online pelo relay: URL da configuracao, endereco do relay com cache, sala do host, lista de salas. |
+| `internal/relay/`, `cmd/relay/` | Protocolo, servidor e cliente do relay (so biblioteca padrao). |
 | `internal/network/globals.go` | Process-wide network role and snapshot maps. |
 | `internal/ui/menu.go` | Host/join UI and the discovery connection flow. |
 
@@ -60,6 +62,9 @@ The game uses TCP for gameplay state and UDP/TCP helpers for LAN discovery.
 | `travel` | host -> peers | The party moved to another map. Carries the destination map and arrival spawn. Also sent to a single rejoining client with `reconnect: true` (see below) as a map catch-up, not a party-wide crossing. |
 | `test_mode` | client -> host | Ask the host to drop that player's cooldown gates (F2). |
 | `ultimate_grant` | host -> peers | Unlocks one character's ultimate for the rest of THIS RUN, on top of the campaign's set (`doc/combat_rules.md`, "O resgate"). Sent once when the last-stand rescue revives a player controlling the map's hero, and replayed to anyone who joins mid-run or reconnects. |
+| `compress` | host -> peer | Ultima linha em texto puro: dali em diante o fluxo desta conexao e deflate. So vai para quem pediu `compress: "deflate"` no `join`. |
+| `ping` / `pong` | client -> host -> client | Eco para medir a latencia que o HUD mostra ("PING 45 ms"). A cada 2 s. |
+| `join_rejected` | host -> peer | Entrada recusada: `full` (partida com `MaxPartySize` humanos) ou `version` (`proto` diferente). O cliente volta ao menu com a frase certa. |
 
 ## Discovery Flow
 
@@ -81,6 +86,205 @@ is Back. Back also calls `StopDiscovery()` + `ClearDiscoveredHosts()`, otherwise
 the scanners keep running behind the main menu and a second Join starts a
 duplicate set of them.
 
+**Aparecer na lista nao e a mesma coisa que ser alcancavel.** O caminho 1 acima e
+de SAIDA do host (ele transmite), e nenhum firewall de entrada o barra; entrar na
+partida depende da porta de jogo (TCP 9000) estar aberta NA MAQUINA DO HOST. Uma
+sala visivel e inalcancavel e, por isso, um estado normal e esperado — e o que
+"Abrir a conexao do cliente" abaixo existe para tratar.
+
+## Abrir a conexao do cliente
+
+`network.StartClientSession` (`internal/network/client_connect.go`) e a porta
+unica: o menu escolhe a sala e a cor, e dali em diante socket, prazo e join sao
+da camada de rede. Tres regras, e as tres nasceram do mesmo bug:
+
+1. **O dial tem prazo** (`dialTimeout`, 3 s, o mesmo da reconexao). Uma porta
+   FECHADA responde na hora (RST); uma porta bloqueada por firewall de entrada
+   DESCARTA o SYN, e um `net.Dial` sem prazo ficava pendurado o tempo limite do
+   sistema — uns dois minutos no Android.
+2. **Enquanto o dial esta pendente, a sessao esta em espera e diz isso.**
+   `AwaitingHost()` (conectando **ou** reconectando) congela o quadro em
+   `game/loop.go` e o renderer desenha a sobreposicao — "Conectando ao
+   anfitriao..." ou "Reconectando...". `TickReconnect` vigia esse estado ANTES
+   de testar `CurrentClient`, com um teto folgado (`connectCeiling`, 10 s) para
+   o caso de o dial nao respeitar o proprio prazo.
+3. **Falhar volta ao menu com o motivo.** `network.SessionFailure` diz QUAL
+   falha (`FailureConnect` = nunca conectou; `FailureReconnect` = conectou, caiu
+   e esgotou `ReconnectWindow`); `ui/menu.go` escolhe a frase. Nao ha
+   `log.Fatalf` no caminho de conexao.
+
+O sintoma que isso corrige, para reconhecer se ele voltar: o cliente entra num
+mapa **sem inimigos e sem outros jogadores**, andando normalmente, sem
+sobreposicao nenhuma, e o host nao o registra. Papel de cliente nao simula nada
+(so o host chama `UpdateSimulation`), entao "sem conexao" e "mundo vazio" tem a
+mesma aparencia. O log do HOST separa as duas causas: com
+`[Host] New client connected` a conexao existe e o problema e no join; sem ele, o
+SYN nao chegou e o problema e alcancabilidade.
+
+## Jogo online (relay na Oracle)
+
+Fora da rede local, a partida passa por um **relay** proprio (`cmd/relay`,
+pacote `internal/relay`) numa VM Always Free da Oracle (`infra/oci/legiao.tf`).
+Ninguem instala nada alem do jogo e ninguem abre porta em roteador: todo mundo
+conecta de SAIDA no relay, que so emparelha as pontas e copia bytes. A partida
+continua simulada no aparelho de quem hospeda.
+
+1. **"CRIAR PARTIDA"** continua so na rede local. **"CRIAR PARTIDA ONLINE"**
+   (so aparece com `network.OnlineConfigURL` preenchido): personagem, depois nome
+   da sala num teclado desenhado pelo jogo (`ui/onscreen_keyboard.go`, porque
+   o raylib nao abre o teclado do Android), depois `network.OpenOnlineRoom`
+   registra a sala e so entao a partida comeca (`Host.ServeOnline`). Se o
+   relay nao responde, o jogador le isso na mesma tela.
+2. O relay gera um **codigo unico** (`#K7M2Q`); nomes podem repetir.
+3. "ENTRAR EM PARTIDA" consulta `LIST` a cada 3 s (`online_rooms.go`) e mostra
+   as salas como `ONLINE <nome> #<codigo> <jogadores>` antes das da LAN, com o
+   estado do servidor no subtitulo (`ui/discovery_entries.go`).
+4. Escolher uma sala vira o `ServerAddress` `sala:<codigo>`. `dialGame`
+   (`online_server.go`) e o unico ponto de discagem do cliente, no connect e na
+   reconexao.
+5. A conexao chega ao MESMO `acceptLoop` da LAN, com `RemoteAddr` proprio
+   (`relay/<id>`), porque `h.peers` e indexado por ele.
+
+**A sala morre com o host.** O relay manda `PING` a cada 15 s e derruba a
+sala (e as conexoes dos jogadores dela) sem `PONG` por 45 s. O app so responde
+enquanto o laco do jogo roda (`network.MarkFrame`, chamado todo quadro em
+`game/loop.go`): app fechado, em segundo plano ou sem rede = sala some. No
+fim do jogo `network.ShutdownOnline` fecha a sala na hora. Quando o jogo volta
+a rodar, o host se registra de novo com o MESMO codigo (codigo + segredo), e
+um cliente dentro da janela de reconexao a encontra.
+
+**Onde o app acha o relay** (`online_config.go`): o IP NAO fica no app. O app
+le `network.OnlineConfigURL`, um objeto publico (`online.json`, bucket
+`legiao-public`, leitura sem listagem) que o Terraform reescreve com o IP
+atual da VM: `{"relay":"ip:9000","enabled":true}`. A URL nao muda se a VM for
+recriada. Consulta no maximo a cada 10 min; sem rede, vale a ultima copia boa
+(memoria, depois `online.json` na pasta do `settings.json`). Um relay que nao
+responde forca reconsultar. `"enabled": false` (variavel `online_enabled` do
+Terraform) desliga o online em todos os apps sem atualizar nenhum. Nao usa o
+Vault de proposito: o endereco nao e segredo, e um cofre exigiria credencial
+dentro do app publicado.
+
+### Capacidade do relay
+
+Com o fluxo comprimido, o gargalo da VM Always Free
+(`VM.Standard.E2.1.Micro`: 1/8 de OCPU garantido, 1 GB, ate 50 Mbps) passou a
+ser a **CPU**, nao a banda. Medido em 29/09/2026 com um gerador de carga contra
+o proprio relay (cada amigo recebendo 1650 bytes a 20 Hz = ~33 KB/s, o pior
+caso comprimido, e mandando 100 bytes a 20 Hz de input):
+
+| Amigos jogando | CPU (de um nucleo) | Memoria | Saida |
+|---|---|---|---|
+| 50 | 6,3% | 6 MB | ~14 Mbps |
+| 70 | 7,9% | 7 MB | ~20 Mbps |
+| 100 | 13,5% | 8 MB | ~28 Mbps |
+
+~0,12% de nucleo por amigo. Limites em `relay.NewServer`: **64 amigos no
+servidor** (~8% de um nucleo, 65% do 1/8 garantido, com folga para a CPU da
+Oracle ser mais lenta que a da medicao; ~17 Mbps), **10 por sala** (11 com o
+host), 50 salas (uma sala vazia custa quase nada), 512 conexoes (2 por amigo +
+controle + `LIST`), 40 por IP, 90 s de partida sem trafego derruba a conexao,
+teto de 8 TiB enviados por mes (em memoria; reiniciar zera). A 33 KB/s por
+amigo, 8 TiB sao ~70 mil horas-amigo por mes.
+
+Saude: `STATS LEGIAO2` (output `health_check` do Terraform); `taxa_kbs` e o
+envio medio dos ultimos 10 s. Builds anteriores a compressao usam a tag
+`net1` e nao aparecem na lista (`OnlineGameTag` = `net2`), entao todo amigo
+contado no teto esta comprimido.
+
+A dificuldade do jogo foi afinada para ate 5 jogadores;
+salas de 11 funcionam, mas a fase
+fica mais facil.
+
+Regras que valem nao reinventar:
+
+- **O aperto de mao le um byte por vez** (`relay.readLine`): ler com buffer
+  engoliria o inicio do fluxo JSON que vem logo depois.
+- **`network.OnlineGameTag`** separa versoes do jogo na lista. Suba quando o
+  que vai no fio mudar de forma incompativel.
+- **`relay.Version`** (`LEGIAO2`) e a versao do aperto de mao; mudar exige
+  publicar o binario novo do relay junto.
+- **O IP muda se a VM for recriada**, e isso so quebra alguem se o
+  `online.json` nao for reescrito: rode `terraform apply` depois. O Terraform
+  ainda ignora mudancas de imagem e de metadados da instancia para nao recriar
+  a VM sem querer.
+- Salas sao publicas (quem tem o app ve e entra). Sem criptografia.
+
+## Envio do host: fila por jogador e compressao
+
+**O laco do jogo nunca espera a rede** (`host_peer_writer.go`). Cada conexao
+tem uma fila e uma goroutine que escreve; `broadcast`/`sendTo` so empilham.
+Antes o host dava `Flush` em cada jogador dentro do quadro, segurando
+`peersMutex`: um celular com 4G ruim enchia o buffer TCP e travava a partida
+de todo mundo. Regras da fila:
+
+- **Snapshot** (`isSnapshotType`: jogadores, inimigos, projeteis, cooldowns)
+  nao acumula: o novo substitui o anterior do mesmo tipo que ainda nao saiu.
+  Quem esta atrasado recebe o estado mais recente.
+- **Evento** nunca e descartado nem reordenado; snapshot nao pula evento.
+- Tudo o que esta na fila sai num lote com UM `Flush` (as tres mensagens do
+  tique viram um pacote).
+- Lote que nao sai em 5 s (`peerWriteTimeout`) ou fila com 1024 itens fecha a
+  conexao; o cliente reconecta e o resto da partida segue.
+- `ClientConn` montado a mao (testes) nao tem fila e continua sincrono.
+
+**Compressao** (deflate, `flate.BestSpeed`): o cliente pede no `join`
+(`Compress: "deflate"`), o host responde com a linha `compress` e comprime
+tudo dali em diante nesta conexao (`client_inflate.go` troca o leitor, e a
+drenagem de snapshots para no marcador). Cliente ou host antigos simplesmente
+nao negociam e seguem em texto puro. Medido com o tique do pior mapa (11
+jogadores, 83 inimigos, 20 projeteis) numa CPU de servidor de 2,1 GHz:
+
+| Etapa | Custo por tique | Trafego por amigo |
+|---|---|---|
+| JSON (ja existia) | 103 us | ~224 KB/s |
+| Comprimir, BestSpeed, por amigo | 57 us, na goroutine de envio | ~33 KB/s (6,7x menos) |
+| Comprimir, nivel padrao | 203 us | ~24 KB/s (9,4x) - nao compensa |
+| Descomprimir no cliente | 33 us, na goroutine de leitura | - |
+
+Num celular ~4x mais lento isso da ~0,5% de um nucleo no cliente e ~5% no host
+com 10 amigos, fora da thread do jogo. Ganho real e maior que o medido: no
+teste as posicoes mudavam inteiras a cada tique. O cliente->host (input) segue
+em texto puro: e pequeno. `TCP_NODELAY` ja e o padrao do Go nas duas pontas e
+no relay.
+
+## Protecoes do host (`host_guard.go`)
+
+Qualquer pessoa com o app pode entrar numa sala online, entao o host se
+protege (a LAN ganha junto):
+
+- **Linha maxima de 64 KiB** por mensagem do cliente (`maxClientLine`, tamanho
+  do `bufio.Reader`); maior que isso derruba a conexao. Antes o host decodificava
+  JSON sem limite.
+- **Taxa maxima de 120 mensagens/s** por jogador (rajada de 240); o excesso e
+  descartado. O jogo legitimo manda ~20-60/s.
+- **`MaxPartySize` = 11** humanos com o host (casa com os 10 amigos por sala do
+  relay); bots nao contam, e quem ja tem vaga (reconexao) sempre volta.
+- **Versao**: o cliente manda `proto` (`OnlineGameTag`) no `join`; diferente
+  da do host e recusada. Vazio (cliente anterior ao campo) e aceito.
+- Recusas vao como `join_rejected` e fecham a conexao DEPOIS de entregue
+  (`closeAfter` na fila de envio).
+
+## Mensagens ao jogador (online)
+
+Nenhum erro cru chega a tela: `network.OnlineErrorText` (`online_errors.go`)
+separa "o servidor recusou" (`relay.RefusedError`: sala cheia, sala encerrada,
+servidor lotado, limite do mes, versao incompativel) de "o servidor nem
+respondeu" (internet do jogador, servidor fora). Onde aparece:
+
+- **Criar sala online**: a frase exata na propria tela de nome.
+- **Entrar / reconexao esgotada**: `network.LastFailureDetail()` no aviso do menu.
+- **Reconectando...**: `network.ReconnectHint()` abaixo da contagem ("O
+  anfitriao saiu ou perdeu a conexao. Aguardando ele voltar...").
+- **Host em jogo**: `ui.DrawNetworkBadge` sob a barra de vida - "SALA ONLINE
+  #K7M2Q", ou "SERVIDOR ONLINE FORA - RECONECTANDO..." quando a ligacao com o
+  relay cai (`relay.Listener.Connected`).
+- **Lista de salas**: subtitulo diz se o servidor esta fora ou desativado;
+  salas com vaga primeiro, as mais cheias antes.
+- **Cliente em jogo**: `ui.DrawNetworkBadge` mostra "PING 45 ms" (verde abaixo
+  de 80, amarelo ate 150, vermelho acima) - `client_ping.go`.
+- **Entrada recusada pelo host**: "A partida esta cheia." / "Sua versao do jogo
+  e diferente da do anfitriao."
+
 ## Taxa de publicacao e interpolacao
 
 **A simulacao roda a 60 Hz; a PUBLICACAO dela roda a 20 Hz** (`SnapshotHz`, em
@@ -88,32 +292,41 @@ duplicate set of them.
 decididos a cada quadro pelo host — o que desceu foi so a frequencia com que o
 estado vai para o fio.
 
-O cliente cobre o vao **interpolando** (`internal/network/interpolation.go`):
-guarda os dois ultimos snapshots e desenha `interpDelay` (100 ms) atras do mais
-recente, entre os dois. Os dois so funcionam juntos — baixar a taxa sem
-interpolar faria toda posicao remota andar tres quadros parada e um salto.
+O cliente cobre o vao **interpolando** (`interpolation.go`,
+`interpolation_clock.go`): guarda os ultimos snapshots num buffer curto,
+carimbados com o **relogio do host** (`HostT`, campo `t` de `state_update` e
+`enemy_update`), e desenha um instante um pouco atras do mais novo, entre os
+dois que o cercam.
+
+**Ate 28/09/2026 a interpolacao nao funcionava**: guardava so os dois ultimos
+snapshots (50 ms de historia), carimbados pela hora de CHEGADA, e desenhava
+100 ms atras - fora do intervalo. O fator de mistura saia sempre 0 e jogadores
+remotos e inimigos andavam aos saltos de 20 Hz. `state_update` e
+`enemy_update` do mesmo tique ainda viravam dois snapshots a 0 ms um do outro.
 
 Regras que valem nao reinventar:
 
-- **O atraso e o preco, e ele e o certo aqui.** O que se ve de um jogador
-  remoto esta ~100 ms velho. O host e autoritativo e ja decide todo o combate;
-  o cliente nunca precisou que a posicao remota fosse instantanea, precisou que
-  fosse CONTINUA. Suavizar sem atraso exigiria extrapolar, e extrapolacao erra
-  a direcao toda vez que alguem muda de rumo.
+- **Relogio do host, nao hora de chegada.** O 4G entrega em rajadas; carimbar
+  pela chegada transformaria cada rajada num tranco. Mensagens com `HostT` a
+  ate 5 ms uma da outra sao o mesmo tique e viram um snapshot so. Host antigo
+  (sem `t`) cai na hora de chegada e ainda interpola.
+- **O atraso se adapta a rede.** Cada chegada da uma amostra `hora local -
+  HostT`; a menor das ultimas ~40 e a diferenca de relogios, e o quanto as
+  outras passam dela (percentil 90) e a oscilacao. Atraso = 100 ms + oscilacao,
+  entre 100 e 300 ms, mudando devagar (5%) para nao dar solavanco. Medido em
+  simulacao: LAN ~114 ms e 0 quadros parados; 4G oscilando ate 120 ms ~194 ms
+  e 1 quadro parado em 188.
+- **O atraso e o preco, e ele e o certo aqui.** O host e autoritativo e ja
+  decide todo o combate; o cliente precisa de posicao remota CONTINUA, nao
+  instantanea.
+- **Nunca extrapola.** Sem snapshot novo, segura no ultimo ponto conhecido.
 - **Interpola so o que e continuo**: posicao e velocidade. Vida, morte, quadro
-  de animacao e identidade vem do snapshot mais recente sem misturar — meia
-  morte nao existe, e um quadro de sprite interpolado seria um numero entre
-  dois desenhos.
-- **`interpDelay` tem de segurar DOIS intervalos de snapshot.** A 20 Hz o
-  intervalo e 50 ms e 100 ms cabem dois; com menos, um pacote atrasado esvazia
-  o buffer e a interpolacao vira extrapolacao.
-- **`ResetInterpolation()` no reinicio da fase.** Mora em `RequestLocalReset`,
-  que e o unico ponto por onde os dois papeis passam. Sem ele, interpolar do
-  campo de batalha ate o ponto de spawn faria todo mundo DESLIZAR pelo mapa.
+  de animacao e identidade vem do snapshot mais recente sem misturar.
+- **`ResetInterpolation()` no reinicio da fase e na reconexao.** Esquece o
+  buffer e o relogio.
 - **Nada publica fora do tique.** Ja aconteceu tres vezes de um caminho
   paralelo transmitir a 60 Hz e anular a taxa: o handler de `MsgInput`,
-  `UpdatePlayerState` (chamado a cada quadro pelo laco do jogo, para o proprio
-  host) e `UpdatePlayerPosition`. Os tres so atualizam estado agora.
+  `UpdatePlayerState` e `UpdatePlayerPosition`. Os tres so atualizam estado.
 
 `game.DrawFrame` desenha de `InterpolatedPlayers()` e `InterpolatedEnemies()`;
 no host as duas devolvem o estado direto, porque ele o tem a cada quadro. A
@@ -161,7 +374,19 @@ lado do host. Por isso o host nao apaga o jogador na primeira falha de leitura
   (`ensureLocalPlayerID`) e reusa em toda tentativa de conexao; cor e
   personagem ficam em `network.LocalPlayerColor`/`LocalPlayerCharacter` para o
   rejoin reenviar os mesmos valores. Limite aceito: se o SO mata o app, e uma
-  sessao nova e o jogador perde o slot — nao ha persistencia em disco.
+  sessao nova e o jogador perde o slot — nao ha persistencia em disco. A
+  EXCECAO e o REINICIAR E VOLTAR de Configuracoes > Graficos (29/09/2026):
+  antes de matar o processo ele grava `resume.json` (`internal/resume`, uso
+  unico, vale 4 min) com id, cor, personagem e endereco, e o processo novo
+  (`ui/resume_session.go`) reconecta com o MESMO id — o host ve uma
+  reconexao comum. Do lado do host a partida morre com o processo; o
+  bilhete guarda `StageMap()` e a sala online (nome, CODIGO e segredo), e ele
+  volta no comeco da fase (`StartTravel` aplicado antes do primeiro quadro,
+  `game/loop.go`). A sala volta com o MESMO codigo (`OpenOnlineRoomAs` ->
+  `relay.HostAs`: o servidor devolve o codigo a quem tem o segredo, ou a
+  qualquer um se ele estiver livre), entao os amigos, cuja reconexao disca o
+  codigo antigo, voltam sozinhos — como na rede local. Voltam como join novo
+  (a partida e nova). Testes: `network/session_resume_test.go`.
 - **Host: `handleClient`'s defer nao deleta mais** — chama `markAbsent`
   (`internal/network/host_absence.go`), que guarda `absentSince` e preserva
   posicao, vida, `IsDead`, `RespawnIn` e todos os cooldowns (ja sao mapas por
@@ -242,9 +467,29 @@ novo, sem nada em campo. Agora o mapa e parte do protocolo.
 A regra de quando isso dispara — todos os jogadores vivos no mesmo portal — e do
 mapa, e esta em `doc/tilemap.md`.
 
+## Janela de imunidade (`PlayerState.Invuln`)
+
+`Invuln float32` (`json:"invuln,omitempty"`) são os segundos que restam da
+janela de imunidade que o host concedeu a um jogador (`GrantInvulnerability`:
+renascer, resgate, reerguimento da vitória). Estado de tique, como `InPortal`:
+veredicto do host, zero fora da janela — o `omitempty` não custa um byte no
+tique comum. `Host.publishInvulnerability` (`host_invulnerability.go`) copia as
+janelas para `h.players` a cada quadro, e `UpdateLocalPlayerState` preserva o
+campo como preserva `InPortal`/`Absent`.
+
+Só o desenho lê: é o que faz o corpo piscar em toda máquina
+(`entity.InvulnBlinkGray`). A fase do piscar vem do relógio local, não do
+número — ele chega a ~20 Hz e serrilharia o ritmo. E ele lê o **mapa** de
+janelas, não `IsInvulnerable`: a paz de vitória responde verdadeiro para todos
+até o fim da fase, e piscar por ela faria a cena de encerramento inteira
+piscar.
+
+A velocidade extra do renascer **não** viaja: a borda morto → vivo já chega a
+toda máquina, e cada uma arma o próprio bônus (`network.ArmLocalRespawnBoost`).
+
 ## Espera no portal (`PlayerState.InPortal`)
 
-Com bots no grupo (`doc/plan_bots_de_classe.md`), a porta quase nunca ficava
+Com bots no grupo, a porta quase nunca ficava
 com todo mundo dentro do MESMO retangulo ao MESMO tempo — bastava um bot
 entrar e sair de novo para a condicao nunca fechar. A saida: quem entra na
 zona do portal SOME da tela e CONGELA, liberando o retangulo para o resto do
@@ -277,6 +522,12 @@ inteiro (`countParty`, `doc/tilemap.md`).
   `PlaceEveryoneAtSpawn` (travessia) e em `ResetStage` (F5). Sem isso o grupo
   chegaria ao mapa seguinte — ou a fase reiniciada — invisivel e sem
   controle.
+
+## Todo mundo na mesma build
+
+O jogo é host-autoritativo, mas o jogador **local** é simulado no próprio quadro (`interpolation.go`: o local nunca passa pela interpolação). Isso significa que qualquer constante de simulação compartilhada tem de ser a mesma nas duas pontas — com `entity.GameSpeed` diferente entre host e cliente, o cliente prevê 270 px/s, o host corrige para 200 e o resultado é rubber-banding contínuo.
+
+**Não há verificação de versão de protocolo no `MsgJoin` hoje.** Um cliente de build antiga entra normalmente e o sintoma aparece só como "está borrachudo". Um campo de assinatura de simulação no `JoinPayload`, com o host recusando (ou avisando) quando diferente, é o próximo passo natural — e paga a si mesmo em todo ajuste futuro de ritmo ou velocidade.
 
 ## Snapshot Rules
 
@@ -315,6 +566,21 @@ vai uma vez, estado vai sempre" above). No new field went on the wire for it.
 ## Operational Notes
 
 - LAN play requires host and clients on the same network.
-- Windows firewall must allow inbound TCP 9000 for the host.
+- Windows firewall must allow inbound TCP 9000 for the host. A regra do firewall
+  e por CAMINHO do executavel: renomear ou mover o binario do jogo faz o Windows
+  perguntar de novo, e um "Cancelar" nessa pergunta fica gravado como bloqueio.
+  O sintoma no cliente e "Nao foi possivel conectar ao anfitriao (porta 9000
+  bloqueada?)" mesmo com a sala aparecendo na lista — ver "Abrir a conexao do
+  cliente" acima.
 - Discovery is LAN-only, not internet matchmaking.
 - Do not reintroduce Java/MulticastLock code unless there is a verified Android requirement; the current query-response path avoids passive broadcast receive dependence.
+
+## Porta de despertar das gárgulas (`EnemyUpdatePayload.SentriesAwake`)
+
+`SentriesAwake bool` (`json:"sentries_awake,omitempty"`) é o veredicto de
+`Host.sentriesMayFire` (`sentry_wake.go`), publicado a cada quadro em
+`handleSentryOrbTick` e enviado no mesmo pacote que as próprias gárgulas. Só a
+seta de borda de tela lê (`network.SentriesAwake`, `LivingSentryCenters`): no
+mapa 4 ela espera "As sentinelas despertaram". Não é derivado no cliente porque
+a porta é "maioria dos vivos no degrau, com trava" — duas máquinas contando o
+grupo em quadros diferentes podiam discordar.

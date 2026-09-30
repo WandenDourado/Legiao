@@ -151,6 +151,7 @@ func (h *Host) InstallArrivalSentries(mapPath string, posts []tilemap.SpawnPoint
 	// Mapa novo, torres caladas de novo: quem decide quando elas abrem fogo e
 	// o degrau de territorio que a fase declara (sentry_wake.go).
 	h.sentriesAwake = false
+	setSentriesAwake(false)
 	h.armSentries(mapPath, posts, sentriesOnArrival[mapPath])
 }
 
@@ -165,5 +166,6 @@ func (h *Host) RestoreSentries() {
 	// E a porta de despertar volta a fechar: uma tentativa nova comeca com o
 	// grupo no vestibulo, e as torres nao podem lembrar do avanco da anterior.
 	h.sentriesAwake = false
+	setSentriesAwake(false)
 	h.armSentries(h.stageMap, h.stageSentries, sentriesOnArrival[h.stageMap])
 }

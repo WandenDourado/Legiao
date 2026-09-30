@@ -13,11 +13,25 @@ const (
 	// and fired separately; cooldown starts after the last one).
 	CelestialCharges int = 2
 	// CelestialSpeed is the arrow travel speed (world units/sec).
-	CelestialSpeed float32 = 1600
+	CelestialSpeed float32 = 1600 * gameSpeed
 	// CelestialRange crosses the entire map.
 	CelestialRange float32 = 4800
-	// CelestialDamage is dealt to EACH enemy pierced.
-	CelestialDamage float32 = 40
+	// CelestialDamage e o dano causado a CADA inimigo perfurado.
+	//
+	// 40 -> 600 (31/08/2026, a pedido do Gui: "uma flecha celestial deveria
+	// derrubar um orc"). O numero e derivado, nao escolhido: o orc
+	// (EnemyTypeGarrison) tem 600 de vida em entity/enemy_sprite.go, e e
+	// exatamente essa vida que a flecha tem de cobrir — nem menos (a suprema
+	// nao derruba o alvo que veio derrubar), nem mais (a diferenca entre a
+	// suprema do Arqueiro e a do Mago e precisao contra area, nao quantidade
+	// de dano). Se a vida do orc mudar, este numero muda junto. Ver
+	// TestOneCelestialArrowFellsAnOrc (network/balance_test.go) e
+	// doc/combat_rules.md.
+	//
+	// Os 40 vinham de quando o slime de 100 de vida era o elenco inteiro — a
+	// mesma origem que os 100 de MeteorImpactDamage tinham antes de 27/08. So
+	// o meteoro foi reajustado quando o orc entrou; a flecha ficou para tras.
+	CelestialDamage float32 = 600
 	// CelestialHitRadius is the piercing collision radius.
 	CelestialHitRadius float32 = 70
 	// CelestialLength is the visual shaft length: a GIGANTIC heavenly arrow,

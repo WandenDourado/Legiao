@@ -3,6 +3,7 @@ package skill
 import (
 	"github.com/WandenDourado/Legiao/internal/collision"
 	"github.com/WandenDourado/Legiao/internal/entity"
+	"github.com/WandenDourado/Legiao/internal/sound"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -67,6 +68,11 @@ func SpawnArrowVolley(m *Manager, ownerID string, start, dir rl.Vector2) {
 
 // spawnFanLocked adds one full fan of arrows. Caller holds arrowMutex.
 func (m *Manager) spawnFanLocked(ownerID string, start, dir rl.Vector2) {
+	// UMA RAJADA, UM SOM — e por isso o disparo esta aqui e nao em
+	// SpawnArrowVolley: um lancamento sao ArrowVolleyWaves levas separadas
+	// por ArrowVolleyWaveDelay, e as levas seguintes passam por aqui vindas
+	// de stepArrowVolleysLocked, no host e no cliente.
+	sound.PlayAt(sound.SFXArrowVolley, start)
 	if m.Arrows == nil {
 		m.Arrows = make(map[string]*Arrow)
 	}
@@ -152,7 +158,8 @@ func (m *Manager) AdvanceArrows(dt float32) {
 func (m *Manager) DrawArrows() {
 	m.arrowMutex.RLock()
 	defer m.arrowMutex.RUnlock()
-	for _, a := range m.Arrows {
-		a.Draw()
+	// Ordem estavel, nao a do mapa: ver draw_order.go.
+	for _, id := range orderedIDs(m.Arrows) {
+		m.Arrows[id].Draw()
 	}
 }

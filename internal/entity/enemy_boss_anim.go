@@ -31,7 +31,12 @@ const (
 	bossCastChannel = 2.4
 	// A janela de desvio: quanto tempo os braços ficam cruzados tremendo antes
 	// do golpe. É o número que o jogador sente como "deu tempo de sair".
-	bossDodgeWindow = 1.8
+	//
+	// Acoplado a `ThornTelegraph` (pacote skill): bossDodgeWindow =
+	// ThornTelegraph - 0.30. Afinado de 1,8 para 0,9 em 31/08/2026 junto com o
+	// espinhão — mexer só aqui desalinha o golpe da animação do irromper do
+	// espinho (ver o comentário de ThornTelegraph em boss_thorn.go).
+	bossDodgeWindow = 0.9
 	// Avanço visual do idle_scan, em unidades de mundo.
 	bossAdvancePixels = 46.0
 )

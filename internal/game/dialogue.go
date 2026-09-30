@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/WandenDourado/Legiao/internal/dialogue"
+	"github.com/WandenDourado/Legiao/internal/entity"
 	"github.com/WandenDourado/Legiao/internal/network"
 	"github.com/WandenDourado/Legiao/internal/tilemap"
 	"github.com/WandenDourado/Legiao/internal/ui"
@@ -37,6 +38,12 @@ type DialogueDirector struct {
 	// codigo independente do NOME que cada mapa da a sua cena: o que importa
 	// e o gatilho, e o gatilho e quem escolheu comecar.
 	runningLastStand bool
+	// runningVictory marca que a cena no ar e a de encerramento de fase
+	// (TriggerWavesCleared). Mesma razao de runningLastStand: quando ela
+	// termina, e so entao, o host libera os fogos e o "Missao Concluida"
+	// (network.CurrentHost.MarkBossVictoryReady) — um mapa sem chefe nao tem
+	// BossState.Present, e MarkBossVictoryReady sobre isso nao desenha nada.
+	runningVictory bool
 }
 
 // NewDialogueDirector returns a director with nothing loaded yet; the first
@@ -80,11 +87,20 @@ func (d *DialogueDirector) Update(w *World) bool {
 			d.publish()
 		} else {
 			endedLastStand := d.runningLastStand
+			endedVictory := d.runningVictory
 			d.end()
 			// O resgate acontece quando a ULTIMA LINHA fecha, nao quando a
 			// cena abre: "Ergam-se" e a deixa, e ela e a ultima fala.
 			if endedLastStand && network.CurrentHost != nil {
 				network.CurrentHost.ResolveLastStand()
+			}
+			// Mesma logica para o fim de fase: os fogos e a mensagem so
+			// aparecem quando a cena de encerramento termina de falar, nunca
+			// antes - e ela ja abriu depois de a horda ter parado e os
+			// caidos terem se erguido (bosses.go), entao este e o ultimo elo
+			// da sequencia pedida.
+			if endedVictory && network.CurrentHost != nil {
+				network.CurrentHost.MarkBossVictoryReady()
 			}
 		}
 	}
@@ -187,6 +203,7 @@ func (d *DialogueDirector) triggerFired(t dialogue.Trigger) bool {
 	// abre. Armar aqui e nao no fim e o que importa: entre a queda do grupo e
 	// a ultima linha o host anunciaria o fim, e o resgate chegaria tarde.
 	d.runningLastStand = t == dialogue.TriggerLastStand
+	d.runningVictory = t == dialogue.TriggerWavesCleared
 	if d.runningLastStand {
 		network.ArmLastStand()
 	}
@@ -206,16 +223,25 @@ func (d *DialogueDirector) conditionMet(t dialogue.Trigger) bool {
 	case dialogue.TriggerWavesCleared:
 		// The wave runner reports "cleared" only after the last horde is dead,
 		// and keeps reporting it; the played set is what stops the replay.
-		state := network.GetWaveState()
-		return state.Total > 0 && network.WavePhase(state.Phase) == network.WavePhaseCleared
+		// The cannon corridor (world_06) has no horde: there the fight ends
+		// when the last cannon falls — see stageFightOver.
+		//
+		// E espera o corpo da chefe terminar de virar cinza (entity/death_fx.go):
+		// a queda dela e o momento da campanha, e a caixa de dialogo abrindo no
+		// mesmo quadro cobriria metade dele. Com o efeito desligado nas
+		// Configuracoes isto e sempre falso e nada muda.
+		return stageFightOver() && !entity.BossDeathFXPlaying()
 	case dialogue.TriggerLastStand:
 		return partyIsFalling(d.mapPath, d.zones)
 	}
 	return false
 }
 
-// partyIsFalling reports whether the group has visibly lost the fight: nobody
-// left standing, or everybody still up below LastStandHealth.
+// partyIsFalling reports whether the group has visibly lost the fight: the
+// party's health, summed, at or below dialogue.LastStandPartyHealth of its
+// summed maximum (partyHealthShare). Until 28/09/2026 it was "everyone still
+// up below 30% of their own bar", which one healthy player could hold off
+// forever.
 //
 // Two guards, and each is a decision:
 //
@@ -241,15 +267,31 @@ func partyIsFalling(mapPath string, zones []tilemap.Zone) bool {
 	if !network.ClimaxWindowOpen(mapPath, zones) {
 		return false
 	}
+	share, ok := partyHealthShare(players)
+	return ok && share <= dialogue.LastStandPartyHealth
+}
+
+// partyHealthShare e a vida do grupo inteiro somada sobre a vida maxima
+// somada: 1 com todo mundo cheio, 0 com todo mundo caido. Morto conta ZERO
+// (a vida dele ja e zero, mas o IsDead e a verdade). Quem ainda nao tem
+// MaxHealth — o primeiro snapshot antes da identidade chegar — fica de fora
+// dos dois lados da conta, em vez de puxar a media para zero e disparar a
+// cena sozinho. ok e falso quando nao sobra ninguem para medir.
+func partyHealthShare(players map[string]network.PlayerState) (share float32, ok bool) {
+	var health, max float32
 	for _, p := range players {
-		if p.IsDead {
+		if p.MaxHealth <= 0 {
 			continue
 		}
-		if p.MaxHealth <= 0 || p.Health > p.MaxHealth*dialogue.LastStandHealth {
-			return false
+		max += p.MaxHealth
+		if !p.IsDead && p.Health > 0 {
+			health += min(p.Health, p.MaxHealth)
 		}
 	}
-	return true
+	if max <= 0 {
+		return 0, false
+	}
+	return health / max, true
 }
 
 // advanceRequested reads the narrator's "next line" input: Enter or Space on a
@@ -287,6 +329,7 @@ func (d *DialogueDirector) publish() {
 func (d *DialogueDirector) end() {
 	d.runner.Stop()
 	d.runningLastStand = false
+	d.runningVictory = false
 	network.PublishDialogue(network.DialogueState{Active: false})
 	log.Printf("[Dialogo] cena encerrada")
 }

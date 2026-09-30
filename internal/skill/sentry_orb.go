@@ -23,14 +23,14 @@ const (
 	// proposito. A esfera nao e para ser desviada por reflexo - e para ser
 	// desviada por MOVIMENTO, e para isso ela precisa levar um tempo visivel
 	// atravessando o saguao.
-	SentryOrbSpeed float32 = 300
+	SentryOrbSpeed float32 = 300 * gameSpeed
 
 	// SentryOrbTurnRate limita quanto a esfera corrige o rumo por segundo, em
 	// graus. Perseguicao perfeita e imbloqueavel: com 150 graus/s a esfera faz
 	// a curva, mas quem corre em diagonal e muda de direcao consegue abrir
 	// distancia. E este numero, e nao a velocidade, que decide se a magia e
 	// justa.
-	SentryOrbTurnRate float32 = 150
+	SentryOrbTurnRate float32 = 150 * gameSpeed
 
 	// SentryOrbRadius e o corpo de colisao. O visual desenha bem maior que
 	// isso: a corona nao machuca, so o nucleo.
@@ -42,12 +42,16 @@ const (
 	// SentryGlobalRange) o chamador real (host_sentry_orb.go) sempre calcula
 	// o TTL pela distancia: uma esfera lancada do outro lado do mapa nao
 	// caberia nestes 9s.
-	SentryOrbTTL float32 = 9.0
+	SentryOrbTTL float32 = 9.0 / gameSpeed
 
 	// SentryOrbMaxTTL e o teto do TTL calculado pela distancia — um disparo
 	// absurdamente longe nao pode viver para sempre (doc/plan_avanco_bots_e_gargula.md
 	// §B2).
-	SentryOrbMaxTTL float32 = 40.0
+	// Dividido por gameSpeed pela mesma razao do TTL acima: e um teto de
+	// DISTANCIA disfarcado de tempo, e a esfera agora cobre a mesma distancia
+	// em menos tempo. O TTL calculado (host_sentry_orb.go) ja acompanha
+	// sozinho, porque ele e dist/SentryOrbSpeed.
+	SentryOrbMaxTTL float32 = 40.0 / gameSpeed
 )
 
 // SentryOrb e um projetil perseguidor desenhado com primitivas raylib.

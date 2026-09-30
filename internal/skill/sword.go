@@ -5,6 +5,8 @@ import (
 	"math"
 	"sync/atomic"
 
+	"github.com/WandenDourado/Legiao/internal/entity"
+
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -21,7 +23,18 @@ const (
 	// SwordSweepTime is how long the blade takes to travel edge to edge.
 	SwordSweepTime float32 = 0.28
 	// SwordDamage is applied once to every enemy inside the arc.
-	SwordDamage float32 = 30
+	//
+	// A REGUA E O ORC: 120 derruba os 600 de vida dele em cinco golpes, que e
+	// o numero que o Gui pediu em 27/08/2026 — pouco mais de tres segundos na
+	// cadencia dela (1,5 golpe/s) para vencer o inimigo mais duro do jogo cara
+	// a cara. Era 30, quatro vezes menos: vinte golpes, treze segundos, e a
+	// Paladina nao ganhava um duelo que a classe dela promete.
+	//
+	// O que este numero decide junto: o arco acerta TODOS os inimigos dentro
+	// dele, entao 120 tambem quer dizer um lobo (40) ou um slime por golpe,
+	// quantos couberem no arco. Isso e o que faz dela a linha de frente, e e
+	// o preco de ela ter de encostar para bater.
+	SwordDamage float32 = 120
 	// swordFadeTime is the extra time the arc trail lingers after the sweep.
 	swordFadeTime float32 = 0.12
 
@@ -30,7 +43,14 @@ const (
 	// SwordAvatarReachScale multiplies the blade reach.
 	SwordAvatarReachScale float32 = 1.9
 	// SwordAvatarDamage replaces SwordDamage while the avatar lasts.
-	SwordAvatarDamage float32 = 75
+	//
+	// Sempre foi 2,5x o dano base (era 75 contra 30) e continua sendo: a
+	// suprema tem de TRANSFIGURAR o golpe, e um multiplicador fixo mantem essa
+	// promessa quando o dano base muda. Deixar em 75 depois de o base virar
+	// 120 faria o Avatar dos Deuses BAIXAR o dano dela — a suprema piorando o
+	// ataque basico e o tipo de defeito que ninguem percebe olhando o codigo,
+	// so estranhando em jogo.
+	SwordAvatarDamage float32 = 300
 )
 
 // swordSeq generates unique sweep IDs (a player can chain swings quickly).
@@ -59,6 +79,12 @@ type SwordSweep struct {
 
 // NewSwordSweep creates a sweep anchored at pos aimed toward dir.
 func NewSwordSweep(ownerID string, pos, dir rl.Vector2) *SwordSweep {
+	// O GOLPE DA PALADINA TEM UM GANCHO SO, como as magias: o host cria a
+	// varredura em performSwordAttack e o cliente cria a MESMA aqui ao
+	// receber MsgMelee, entao cada maquina resolve o proprio som sem evento
+	// novo. Os outros quatro personagens nao tem essa sorte — o ataque deles
+	// e um projetil que so aparece no instantaneo (network/client_attack_sound.go).
+	entity.PlayAttackSound(entity.CharPaladina, pos)
 	d := dir
 	if d.X == 0 && d.Y == 0 {
 		d = rl.NewVector2(0, 1)
@@ -116,6 +142,28 @@ func (s *SwordSweep) InArc(target rl.Vector2, extraRadius float32) bool {
 	diff := angleDiff(ang, s.BaseAngle)
 	half := SwordArcDeg * math.Pi / 180 / 2
 	return diff <= half
+}
+
+// NearestPointInRect returns the point of rect closest to from — from itself
+// when it already lies inside. Used to test a sweep's arc against a solid
+// target's actual footprint (a rectangle) instead of a single floating
+// point: InArc measures both distance and angle to whatever point it is
+// given, and a point at the object's own center can be out of the 120° cone
+// while the object's near edge, the part actually facing the swing, is not.
+func NearestPointInRect(rect rl.Rectangle, from rl.Vector2) rl.Vector2 {
+	x := from.X
+	if x < rect.X {
+		x = rect.X
+	} else if x > rect.X+rect.Width {
+		x = rect.X + rect.Width
+	}
+	y := from.Y
+	if y < rect.Y {
+		y = rect.Y
+	} else if y > rect.Y+rect.Height {
+		y = rect.Y + rect.Height
+	}
+	return rl.NewVector2(x, y)
 }
 
 // angleDiff returns the absolute smallest difference between two angles.

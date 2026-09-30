@@ -12,6 +12,16 @@ func ActivateDarkFog(m *Manager, bounds rl.Rectangle) {
 	m.Fog = NewDarkFog(bounds)
 }
 
+// ExpireFog derruba a nevoa imediatamente, sem esperar a propria contagem
+// (AdvanceFog) concordar sozinha. Chamada so pelo cliente, no "expire" de
+// MsgBossFog (network/client.go): o host ja decidiu que ela acabou, e nao ha
+// razao para um cliente atrasado por um quadro continuar desenhando-a.
+func ExpireFog(m *Manager) {
+	m.bossMutex.Lock()
+	defer m.bossMutex.Unlock()
+	m.Fog = nil
+}
+
 // FogActive reporta se a nevoa esta no ar.
 func (m *Manager) FogActive() bool {
 	m.bossMutex.RLock()

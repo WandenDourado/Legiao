@@ -17,6 +17,52 @@ const (
 	ShieldRadius float32 = 95
 	// shieldBreakTime is how long the shatter animation lasts after breaking.
 	shieldBreakTime float32 = 0.45
+
+	// ShieldCastHeal e a fracao da vida MAXIMA que a Paladina recupera ao
+	// conjurar o Escudo Sagrado (Gui, 27/08/2026).
+	//
+	// Muda o que a habilidade E. Antes o escudo so adiava dano, entao lanca-lo
+	// com a vida cheia ou com a vida no fim dava exatamente a mesma coisa —
+	// e a Paladina nao tinha nenhuma forma propria de se recuperar sem a
+	// Sacerdotisa por perto. Com a cura no lancamento, o Q vira a decisao de
+	// segurar a linha: 20 de vida a cada 6 segundos de recarga.
+	//
+	// Fracao e nao valor fixo porque a vida maxima e do PERSONAGEM: se um dia
+	// a Paladina tiver mais vida que os outros, a cura acompanha sem ninguem
+	// lembrar de reajustar um numero solto.
+	ShieldCastHeal float32 = 0.20
+
+	// ShieldBreakDamage e o dano que o escudo cobra AO ESTOURAR, de todo
+	// inimigo encostado na Paladina.
+	//
+	// A regua e o lobo: 80% dos 40 de vida dele (Gui, 27/08/2026). O numero
+	// diz o que o estouro pode e o que nao pode — ele nao limpa a matilha
+	// sozinho, ele abre espaco e termina quem ja estava ferido. Quebrar o
+	// escudo deixa de ser so uma perda.
+	//
+	// Literal em vez de ler `entity.GetEnemyDef(EnemyTypeFast).Health`: o
+	// pacote skill nao conhece entity, e criar essa dependencia por causa de
+	// uma constante custa mais do que este comentario. Se a vida do lobo
+	// mudar, o teste irmao em host_shield_test.go avisa.
+	ShieldBreakDamage float32 = 32
+	// ShieldBreakRadius e o alcance do estouro: a propria borda da aura, para
+	// o jogador mirar a explosao pelo que ve na tela e nao por um numero
+	// invisivel.
+	ShieldBreakRadius float32 = ShieldRadius
+	// ShieldBreakKnockback e quanto o estouro joga cada inimigo para tras
+	// (Gui, 27/08/2026).
+	//
+	// O empurrao e o que faz o estouro valer mesmo quando nao mata: 32 de dano
+	// nao tira um orc de cima da Paladina, 150 px tiram. Ela quebra o escudo
+	// cercada e ganha o passo que precisava para relancar — e e por isso que o
+	// numero e MAIOR que o raio da aura (95): quem estava dentro do circulo
+	// termina fora dele.
+	//
+	// Nao e maior ainda porque o estouro nao pode virar reposicionamento: uma
+	// distancia que jogasse a horda para o outro lado da tela transformaria
+	// perder o escudo em ferramenta de controle, e perder o escudo continua
+	// sendo perder o escudo.
+	ShieldBreakKnockback float32 = 150
 )
 
 // Shield is the Paladina's protective energy. It has no duration: it persists,

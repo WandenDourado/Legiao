@@ -217,6 +217,14 @@ func (h *Host) buildBotView(id string, dt float32) (bot.View, *botRuntime, Playe
 
 	portalCentre, portalActive := partyPortal()
 
+	// Os canhoes de pe (so o mapa 6 tem). Fora de Foes de proposito — ver
+	// bot.View.Cannons. Mapa sem canhao devolve lista vazia e nenhum cerebro
+	// paga nada por isso.
+	var cannons []bot.CannonPost
+	for _, c := range h.LiveCannons() {
+		cannons = append(cannons, bot.CannonPost{Pos: c.Position, HitCentre: c.hitAnchor()})
+	}
+
 	primaryID := ability.PrimaryAbilityOf(char)
 	ultimateID := ability.UltimateAbilityOf(char)
 
@@ -246,6 +254,7 @@ func (h *Host) buildBotView(id string, dt float32) (bot.View, *botRuntime, Playe
 		PortalActive:   portalActive,
 		HumansAtPortal: humansAtPortal,
 		EnemiesLeft:    enemiesLeft,
+		Cannons:        cannons,
 		PrimaryReady:   primaryID == "" || h.skillOffCooldown(id, primaryID),
 		UltimateReady:  ultimateID != "" && h.skillOffCooldown(id, ultimateID) && h.skillUnlocked(id, ultimateID, char),
 		UltimateRange:  ultimateRange,
@@ -283,10 +292,17 @@ func (h *Host) skillOffCooldown(playerID, skillID string) bool {
 // HandleAttack / HandleSkillMessage — never a bot-only code path.
 func (h *Host) applyBotIntent(id string, rt *botRuntime, self PlayerState, intent bot.Intent, dt float32) {
 	pos := rl.NewVector2(float32(self.X), float32(self.Y))
+	// A bot anda como qualquer personagem, buffs incluidos: uma Sacerdotisa
+	// controlada pela maquina com o Santuario no ar ganha os mesmos 25% que a
+	// humana ganha em game/move_buff.go. Sem isto, a mesma habilidade valeria
+	// coisas diferentes dependendo de quem segura o personagem.
+	// O folego do renascer tambem (host_respawn_grace.go): o humano o ganha
+	// em network.MoveSpeedMultiplier, o bot aqui.
+	speed := botSpeed * h.Skills.SanctuaryMoveMultiplier(id) * respawnGraceMultiplier(id)
 	move := desiredBotMove(rt, h.EntityManager.Nav, pos, intent, dt)
 	move = unstickMove(rt, pos, move, dt)
 	if move.X != 0 || move.Y != 0 {
-		delta := rl.Vector2Scale(move, botSpeed*dt)
+		delta := rl.Vector2Scale(move, speed*dt)
 		pos = resolveBotMove(rt, pos, delta, rt.character, h.EntityManager.Solid, h.EntityManager.Nav)
 	}
 	// After the step resolves, not before: arenaLocked arms on actually
@@ -300,7 +316,7 @@ func (h *Host) applyBotIntent(id string, rt *botRuntime, self PlayerState, inten
 	if p, ok := h.players[id]; ok && !p.IsDead {
 		p.X, p.Y = int(pos.X), int(pos.Y)
 		p.CurrentRow, p.CurrentFrame = row, frame
-		p.VelX, p.VelY = move.X*botSpeed, move.Y*botSpeed
+		p.VelX, p.VelY = move.X*speed, move.Y*speed
 		p.IsSprinting = false
 		published = *p
 	}

@@ -9,6 +9,8 @@ package network
 import (
 	"encoding/json"
 	"log"
+
+	"github.com/WandenDourado/Legiao/internal/entity"
 )
 
 // handleJoin processes a MsgJoin on connection c. A known PlayerID is a
@@ -22,6 +24,10 @@ func (h *Host) handleJoin(c *ClientConn, payload json.RawMessage) {
 	if err := json.Unmarshal(payload, &join); err != nil {
 		log.Printf("failed to unmarshal join payload: %v", err)
 		return
+	}
+	// Antes de qualquer resposta: o estado inicial ja sai comprimido.
+	if join.Compress == compressDeflate {
+		c.enableCompression()
 	}
 
 	h.playersMutex.Lock()
@@ -44,6 +50,9 @@ func (h *Host) handleJoin(c *ClientConn, payload json.RawMessage) {
 		// second, separate character — see plan §3.
 		tookOverBot = h.takeOverBot(join.PlayerID, join.Color, join.Character)
 		if !tookOverBot {
+			// Vida do PERSONAGEM, nao um literal: quem entra de Paladina entra
+			// com os 300 dela (entity.MaxHealthFor).
+			joinMaxHealth := entity.MaxHealthFor(entity.CharacterType(join.Character))
 			h.playersMutex.Lock()
 			h.players[join.PlayerID] = &PlayerState{
 				PlayerID:  join.PlayerID,
@@ -51,8 +60,8 @@ func (h *Host) handleJoin(c *ClientConn, payload json.RawMessage) {
 				Y:         int(h.PlayerSpawn.Y),
 				Color:     join.Color,
 				Character: join.Character,
-				Health:    100,
-				MaxHealth: 100,
+				Health:    joinMaxHealth,
+				MaxHealth: joinMaxHealth,
 				IsDead:    false,
 			}
 			h.playersMutex.Unlock()
@@ -76,16 +85,26 @@ func (h *Host) handleJoin(c *ClientConn, payload json.RawMessage) {
 	h.BroadcastRoster()
 	// Send current state to the new client specifically.
 	h.sendStateToClient(c)
-	if isReconnect {
-		// Quem reconecta pode ter caido num mapa que ja nao existe mais para
-		// o grupo: sem isto ele ficaria sozinho no mapa antigo depois de um
-		// portal atravessado durante a queda. Reaproveita MsgTravel, so que
-		// para um destinatario so.
-		h.sendCurrentMapTo(c)
-	}
+	// TODO join recebe o mapa. Um jogador novo entra no mapa em que o grupo
+	// esta, e nao naquele que a maquina dele carregou antes do menu — sem
+	// isto ele chegava com os assets do world_01 (o mapa do menu) desenhados
+	// sobre coordenadas do mapa em que o host realmente esta. Quem reconecta
+	// tambem pode ter caido num mapa que ja nao existe mais para o grupo:
+	// sem isto ele ficaria sozinho no mapa antigo depois de um portal
+	// atravessado durante a queda. Os dois casos reaproveitam MsgTravel, so
+	// que para um destinatario so; isReconnect so muda a semantica do campo
+	// Reconnect (ApplyPendingTravel le-o para pousar na posicao preservada
+	// pelo host em vez do spawn do mapa — para um join novo isso ja e
+	// verdade, porque handleJoin acabou de criar o PlayerState em
+	// h.PlayerSpawn e sendStateToClient ja mandou essa posicao).
+	h.sendCurrentMapTo(c, isReconnect)
 	// A client joining mid-scene has to land already paused, or it would run
 	// around alone while everyone else reads.
 	h.sendDialogueTo(c)
+	// E os canhoes do corredor no estado em que estao: quem entra depois de
+	// eles cairem precisa ver a arte em ruinas, a barra vazia e — o que
+	// importa de verdade — o portal do fim aberto como todo mundo ve.
+	h.sendCannonStateTo(c)
 }
 
 // supersedeConnection closes any OTHER live connection already registered
@@ -113,12 +132,12 @@ func (h *Host) supersedeConnection(c *ClientConn) {
 // spawn, bounds, collision and portals from the file itself, exactly like
 // travelTo already does for everyone. Empty TargetSpawn means the map's own
 // player_spawn.
-func (h *Host) sendCurrentMapTo(c *ClientConn) {
+func (h *Host) sendCurrentMapTo(c *ClientConn, isReconnect bool) {
 	if h.stageMap == "" {
 		return
 	}
 	h.sendTo(c, Message{Type: MsgTravel, Payload: MustMarshal(TravelPayload{
 		TargetMap: h.stageMap,
-		Reconnect: true,
+		Reconnect: isReconnect,
 	})})
 }

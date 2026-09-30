@@ -49,16 +49,48 @@ func TestPartyIsFallingFiresOnTheDeclaredHorde(t *testing.T) {
 	}
 }
 
-func TestPartyIsFallingNeedsEveryoneBelowTheThreshold(t *testing.T) {
+// A regra e do GRUPO somado (28/09/2026): o grupo inteiro saudavel nao
+// dispara, mas um personagem quase cheio com o resto caido dispara — o que a
+// regra antiga ("todo mundo de pe abaixo de 30%") segurava para sempre.
+func TestPartyIsFallingNeedsTheSummedPartyBelowTheThreshold(t *testing.T) {
 	resetPartyIsFallingState(t)
 	defer resetPartyIsFallingState(t)
 	network.SetWaveState(network.WaveState{Total: 3, Index: 3, Phase: string(network.WavePhaseFighting)})
-	setPlayer("p1", 10, 100, false)
-	// Um unico jogador ACIMA de 30% impede o disparo — nao e maioria, e TODOS.
-	setPlayer("p2", 50, 100, false)
-
+	for _, id := range []string{"p1", "p2", "p3", "p4", "p5"} {
+		setPlayer(id, 200, 200, false)
+	}
 	if partyIsFalling("assets/maps/world_02.json", nil) {
-		t.Fatal("o climax disparou com um jogador acima de 30% de vida")
+		t.Fatal("o climax disparou com o grupo inteiro de vida cheia")
+	}
+
+	// Dois cheios e tres caidos: 40%, ainda uma luta em pe.
+	setPlayer("p3", 0, 200, true)
+	setPlayer("p4", 0, 200, true)
+	setPlayer("p5", 0, 200, true)
+	if partyIsFalling("assets/maps/world_02.json", nil) {
+		t.Fatal("o climax disparou com 40% da vida do grupo")
+	}
+
+	// Um quase cheio e quatro caidos: 18%. Era o caso que a regra antiga
+	// segurava ate o ultimo morrer.
+	setPlayer("p1", 180, 200, false)
+	setPlayer("p2", 0, 200, true)
+	if !partyIsFalling("assets/maps/world_02.json", nil) {
+		t.Fatal("um personagem quase cheio com o resto do grupo caido deveria disparar o climax")
+	}
+}
+
+// Sem ninguem com vida maxima conhecida nao ha grupo para medir.
+func TestPartyHealthShareIgnoresUnknownMaxHealth(t *testing.T) {
+	share, ok := partyHealthShare(map[string]network.PlayerState{
+		"a": {Health: 50, MaxHealth: 100},
+		"b": {Health: 0, MaxHealth: 0},
+	})
+	if !ok || share != 0.5 {
+		t.Errorf("share %.2f ok %v; esperado 0,5 ignorando quem nao tem MaxHealth", share, ok)
+	}
+	if _, ok := partyHealthShare(map[string]network.PlayerState{"b": {}}); ok {
+		t.Error("grupo sem MaxHealth nenhum nao pode ser medido")
 	}
 }
 

@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/WandenDourado/Legiao/internal/entity"
@@ -10,15 +9,7 @@ import (
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
-// Dialogue box layout, all proportional to the screen so the box reads the
-// same on a phone and on a desktop monitor.
-const (
-	dialogueSideMargin   = 0.06 // of screen width, each side
-	dialogueBottomMargin = 0.05 // of screen height
-	dialogueHeightRatio  = 0.26 // of screen height
-	dialoguePadding      = 18.0
-	dialogueMinHeight    = 160.0
-)
+// A geometria da caixa e do retrato mora em dialogue_geometry.go.
 
 // placeholderPortraits lists characters whose reference art is still borrowed
 // from somebody else. Drawing it would put another character's face on their
@@ -43,127 +34,110 @@ func DrawDialogueBox(screenWidth, screenHeight float32) {
 		return
 	}
 
-	box := dialogueRect(screenWidth, screenHeight)
+	box, portrait := dialogueLayout(screenWidth, screenHeight)
 
 	// Dim the whole scene so the eye goes to the box and the frozen battle
 	// behind it reads as paused rather than as a bug.
-	rl.DrawRectangle(0, 0, int32(screenWidth), int32(screenHeight), rl.Fade(rl.Black, 0.35))
+	rl.DrawRectangle(0, 0, int32(screenWidth), int32(screenHeight), rl.Fade(rl.Black, 0.52))
 
-	rl.DrawRectangleRec(box, rl.Fade(rl.Black, 0.85))
-	rl.DrawRectangleLinesEx(box, 2, rl.Fade(rl.RayWhite, 0.45))
-
-	textX := box.X + dialoguePadding
-	textWidth := box.Width - dialoguePadding*2
-
+	// A ordem e o efeito: escurecimento, retrato, painel. O retrato ENTRE os
+	// dois e o que produz a leitura das referencias — o busto sobe livre
+	// acima da caixa e o painel cruza por cima do quadril. Desenhar o painel
+	// antes devolveria a figurinha colada ao lado da caixa.
 	if tex, ok := portraitTexture(d.Portrait); ok {
-		frame := drawDialoguePortrait(tex, box)
-		textX = frame.X + frame.Width + dialoguePadding
-		textWidth = box.X + box.Width - dialoguePadding - textX
+		drawDialoguePortrait(tex, portrait)
 	}
+	drawDialoguePanel(box)
 
-	nameSize := dialogueFontSize(screenHeight, 0.030)
-	bodySize := dialogueFontSize(screenHeight, 0.026)
-	hintSize := dialogueFontSize(screenHeight, 0.020)
+	textX := box.X + Px(dialoguePadding)
+	textWidth := box.Width - Px(dialoguePadding)*2
 
-	y := box.Y + dialoguePadding
+	nameSize, bodySize, hintSize := dialogueFonts(screenHeight)
+
+	y := box.Y + Px(dialoguePadding)
 	if d.Speaker != "" {
-		rl.DrawText(d.Speaker, int32(textX), int32(y), nameSize, rl.Gold)
-		y += float32(nameSize) + 8
+		drawDialogueNameplate(d.Speaker, box, nameSize)
+		y += float32(nameSize) + Px(dialogueNameGap)
 	}
 
-	for _, line := range wrapText(d.Text, bodySize, int32(textWidth)) {
+	// Quanto de altura sobra para o corpo, descontando a dica no rodape.
+	avail := box.Y + box.Height - Px(dialoguePadding) - float32(hintSize) - y
+	lines, bodySize := fitDialogueBody(d.Text, int32(textWidth), bodySize, avail)
+
+	for _, line := range lines {
 		// Stop before spilling out of the box: a line that would be drawn
-		// under the border is not readable anyway.
-		if y+float32(bodySize) > box.Y+box.Height-dialoguePadding-float32(hintSize) {
+		// under the border is not readable anyway. Com o encolhimento acima
+		// isto vira rede de seguranca, e nao o mecanismo — uma fala so chega
+		// aqui se nem no piso ela coube.
+		if y+float32(bodySize) > box.Y+box.Height-Px(dialoguePadding)-float32(hintSize) {
 			break
 		}
-		rl.DrawText(line, int32(textX), int32(y), bodySize, rl.RayWhite)
-		y += float32(bodySize) + 6
+		rl.DrawText(line, int32(textX), int32(y), bodySize, rl.NewColor(42, 46, 42, 255))
+		y += float32(bodySize) + Px(dialogueLineGap)
 	}
 
 	drawDialogueHint(d, box, hintSize)
 }
 
-// dialogueRect is the single source of the box geometry: the drawing and the
-// touch hit-area both read it, so tapping always matches what is on screen.
-func dialogueRect(screenWidth, screenHeight float32) rl.Rectangle {
-	height := screenHeight * dialogueHeightRatio
-	if height < dialogueMinHeight {
-		height = dialogueMinHeight
-	}
-	margin := screenWidth * dialogueSideMargin
-	return rl.NewRectangle(
-		margin,
-		screenHeight-height-screenHeight*dialogueBottomMargin,
-		screenWidth-margin*2,
-		height,
-	)
+// dialogueFonts devolve os tres tamanhos da cena: nome do orador, corpo da
+// fala e dica de rodape.
+//
+// SUBIDOS EM 20/09/2026. As razoes eram 0.030/0.026/0.020 com piso 16 e teto
+// 34 para os tres, e as duas pontas doiam: numa janela 1280x720 o corpo saia a
+// 18,7 px — o texto que os testadores chamaram de ilegivel — e num monitor de
+// 1440 ele PARAVA de crescer em 34, porque o teto estava abaixo do que a razao
+// pedia. Agora cada papel tem a propria faixa, e a escala do jogador
+// (Configuracoes > Interface) multiplica o resultado como em todo o resto do
+// HUD (text.go).
+func dialogueFonts(screenHeight float32) (name, body, hint int32) {
+	return dialogueFontSize(screenHeight, 0.034, 24, 50),
+		dialogueFontSize(screenHeight, 0.030, 24, 44),
+		dialogueFontSize(screenHeight, 0.024, 18, 34)
 }
 
-// DialogueBoxRect exposes the box area so the input layer can treat a tap
-// inside it as "next line" without duplicating the layout maths.
-func DialogueBoxRect(screenWidth, screenHeight float32) rl.Rectangle {
-	return dialogueRect(screenWidth, screenHeight)
-}
-
-// drawDialoguePortrait fits the speaker's reference art into a framed panel on
-// the left of the box and returns the panel it used.
-func drawDialoguePortrait(tex rl.Texture2D, box rl.Rectangle) rl.Rectangle {
-	frame := rl.NewRectangle(
-		box.X+dialoguePadding,
-		box.Y+dialoguePadding,
-		(box.Height-dialoguePadding*2)*0.8,
-		box.Height-dialoguePadding*2,
-	)
-	rl.DrawRectangleRec(frame, rl.Fade(rl.Black, 0.5))
-
-	source := rl.NewRectangle(0, 0, float32(tex.Width), float32(tex.Height))
-	// Fit the whole figure: references are framed differently per character
-	// (some full body, some square), so cropping to a head would land on the
-	// chest for one of them.
-	scale := frame.Width / source.Width
-	if h := frame.Height / source.Height; h < scale {
-		scale = h
-	}
-	drawn := rl.NewRectangle(
-		frame.X+(frame.Width-source.Width*scale)/2,
-		frame.Y+(frame.Height-source.Height*scale),
-		source.Width*scale,
-		source.Height*scale,
-	)
-	rl.DrawTexturePro(tex, source, drawn, rl.NewVector2(0, 0), 0, rl.White)
-	rl.DrawRectangleLinesEx(frame, 1, rl.Fade(rl.RayWhite, 0.25))
-	return frame
-}
-
-// drawDialogueHint tells each machine what it can do: the host advances, a
-// client waits. Without it a client reads a frozen screen with no explanation.
-func drawDialogueHint(d network.DialogueState, box rl.Rectangle, size int32) {
-	hint := "Enter ou toque para continuar"
-	if network.Role == "client" {
-		hint = "aguardando o narrador..."
-	}
-	if d.Total > 0 {
-		hint = fmt.Sprintf("%s   %d/%d", hint, d.Index, d.Total)
-	}
-	width := rl.MeasureText(hint, size)
-	rl.DrawText(hint,
-		int32(box.X+box.Width-dialoguePadding)-width,
-		int32(box.Y+box.Height-dialoguePadding-float32(size)),
-		size, rl.Fade(rl.LightGray, 0.8))
-}
-
-// dialogueFontSize scales a font with the screen and keeps it inside a range
-// that stays legible on a phone without turning into a headline on a monitor.
-func dialogueFontSize(screenHeight, ratio float32) int32 {
+// dialogueFontSize scales a font with the screen, keeps it inside the range
+// authored for that role and then applies the player's HUD scale.
+func dialogueFontSize(screenHeight, ratio, min, max float32) int32 {
+	// Piso e teto sao pixels da tela nativa (Px, text.go).
+	min, max = Px(min), Px(max)
 	size := screenHeight * ratio
-	if size < 16 {
-		size = 16
+	if size < min {
+		size = min
 	}
-	if size > 34 {
-		size = 34
+	if size > max {
+		size = max
 	}
-	return int32(size)
+	return FitTextSize(size * hudScale)
+}
+
+// fitDialogueBody quebra a fala e, se ela nao couber na altura disponivel,
+// ENCOLHE a fonte ate caber.
+//
+// Existe porque a caixa e um recipiente de tamanho fixo e a fala nao: a mais
+// longa da campanha tem 275 caracteres (mapa 6), e com a fonte maior — ou com
+// a escala do jogador em 1.8 — ela passa a pedir mais linhas do que a caixa
+// tem. A alternativa era o corte silencioso do laco de desenho, que apaga o
+// fim de uma fala de narrativa sem avisar ninguem. Perder tamanho e reversivel
+// e visivel; perder texto nao.
+//
+// O piso e o de FitTextSize (MinTextSize em pixels da tela nativa): abaixo
+// dele encolher nao resolve nada, so troca um problema de leitura por outro.
+func fitDialogueBody(text string, maxWidth, size int32, avail float32) ([]string, int32) {
+	if maxWidth <= 0 {
+		return nil, size
+	}
+	floor := FitTextSize(0)
+	for {
+		lines := wrapText(text, size, maxWidth)
+		if float32(len(lines))*(float32(size)+Px(dialogueLineGap)) <= avail || size <= floor {
+			return lines, size
+		}
+		next := int32(float32(size) * 0.92)
+		if next < floor {
+			next = floor
+		}
+		size = next
+	}
 }
 
 // wrapText breaks a paragraph into lines that fit maxWidth. A word longer than

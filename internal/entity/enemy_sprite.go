@@ -237,8 +237,44 @@ func (d EnemyDef) HasAnim(anim EnemyAnim) bool {
 var enemyRegistry = map[EnemyType]EnemyDef{}
 
 // RegisterEnemy adds an enemy definition to the registry.
+//
+// E AQUI QUE O RITMO DO JOGO E APLICADO, num ponto so, em vez de dentro de
+// cada literal la embaixo. Os numeros escritos em cada registro continuam
+// sendo os autorais — o 130 do orc contra os 200 do jogador, que e a relacao
+// que os comentarios deste arquivo explicam — e GameSpeed (gamespeed.go)
+// multiplica os dois na mesma proporcao.
+//
+// O tempo por quadro da caminhada e dividido pelo mesmo fator, e isso nao e
+// capricho: o FrameTime do AnimWalk do orc e a unica solucao de uma equacao
+// que tem a Speed dentro (ver o comentario dele). Mexer num sem o outro
+// devolve o pe deslizando. Monstro parado (Speed 0) nao passa por nada disto.
 func RegisterEnemy(def EnemyDef) {
+	if def.Speed > 0 {
+		def.Speed = scaledSpeed(def.Speed)
+		def.Anims = scaledWalkAnims(def.Anims)
+		if len(def.Anims) == 0 {
+			// Folha unica radial (slime, lobo): o ciclo dela E a locomocao.
+			def.FrameTime = scaledFrameTime(def.FrameTime)
+		}
+	}
 	enemyRegistry[def.Type] = def
+}
+
+// scaledWalkAnims devolve uma COPIA do mapa com o AnimWalk encurtado. Copia e
+// nao mutacao: o mapa vem de um literal do chamador, e alterar o original
+// faria uma segunda chamada com o mesmo literal escalar duas vezes.
+func scaledWalkAnims(anims map[EnemyAnim]EnemyAnimDef) map[EnemyAnim]EnemyAnimDef {
+	walk, ok := anims[AnimWalk]
+	if !ok {
+		return anims
+	}
+	out := make(map[EnemyAnim]EnemyAnimDef, len(anims))
+	for k, v := range anims {
+		out[k] = v
+	}
+	walk.FrameTime = scaledFrameTime(walk.FrameTime)
+	out[AnimWalk] = walk
+	return out
 }
 
 // GetEnemyDef returns the definition for an enemy type, falling back to the
@@ -344,17 +380,26 @@ func init() {
 		},
 
 		Radius: 58, HitOffsetY: -67, HitRadius: 78,
-		// AttackDamage 25: QUATRO esferas derrubam um personagem (100 de
-		// vida, entity/character.go). Eram 14, ou seja oito acertos — e oito
-		// acertos a uma esfera por vez (host_sentry_orb.go so deixa uma no ar
-		// por gargula) e uma ameaca que o grupo simplesmente absorve andando.
-		// A gargula existe para bater de FORA do raio da Area Angelical; se
-		// ela nao doi, a fase 4 nao tem pergunta nenhuma.
+		// AttackDamage 34 (25 -> 34, 25/08/2026): TRES esferas derrubam um
+		// personagem (100 de vida, entity/character.go). Eram 25, ou seja
+		// quatro acertos — e no climax do mapa 4 a cadencia real nao e o
+		// AttackCooldown, e sim o tempo de viagem da esfera (300 px/s):
+		// `launchSentryOrbs` recusa lancar enquanto a anterior estiver no ar
+		// (skill.SentryHasLiveOrb), entao numa travessia de saguao o grupo
+		// tinha tempo de sobra para absorver os quatro acertos andando, e a
+		// emboscada nunca derrubava ninguem abaixo dos 30% ao mesmo tempo — a
+		// cena do Arqueiro nunca abria. A gargula existe para bater de FORA
+		// do raio da Area Angelical; se ela nao doi, a fase 4 nao tem
+		// pergunta nenhuma.
 		//
 		// Continua sendo dano ESQUIVAVEL: a esfera viaja a 300 e o jogador
-		// anda a 200 com vantagem de angulo. Quatro golpes e o preco de
+		// anda a 200 com vantagem de angulo. Tres golpes e o preco de
 		// ignora-la, nao de enfrenta-la.
-		Health: 40, Speed: 0, AttackDamage: 25, AttackRange: SentryGlobalRange,
+		//
+		// Health continua em 40: e um contrato com a fase 5, onde as Flechas
+		// Celestiais tiram 40 de dano perfurante — uma flecha por gargula.
+		// Mudar a vida daqui quebra aquela suprema em silencio.
+		Health: 40, Speed: 0, AttackDamage: 34, AttackRange: SentryGlobalRange,
 		AttackCooldown: 1.35, Color: "#6B287A",
 	})
 
@@ -381,7 +426,7 @@ func init() {
 	// da sala. HitOffsetY -180 sobe a caixa de acerto do chao para o meio do
 	// corpo solido; sem isso o jogador teria que mirar no piso entre as patas.
 	RegisterEnemy(EnemyDef{
-		Type: EnemyTypeDarkLady, Name: "Senhora das Trevas",
+		Type: EnemyTypeDarkLady, Name: "Imperatriz das Trevas",
 		Mode:        EnemyModeFixed,
 		RenderScale: 1.0,
 		Anims: map[EnemyAnim]EnemyAnimDef{
@@ -430,7 +475,8 @@ func init() {
 		},
 
 		Radius: 130, HitOffsetY: -180, HitRadius: 200,
-		// Health 2000, cinco vezes os 400 que ela tinha.
+		// Health 45000 (31/08/2026, doc/plan_world07_arena_tuning.md). Antes
+		// disso foram 400, depois 2000, depois 30000 (27/08/2026).
 		//
 		// Os 400 vinham de quando ela era o chefe do world_05, uma criatura
 		// no fim de uma corrida de cinco hordas. Hoje ela comanda a ARENA do
@@ -440,7 +486,34 @@ func init() {
 		// tempo o grupo segura os dois portoes. Com 400 o cerco final acabava
 		// antes de a fase mostrar do que e capaz — uma salva de Flechas
 		// Celestiais e uma Chuva de Meteoros a derrubavam.
-		Health: 2000, Speed: 0, AttackDamage: 22, AttackRange: 1400,
+		//
+		// Com 2000 ainda acabava. A escala de dano do grupo de cinco cresceu
+		// junto com as supremas: as Flechas Celestiais perfuram, a Chuva de
+		// Meteoros agora tira 480 por impacto (skill/meteor.go) e a chefe e um
+		// alvo PARADO de raio 200 no meio da arena — ela come dezenas de
+		// impactos de uma chuva so.
+		//
+		// 30000 tambem caiu rapido demais quando o anel de contato
+		// (BossContactRadius/BossContactDPS, skill/boss_contact.go) entrou em
+		// jogo: a Legiao Espectral sozinha, colada no corpo dela, tirava perto
+		// de METADE da barra numa unica ativacao (a conta esta no comentario
+		// de BossContactDPS). 45000 poe a luta na ordem de varias recargas de
+		// suprema (60 s cada) mesmo com a Legiao mordendo o corpo dela, que e
+		// o tamanho que uma arena final `Endless` precisa ter para que segurar
+		// os portoes seja a fase, e nao o intervalo antes dela.
+		//
+		// A barra da chefe e proporcional (ui.DrawBossBar), entao o numero nao
+		// vaza para a tela — o jogador le "quanto falta", nao "quantos HP".
+		//
+		// AttackDamage/AttackCooldown (27/09/2026, plans/plan_playtest_27_09.md
+		// §2) SO valem contra ESPECTRO: e o revide que StepLegions
+		// (skill/legion_manager.go) cobra de quem a morde, e entra na conta
+		// de BossContactDPS. Contra JOGADOR ela nao tem golpe corpo a corpo:
+		// o caminho generico (checkEnemyPlayerCollisions) cobrava esses 22 de
+		// quem estivesse a ate AttackRange+Radius (1530 px) dela, sem nada na
+		// tela, e agora pula chefe. Zerar o numero aqui mudaria a Legiao em
+		// silencio (~5,5 dano/s de revide a menos por espectro).
+		Health: 45000, Speed: 0, AttackDamage: 22, AttackRange: 1400,
 		AttackCooldown: 4.0, Color: "#2A2540", Vision: 2600,
 	})
 

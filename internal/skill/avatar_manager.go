@@ -1,6 +1,8 @@
 package skill
 
 import (
+	"github.com/WandenDourado/Legiao/internal/sound"
+
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -8,6 +10,7 @@ import (
 
 // ActivateAvatar makes ownerID an avatar (or restarts the duration on recast).
 func ActivateAvatar(m *Manager, ownerID string, pos rl.Vector2) {
+	sound.PlayAt(sound.SFXAvatar, pos)
 	m.ultMutex.Lock()
 	defer m.ultMutex.Unlock()
 	if m.Avatars == nil {
@@ -55,7 +58,8 @@ func (m *Manager) UpdateAvatars(dt float32) {
 func (m *Manager) DrawAvatars() {
 	m.ultMutex.RLock()
 	defer m.ultMutex.RUnlock()
-	for _, av := range m.Avatars {
-		av.Draw()
+	// Ordem estavel, nao a do mapa: ver draw_order.go.
+	for _, id := range orderedIDs(m.Avatars) {
+		m.Avatars[id].Draw()
 	}
 }

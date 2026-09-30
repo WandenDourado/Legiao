@@ -681,6 +681,11 @@ func (e *Enemy) Draw() {
 		default:
 			drawEnemySprite(tex, ad, def.RenderScale, e.Position.X, e.Position.Y, e.AnimFrame, e.Angle)
 		}
+		// A pose deste quadro, para a desintegracao saber de onde partir se
+		// ele nao estiver mais vivo no proximo (death_fx.go).
+		if deathFXEnabled {
+			watchEnemyPose(e.ID, e.deathPose(def, ad))
+		}
 		return
 	}
 	col := hexToColor(e.Color)
@@ -762,6 +767,18 @@ func drawEnemyHealthBar(x, y, health, maxHealth, above, halfWidth float32) {
 	rl.DrawRectangle(int32(barX), int32(barY), int32(fillWidth), int32(barHeight), healthColor)
 }
 
+// DrawStructureHealthBar desenha a barra de uma coisa que leva dano mas nao e
+// um `Enemy` — hoje so o canhao do corredor do mapa 6, que e decoracao do mapa
+// com uma arma atras (internal/network/cannons.go).
+//
+// A geometria vem por parametro em vez de sair de um `EnemyDef` justamente
+// porque nao ha def: a altura e a largura da barra saem do tamanho da PECA no
+// manifesto do tileset. A regua de cor e a mesma do monstro, e nao a do aliado
+// (player_health_bar.go): para quem joga, aquilo ali e ameaca.
+func DrawStructureHealthBar(x, y, health, maxHealth, above, halfWidth float32) {
+	drawEnemyHealthBar(x, y, health, maxHealth, above, halfWidth)
+}
+
 // generateID creates a unique ID for enemies and projectiles.
 func generateID() string {
 	randBytes := make([]byte, 8)
@@ -801,6 +818,9 @@ func DrawRemoteEnemy(id string, enemyType EnemyType, x, y float32, color string,
 		drawEnemyFixed(tex, ad, def.RenderScale, x, y, st.frame)
 	default:
 		drawEnemySprite(tex, ad, def.RenderScale, x, y, st.frame, st.angle)
+	}
+	if deathFXEnabled {
+		watchEnemyPose(id, remoteDeathPose(enemyType, def, ad, st, x, y))
 	}
 }
 

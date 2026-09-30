@@ -19,12 +19,19 @@ type BossState struct {
 	MaxHealth float32
 	// Casting e verdadeiro enquanto a chefe DANCA e a nevoa ainda nao entrou.
 	// E o unico aviso que o jogador tem, e ele precisa chegar ao HUD: a danca
-	// acontece do outro lado de uma arena de 5120 px e um grupo que esta
-	// segurando um portao simplesmente nao ve a chefe.
+	// acontece do outro lado da arena e um grupo que esta segurando um
+	// portao simplesmente nao ve a chefe.
 	Casting bool
 	// CastLeft e quantos segundos faltam para a nevoa. Alimenta a contagem no
 	// aviso — "PERIGO" sem relogio diz que algo vem, nao diz quando.
 	CastLeft float32
+	// VictoryReady so vira verdadeiro depois que a horda parou, os caidos
+	// se ergueram e a cena final terminou de falar. E ele, e nao Health<=0,
+	// que os fogos e a mensagem "Missao Concluida" esperam - a ideia e que a
+	// vitoria SE ANUNCIE depois de a fase inteira ter acabado, nao no exato
+	// quadro em que a vida do chefe zera. Ver DialogueDirector.Update
+	// (game/dialogue.go) e (*Host).MarkBossVictoryReady (bosses.go).
+	VictoryReady bool
 }
 
 var (

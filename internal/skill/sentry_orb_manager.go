@@ -165,8 +165,9 @@ func DrawSentryOrbs(host bool) {
 	st, mu := sentryStore(host)
 	mu.RLock()
 	defer mu.RUnlock()
-	for _, o := range st.Orbs {
-		o.Draw()
+	// Ordem estavel, nao a do mapa: ver draw_order.go.
+	for _, id := range orderedIDs(st.Orbs) {
+		st.Orbs[id].Draw()
 	}
 	for _, b := range st.Bursts {
 		b.Draw()

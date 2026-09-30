@@ -5,6 +5,7 @@ import (
 	"github.com/WandenDourado/Legiao/internal/entity"
 	"github.com/WandenDourado/Legiao/internal/input"
 	"github.com/WandenDourado/Legiao/internal/network"
+	"github.com/WandenDourado/Legiao/internal/settings"
 	"github.com/WandenDourado/Legiao/internal/ui"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -15,6 +16,30 @@ var uiSkillButton = ui.NewSkillButton()
 
 // uiUltimateButton is the on-screen ultimate (supreme skill) button (Android).
 var uiUltimateButton = ui.NewUltimateButton()
+
+// androidActionLock is the aim cluster's single-gesture rule: the first of the
+// three action buttons to take a touch owns it, and the other two stop
+// answering until it lets go.
+//
+// It exists because aiming is a HELD drag that routinely crosses the other
+// buttons — they are one thumb-width away, which is the point of a cluster —
+// and each one was arming on the way past and firing on release. The player
+// asked for an angle and got an ultimate. The movement joystick is outside the
+// lock on purpose: walking while aiming is the game working as intended.
+var androidActionLock input.ActionLock
+
+// cancelAndroidAim drops any aim in flight and frees the cluster.
+//
+// For every path that stops updating the buttons: a finished run, a body
+// frozen inside a portal, a session on desktop. Release is detected by
+// scanning touches, so returning before that scan would leave a button armed
+// and the other two locked out for the rest of the run.
+func cancelAndroidAim(aj *input.AimJoystick) {
+	aj.Cancel(&androidActionLock)
+	uiSkillButton.Cancel(&androidActionLock)
+	uiUltimateButton.Cancel(&androidActionLock)
+	androidActionLock.Reset()
+}
 
 // ProcessInput handles all input for one frame and returns the movement direction vector.
 // On Android this reads the touch joystick, aim joystick, and handles sprint detection.
@@ -30,6 +55,7 @@ func ProcessInput(cfg Config, p *entity.Player, w *World, ts *input.TouchState, 
 	if network.GameOver {
 		// A finished run takes no gameplay input from anyone. Without this a
 		// dead player could still fire into the Game Over screen.
+		cancelAndroidAim(aj)
 		return dir
 	}
 	if network.LocalPlayerInPortal {
@@ -38,7 +64,21 @@ func ProcessInput(cfg Config, p *entity.Player, w *World, ts *input.TouchState, 
 		// steps the player clear of the rectangle and clears the flag
 		// locally; the host confirms it on its own the next tick it
 		// recomputes presence.
+		cancelAndroidAim(aj)
 		UpdatePortalCancel(p, w, cfg, sw, sh)
+		return dir
+	}
+
+	// Configuracoes DE DENTRO da partida (Passo 6). Fora do galho acima de
+	// proposito: enquanto o jogador espera um portal, ESC so cancela o
+	// portal — ver settings_overlay.go para o motivo por extenso.
+	RequestOpenSettingsOverlay(cfg, aj, sw, sh)
+	if SettingsOverlayOpen() {
+		// A tela possui o toque/mouse deste quadro; nenhum movimento,
+		// ataque ou habilidade e lido enquanto ela estiver aberta. A
+		// PARTIDA CONTINUA simulando (loop.go nao para por causa disto) —
+		// so a leitura de controle local congela.
+		cancelAndroidAim(aj)
 		return dir
 	}
 
@@ -48,6 +88,12 @@ func ProcessInput(cfg Config, p *entity.Player, w *World, ts *input.TouchState, 
 		// fire and skill buttons never overlap.
 		geom := input.ComputeAndroidControlGeom(sw, sh)
 		joystickCenterX := sw * 0.15
+		if input.LeftHanded() {
+			// O joystick troca de lado com o cluster de acoes (Modo
+			// canhoto, doc/settings.md): sem isto os dois ficariam do
+			// MESMO lado depois de espelhar so o cluster.
+			joystickCenterX = sw * (1 - 0.15)
+		}
 		joystickCenterY := sh * 0.80
 		baseRadius := sh * 0.08
 
@@ -59,19 +105,27 @@ func ProcessInput(cfg Config, p *entity.Player, w *World, ts *input.TouchState, 
 		)
 		attackRect := geom.AttackRect()
 
-		ts.SetMaxRadius(baseRadius * 0.75)
+		// JoystickRadiusScale (0.7..1.5) vem da tela de Configuracoes.
+		ts.SetMaxRadius(baseRadius * 0.75 * input.JoystickRadiusScale())
 		ts.Update(joystickRect, attackRect)
 
-		dir = ts.GetJoystickDelta()
+		// raw e o deslocamento do polegar (0..1 do raio maximo); dir passa
+		// pela curva de resposta, que chega ao comprimento 1 do teclado
+		// antes da borda — sem ela o celular andava mais devagar que o
+		// desktop (input/joystick_curve.go).
+		raw := ts.GetJoystickDelta()
+		dir.X, dir.Y = input.JoystickMoveResponse(raw.X, raw.Y)
 
-		// Sprint detection: joystick displacement > 70% of max radius
-		joyMag := rl.Vector2Length(dir)
+		// Sprint detection: joystick displacement > 70% of max radius.
+		// Le o deslocamento CRU: a curva satura em 1 bem antes de 0,70.
+		joyMag := rl.Vector2Length(raw)
 		p.IsSprinting = joyMag > entity.SprintThreshold
 
 		// Aim joystick update — returns true on release (fire).
-		// Pass the skill button geometry so the fire button does not claim a
-		// touch that belongs to the skill button.
-		if aj.Update(attackRect, *ts, rl.NewVector2(geom.SkillCenterX, geom.SkillCenterY), geom.SkillRadius, sw, sh) {
+		// The whole cluster geometry goes in: the fire button hit-tests as a
+		// circle now, and the lock is what keeps it from claiming a touch
+		// while an ability is being aimed.
+		if aj.Update(geom, *ts, &androidActionLock, sw, sh) {
 			aimDir := aj.AimDir
 			if network.Role == "host" && network.CurrentHost != nil {
 				targetX := p.Position.X + aimDir.X*100
@@ -99,10 +153,22 @@ func ProcessInput(cfg Config, p *entity.Player, w *World, ts *input.TouchState, 
 		// On-screen ULTIMATE button — casts the player's supreme ability.
 		if abilityUsable(p.CharType, 1) {
 			updateAndroidSkillButton(uiUltimateButton, p, 1, sw, sh)
+		} else {
+			// Stopped being available — possibly mid-aim, and a button that
+			// disappears while holding the lock locks the cluster forever.
+			uiUltimateButton.Cancel(&androidActionLock)
 		}
 	} else {
 		// Desktop sprint detection: Left Shift key
 		p.IsSprinting = rl.IsKeyDown(rl.KeyLeftShift)
+		cancelAndroidAim(aj)
+		// "Mira segue o mouse continuamente" (Configuracoes > Controles):
+		// so entao o chevron (ui/aim_indicator.go) segue o cursor a cada
+		// quadro. No modo padrao ("so no clique") o chevron so muda no
+		// instante do clique — ver o bloco de ataque do mouse mais abaixo.
+		if settings.Get().ContinuousMouseAim {
+			updateDesktopAimFromMouse(p, aj, cam)
+		}
 	}
 
 	// Keyboard input (WASD + arrow keys) — desktop primary input
@@ -133,6 +199,11 @@ func ProcessInput(cfg Config, p *entity.Player, w *World, ts *input.TouchState, 
 	if !cfg.FullScreen && rl.IsMouseButtonPressed(rl.MouseLeftButton) {
 		screenPos := rl.GetMousePosition()
 		mousePos := rl.GetScreenToWorld2D(screenPos, cam.Camera)
+		// "So no clique" (o padrao): o chevron muda AQUI, no instante do
+		// tiro, mesmo quando ContinuousMouseAim esta desligado — antes
+		// desta linha o indicador de mira nunca refletia o mouse no
+		// desktop (ficava preso na direcao padrao "para baixo").
+		aj.AimDir = aimDirTo(p.Position, mousePos)
 		if network.Role == "host" && network.CurrentHost != nil {
 			network.CurrentHost.HandleAttack(network.LocalPlayerID, mousePos.X, mousePos.Y)
 		} else if network.Role == "client" {
@@ -207,7 +278,7 @@ func updateAndroidSkillButton(sb *ui.SkillButton, p *entity.Player, abilityIdx i
 	// Feed the button its recharge state so Draw can put the counter on top
 	// of it — on a phone that is the only place the player is looking.
 	sb.SetCooldown(SkillSlotCooldown(p.CharType, abilityIdx))
-	if sb.Update() {
+	if sb.Update(&androidActionLock) {
 		// Each button uses its OWN aim direction (sb.SkillDir) only.
 		// It must never fall back to the attack button's AimDir, otherwise
 		// the cast would inherit the fire-button's direction. If the

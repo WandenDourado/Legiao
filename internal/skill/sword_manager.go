@@ -20,9 +20,13 @@ func (m *Manager) AddSword(s *SwordSweep) {
 func (m *Manager) GetAllSwords() []*SwordSweep {
 	m.swordMutex.RLock()
 	defer m.swordMutex.RUnlock()
-	list := make([]*SwordSweep, 0, len(m.Swords))
-	for _, s := range m.Swords {
-		list = append(list, s)
+	// Ordem estavel, nao a do mapa: ver draw_order.go. GetAllSwords alimenta
+	// tanto o desenho quanto a resolucao de golpe, e as duas querem a mesma
+	// ordem todo quadro.
+	ids := orderedIDs(m.Swords)
+	list := make([]*SwordSweep, 0, len(ids))
+	for _, id := range ids {
+		list = append(list, m.Swords[id])
 	}
 	return list
 }

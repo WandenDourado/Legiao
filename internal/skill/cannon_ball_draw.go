@@ -42,6 +42,13 @@ type CannonBallBurst struct {
 const CannonBallBurstTTL float32 = 0.6
 
 // NewCannonBallBurst cria a explosão de impacto em pos.
+//
+// O anel expande até ~4,6x o raio da bola: é ONDA DE CHOQUE, e não a área que
+// machuca (`CannonBlastRadius`, 630). Isso foi mexido em 27/08/2026 para as
+// duas coincidirem e o Gui pediu de volta em 28/08 — o efeito lia bem, e o
+// problema nunca esteve aqui: era o gatilho da explosão, que detonava a bola
+// 664 px antes de encostar em alguém (ver network.cannonBallImpactPoint).
+// Um anel de choque maior que a zona letal é convenção, não promessa.
 func NewCannonBallBurst(pos rl.Vector2) *CannonBallBurst {
 	b := &CannonBallBurst{Position: pos, TTL: CannonBallBurstTTL, Max: CannonBallBurstTTL, Sparks: NewParticleEmitter()}
 	b.Sparks.Burst(pos, 34, 90, 320, 0.5, CannonBallRadius*0.45, rl.Orange)

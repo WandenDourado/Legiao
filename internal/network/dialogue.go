@@ -64,12 +64,22 @@ func PublishDialogue(d DialogueState) {
 	CurrentHost.broadcast(Message{Type: MsgDialogue, Payload: MustMarshal(d)})
 }
 
-// sendDialogueTo pushes the running dialogue to one connection. A client that
-// joins mid-scene would otherwise keep playing while everyone else reads.
+// sendDialogueTo sincroniza UMA conexao com o estado do dialogo, seja ele
+// qual for — inclusive a AUSENCIA de cena.
+//
+// O "inclusive" e o conserto de um bug de 20/09/2026. A funcao nascia com um
+// `if !d.Active { return }`, porque o caso em que se pensou foi o de quem
+// entra no meio de uma cena e precisa pousar ja pausado. Mas `Active:false` e
+// publicado UMA vez, como evento, por DialogueDirector.end (game/dialogue.go):
+// quem estava com a conexao caida naquele instante nunca recebe, e o rejoin
+// era justamente o momento de contar — e ficava calado. O cliente entao
+// guardava para sempre o `Active:true` de antes da queda, e como DialogueActive
+// e o portao de pausa de input e simulacao (host.go, game/dialogue.go), a
+// pessoa voltava para um jogo congelado numa caixa que ninguem mais podia
+// avancar: o host ja tinha encerrado a cena.
+//
+// Mandar sempre custa uma mensagem por rejoin e torna o estado idempotente:
+// depois de um rejoin, o que o cliente tem e o que o host tem.
 func (h *Host) sendDialogueTo(c *ClientConn) {
-	d := GetDialogueState()
-	if !d.Active {
-		return
-	}
-	h.sendTo(c, Message{Type: MsgDialogue, Payload: MustMarshal(d)})
+	h.sendTo(c, Message{Type: MsgDialogue, Payload: MustMarshal(GetDialogueState())})
 }

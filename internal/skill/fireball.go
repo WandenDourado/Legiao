@@ -6,9 +6,9 @@ import (
 
 // Fireball constants tune the Mago Bola de Fogo skill.
 const (
-	FireballSpeed           float32 = 840
+	FireballSpeed           float32 = 840 * gameSpeed
 	FireballRadius          float32 = 140
-	FireballTTL             float32 = 3.0
+	FireballTTL             float32 = 3.0 / gameSpeed
 	FireballTrail           int     = 6
 	FireballRange           float32 = 900
 	FireballExplosionRadius float32 = 700

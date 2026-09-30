@@ -55,6 +55,13 @@ func (p *Player) updateAnimation(dir rl.Vector2, dt float32) {
 	if p.IsSprinting {
 		frameTime = def.SprintTime
 	}
+	// O ciclo acompanha o passo (doc/game_speed.md, invariante 1: o pe nao
+	// desliza). Speed e PlayerSpeed vezes os buffs de movimento (Santuario,
+	// folego do renascer — game/move_buff.go); sem isto o corpo andava 40%
+	// mais rapido com as pernas no ritmo normal.
+	if ratio := p.Speed / PlayerSpeed; ratio > 0 {
+		frameTime /= ratio
+	}
 	p.AnimTimer += dt
 	if p.AnimTimer >= frameTime {
 		p.AnimTimer -= frameTime
@@ -76,7 +83,9 @@ func (p *Player) Draw() {
 	def := GetCharacter(p.CharType)
 	// A corpse is the same sprite drawn through the grayscale shader, frozen
 	// on the frame and facing the direction it died in.
-	if p.IsDead {
+	// A janela de imunidade pisca pelo MESMO shader: cinza e colorido se
+	// alternando le como "fantasma, ainda nao pode ser tocado".
+	if p.IsDead || InvulnBlinkGray(p.Invuln) {
 		BeginDeathTint()
 		defer EndDeathTint()
 	}

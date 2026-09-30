@@ -1,0 +1,145 @@
+{
+ "atlas": "assets/tilesets/arena_sigils.png",
+ "pieces": {
+  "sigil_circle_grand": {
+   "source": {
+    "x": 6,
+    "y": 6,
+    "width": 778,
+    "height": 758
+   },
+   "anchor": {
+    "x": 389.0,
+    "y": 758
+   },
+   "role": "ground_detail",
+   "collision": false
+  },
+  "sigil_circle_minor": {
+   "source": {
+    "x": 6,
+    "y": 770,
+    "width": 381,
+    "height": 379
+   },
+   "anchor": {
+    "x": 190.5,
+    "y": 379
+   },
+   "role": "ground_detail",
+   "collision": false
+  },
+  "sigil_wax_ring": {
+   "source": {
+    "x": 393,
+    "y": 770,
+    "width": 355,
+    "height": 339
+   },
+   "anchor": {
+    "x": 177.5,
+    "y": 339
+   },
+   "role": "ground_detail",
+   "collision": false
+  },
+  "sigil_glyph_01": {
+   "source": {
+    "x": 754,
+    "y": 770,
+    "width": 89,
+    "height": 102
+   },
+   "anchor": {
+    "x": 44.5,
+    "y": 102
+   },
+   "role": "ground_detail",
+   "collision": false
+  },
+  "sigil_glyph_02": {
+   "source": {
+    "x": 849,
+    "y": 770,
+    "width": 73,
+    "height": 102
+   },
+   "anchor": {
+    "x": 36.5,
+    "y": 102
+   },
+   "role": "ground_detail",
+   "collision": false
+  },
+  "sigil_glyph_03": {
+   "source": {
+    "x": 928,
+    "y": 770,
+    "width": 72,
+    "height": 102
+   },
+   "anchor": {
+    "x": 36.0,
+    "y": 102
+   },
+   "role": "ground_detail",
+   "collision": false
+  },
+  "sigil_glyph_04": {
+   "source": {
+    "x": 6,
+    "y": 1155,
+    "width": 81,
+    "height": 85
+   },
+   "anchor": {
+    "x": 40.5,
+    "y": 85
+   },
+   "role": "ground_detail",
+   "collision": false
+  },
+  "sigil_scuff_01": {
+   "source": {
+    "x": 93,
+    "y": 1155,
+    "width": 90,
+    "height": 102
+   },
+   "anchor": {
+    "x": 45.0,
+    "y": 102
+   },
+   "role": "ground_detail",
+   "collision": false
+  },
+  "sigil_scuff_02": {
+   "source": {
+    "x": 189,
+    "y": 1155,
+    "width": 89,
+    "height": 91
+   },
+   "anchor": {
+    "x": 44.5,
+    "y": 91
+   },
+   "role": "ground_detail",
+   "collision": false
+  },
+  "sigil_drag_line_h": {
+   "source": {
+    "x": 284,
+    "y": 1155,
+    "width": 510,
+    "height": 65
+   },
+   "anchor": {
+    "x": 255.0,
+    "y": 65
+   },
+   "role": "ground_detail",
+   "collision": false
+  }
+ }
+}

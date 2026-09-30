@@ -45,6 +45,21 @@ func stateUpdateMsg(t *testing.T, playerID string) Message {
 	return Message{Type: MsgStateUpdate, Payload: payload}
 }
 
+// stateUpdateMsgGen is stateUpdateMsg plus an explicit StageGen — used by the
+// backlog test below, which needs to tell two state_update snapshots apart by
+// generation rather than by which player they carry.
+func stateUpdateMsgGen(t *testing.T, playerID string, gen int) Message {
+	t.Helper()
+	payload, err := json.Marshal(StateUpdatePayload{
+		Players:  []PlayerState{{PlayerID: playerID}},
+		StageGen: gen,
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	return Message{Type: MsgStateUpdate, Payload: payload}
+}
+
 // TestDrainStaleSnapshotsKeepsOnlyTheNewestOfTheSameType reproduces the
 // resume-from-background backlog: several state_update snapshots already
 // sitting in the read buffer, none of which was ever going to reach the
@@ -97,6 +112,11 @@ func TestDrainStaleSnapshotsIgnoresNonSnapshotTypes(t *testing.T) {
 	// consumed by this call.
 	body := newlineJoined(t, stateUpdateMsg(t, "after"))
 	c := &Client{reader: bufio.NewReader(strings.NewReader(body))}
+	// Sem isto Buffered() fica em 0 so porque ninguem tentou ler ainda — nao
+	// porque drainStaleSnapshots consumiu algo. As duas irmas acima chamam
+	// primeBuffered antes de medir; esta faltava, e o teste falhava mesmo
+	// com o caminho rapido correto (pre-existente, sem relacao com A1/A2).
+	primeBuffered(c.reader)
 
 	got := c.drainStaleSnapshots(dialogue)
 	if got.Type != MsgDialogue {
@@ -104,5 +124,33 @@ func TestDrainStaleSnapshotsIgnoresNonSnapshotTypes(t *testing.T) {
 	}
 	if c.reader.Buffered() == 0 {
 		t.Fatal("drainStaleSnapshots nao deveria ter consumido o buffer para um tipo que nao e snapshot")
+	}
+}
+
+// TestDrainStaleSnapshotsEndsOnTheNewestGeneration e a cautela que A1 pede
+// (plan_correcoes_30-08-2026.md, bloco A1): StageGen agora mora DENTRO do
+// snapshot que drainStaleSnapshots ja colapsa por "so o ultimo importa". Um
+// backlog com uma geracao N e depois uma N+1 tem de terminar exatamente na
+// N+1 — a mesma regra de sempre ("so o ultimo snapshot do tipo importa"),
+// so que agora tambem carrega a informacao de reset. Se drainStaleSnapshots
+// alguma vez passasse a devolver o PRIMEIRO em vez do ultimo, este teste
+// pegaria isso antes de reconcileStageState receber uma geracao velha.
+func TestDrainStaleSnapshotsEndsOnTheNewestGeneration(t *testing.T) {
+	first := stateUpdateMsgGen(t, "p1", 3)
+	stale := stateUpdateMsgGen(t, "p1", 4)   // geracao N: ja tem sucessor no buffer
+	newest := stateUpdateMsgGen(t, "p1", 5)  // geracao N+1: a que deve sobrar
+
+	body := newlineJoined(t, stale, newest)
+	c := &Client{reader: bufio.NewReader(strings.NewReader(body))}
+	primeBuffered(c.reader)
+
+	got := c.drainStaleSnapshots(first)
+
+	var state StateUpdatePayload
+	if err := json.Unmarshal(got.Payload, &state); err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+	if state.StageGen != 5 {
+		t.Fatalf("esperava terminar na geracao mais nova (5), ficou %d", state.StageGen)
 	}
 }

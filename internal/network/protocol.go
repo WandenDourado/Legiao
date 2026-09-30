@@ -41,6 +41,16 @@ const (
 	// sends it when the player presses F2; the host applies it to that
 	// player's gates only.
 	MsgTestMode MessageType = "test_mode"
+	// MsgCompress (host -> cliente) e a ultima linha em texto puro: tudo o que
+	// vem depois nesta conexao e deflate (host_peer_writer.go, client_inflate.go).
+	MsgCompress MessageType = "compress"
+	// MsgPing (cliente -> host) e MsgPong (host -> cliente, o mesmo payload):
+	// medem a latencia que o HUD mostra ao jogador (client_ping.go).
+	MsgPing MessageType = "ping"
+	MsgPong MessageType = "pong"
+	// MsgJoinRejected (host -> cliente): sala cheia ou versao diferente. O
+	// cliente volta ao menu com a frase certa (host_guard.go).
+	MsgJoinRejected MessageType = "join_rejected"
 	// MsgDialogue carries the line currently on screen. The host owns the
 	// narrative: clients never send this, they only display what arrives.
 	MsgDialogue MessageType = "dialogue"
@@ -58,6 +68,28 @@ const (
 	// sends it, and only the host does — a client never grants itself
 	// anything.
 	MsgUltimateGrant MessageType = "ultimate_grant"
+	// MsgCannonState anuncia a vida e a queda dos canhoes do corredor: o
+	// cliente desenha a barra com ela e, quando um posto zera, troca a arte
+	// pela versao em ruinas. Vai separado de MsgCannonBall de proposito:
+	// aquilo e o projetil, isto e o EMPLACAMENTO que o disparou, e misturar
+	// os dois foi o erro que a separacao entre sentinela e canhao ja evitou
+	// uma vez (ver cannons.go).
+	//
+	// So a vida viaja. A POSICAO de cada posto as duas maquinas leem do mesmo
+	// mapa (SetCannonPosts, cannon_view.go), o que faz um cliente que entra no
+	// meio da fase ja nascer com os postos no lugar certo.
+	MsgCannonState MessageType = "cannon_state_event"
+	// MsgBossFog carries the Dark Lady's arena-wide dark fog (map 7 boss) to
+	// clients. Same family as MsgSentryOrb/MsgCannonBall — magia de MONSTRO,
+	// nao de jogador, entao nao viaja em MsgSkill. See host_boss.go: ate este
+	// evento existir, a nevoa so existia no host.
+	MsgBossFog MessageType = "boss_fog_event"
+	// MsgBossThorn carries the Dark Lady's ground-spike volley (map 7 boss)
+	// to clients. Mesma familia de MsgBossFog. Um unico evento carrega TODOS
+	// os pontos de uma conjuracao — a mesma foto de posicoes que castThorns
+	// tira no host — em vez de um evento por espinho, que deixaria a rajada
+	// se espalhar por varios quadros de rede em vez de nascer junta.
+	MsgBossThorn MessageType = "boss_thorn_event"
 )
 
 type Message struct {
@@ -69,6 +101,38 @@ type JoinPayload struct {
 	PlayerID  string `json:"player_id"`
 	Color     string `json:"color"`
 	Character string `json:"character"`
+	// Compress pede o fluxo host->cliente comprimido ("deflate"). Um host
+	// antigo ignora o campo e continua em texto puro; um cliente antigo nao
+	// manda e recebe texto puro. Os dois lados convivem com qualquer versao.
+	Compress string `json:"compress,omitempty"`
+	// Proto e a versao do protocolo do jogo (OnlineGameTag). O host recusa
+	// uma versao DIFERENTE da sua com uma mensagem clara (MsgJoinRejected);
+	// vazio (cliente antigo, anterior ao campo) e aceito.
+	Proto string `json:"proto,omitempty"`
+}
+
+// PingPayload vai e volta igual (MsgPing -> MsgPong): o cliente mede o tempo
+// de ida e volta pelo proprio relogio.
+type PingPayload struct {
+	ID int64 `json:"id"`
+}
+
+// JoinRejectedPayload diz por que o host recusou a entrada.
+type JoinRejectedPayload struct {
+	Reason string `json:"reason"` // joinRejectFull | joinRejectVersion
+}
+
+const (
+	joinRejectFull    = "full"
+	joinRejectVersion = "version"
+)
+
+// compressDeflate e o unico algoritmo que existe hoje.
+const compressDeflate = "deflate"
+
+// CompressPayload vai no marcador MsgCompress, a ultima linha em texto puro.
+type CompressPayload struct {
+	Algo string `json:"algo"`
 }
 
 type InputPayload struct {
@@ -85,6 +149,28 @@ type InputPayload struct {
 
 type StateUpdatePayload struct {
 	Players []PlayerState `json:"players"`
+	// Stage e a corrida da fase e se ela terminou. Estado, e nao evento: os
+	// eventos MsgGameOver e MsgReset continuam existindo para a reacao
+	// imediata na tela de quem os recebe, mas quem perdeu um deles (uma tela
+	// de celular bloqueada, um socket que caiu e ressincronizou) se corrige
+	// sozinho no proximo snapshot, sem precisar de mais nenhuma mensagem —
+	// StageGen e GameOver ja vao junto de toda publicacao de
+	// StateUpdatePayload (sendStateToClient, BroadcastStateUpdate,
+	// BroadcastRoster), entao "o proximo snapshot" chega em, no maximo, um
+	// tique de simulacao.
+	//
+	// StageGen e a mesma geracao que StageGeneration() ja conta nas duas
+	// maquinas (reset_local.go) — ela so nunca tinha cruzado a rede antes.
+	// GameOver nao tem omitempty: false e um valor legitimo e diferente de
+	// ausente, e omiti-lo faria um cliente que perdeu o fim do jogo nunca
+	// saber que ele acabou (o campo chegaria sempre zerado por omissao, igual
+	// a "nao acabou").
+	StageGen int  `json:"stage_gen"`
+	GameOver bool `json:"game_over"`
+	// HostT e o relogio do host (ms) no tique deste snapshot. A interpolacao
+	// do cliente usa isto, e nao a hora de chegada (interpolation.go).
+	// Omitido por hosts antigos: o cliente cai na hora de chegada.
+	HostT int64 `json:"t,omitempty"`
 }
 
 // PlayerState represents a player's state in the game.
@@ -116,6 +202,12 @@ type PlayerState struct {
 	// Absent, not identity, so it rides the ordinary snapshot with no
 	// wire.go changes (host_portal_presence.go).
 	InPortal bool `json:"in_portal,omitempty"`
+	// Invuln sao os segundos que restam da janela de imunidade que o host
+	// concedeu (host_invulnerability.go: renascer, ultimo suspiro, vitoria).
+	// Estado por tique como InPortal — veredicto do host, zero fora da janela,
+	// e por isso `omitempty` nao custa um byte no tique comum. So o desenho
+	// le: e o que faz o corpo piscar (entity.InvulnBlinkGray).
+	Invuln float32 `json:"invuln,omitempty"`
 	// Animation state for sprite rendering
 	CurrentFrame int     `json:"current_frame,omitempty"`
 	CurrentRow   int     `json:"current_row,omitempty"`
@@ -148,11 +240,19 @@ type WaveState struct {
 }
 
 // EnemyUpdatePayload is broadcast by host to sync all enemies.
-// The wave state rides along with it: both change every tick and are consumed
-// together, so a separate message type would only add a second handler.
+// The wave and boss states ride along with it: all three change every tick
+// and are consumed together, so a separate message type would only add a
+// second and third handler that do exactly what this one already does.
 type EnemyUpdatePayload struct {
 	Enemies []EnemyState `json:"enemies"`
 	Wave    WaveState    `json:"wave"`
+	Boss    BossState    `json:"boss"`
+	// SentriesAwake e o veredicto da porta de despertar das gargulas
+	// (sentry_wake.go). O cliente precisa dele para so mostrar a seta de
+	// borda de tela depois de "As sentinelas despertaram".
+	SentriesAwake bool `json:"sentries_awake,omitempty"`
+	// HostT: o mesmo relogio de StateUpdatePayload.HostT, do mesmo tique.
+	HostT int64 `json:"t,omitempty"`
 }
 
 // ProjectileState represents a projectile's state.
@@ -269,6 +369,51 @@ type CannonBallPayload struct {
 	Y         int     `json:"y,omitempty"`
 	DirX      float32 `json:"dir_x,omitempty"`
 	DirY      float32 `json:"dir_y,omitempty"`
+}
+
+// CannonStatePayload carries the posts whose health changed, by position.
+// Position and not name: o host conhece o posto pelo marcador `enemy_cannon_*`
+// da camada `spawn`, e a decoracao que o cliente desenha e um objeto da camada
+// `buildings` — os dois coincidem no mapa, e casar por ponto dispensa uma
+// tabela de nomes que nao existe (ver internal/tilemap/piece_swap.go).
+type CannonStatePayload struct {
+	Posts []CannonPostState `json:"posts"`
+}
+
+// CannonPostState e um posto e a vida que sobrou nele. HP zero e a queda.
+type CannonPostState struct {
+	X  int     `json:"x"`
+	Y  int     `json:"y"`
+	HP float32 `json:"hp"`
+}
+
+// BossFogPayload carries the Dark Lady's dark fog (map 7 boss) to clients.
+// "cast" traz os limites que ela cobre (a arena inteira, host_boss.go
+// arenaBounds) para o cliente criar a mesma nevoa que o host acabou de
+// conjurar. "expire" nao carrega nada alem do tipo: e so o aviso para o
+// cliente derrubar a nevoa AGORA, em vez de esperar a propria contagem local
+// (AdvanceFog, chamada nas duas maquinas) concordar sozinha.
+type BossFogPayload struct {
+	EventType string  `json:"event_type"` // "cast" ou "expire"
+	X         int     `json:"x,omitempty"`
+	Y         int     `json:"y,omitempty"`
+	W         float32 `json:"w,omitempty"`
+	H         float32 `json:"h,omitempty"`
+}
+
+// BossThornPayload carries the Dark Lady's ground-spike volley (map 7 boss)
+// to clients: todos os pontos de UMA conjuracao, na mesma mensagem — a foto
+// que castThorns tira do host inteira, e nao espalhada em varios eventos.
+type BossThornPayload struct {
+	Points []BossThornPoint `json:"points"`
+}
+
+// BossThornPoint e uma marca de espinho: so o centro. O relogio de cada um
+// (telegrafo, subida, permanencia) e a mesma constante nas duas maquinas
+// (skill.ThornTelegraph e companhia), entao nao precisa viajar.
+type BossThornPoint struct {
+	X int `json:"x"`
+	Y int `json:"y"`
 }
 
 // SanctuaryPayload carries a sanctuary spawn so clients can render it.

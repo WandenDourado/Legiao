@@ -5,6 +5,7 @@ import (
 
 	"github.com/WandenDourado/Legiao/internal/collision"
 	"github.com/WandenDourado/Legiao/internal/entity"
+	"github.com/WandenDourado/Legiao/internal/sound"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -25,6 +26,7 @@ type LegionEvent struct {
 // ActivateLegion summons a fresh legion for ownerID (a recast replaces any
 // remnant with a full new circle of specters).
 func ActivateLegion(m *Manager, ownerID string, pos rl.Vector2) {
+	sound.PlayAt(sound.SFXLegion, pos)
 	m.necroMutex.Lock()
 	defer m.necroMutex.Unlock()
 	m.Legions[ownerID] = NewLegion(ownerID, pos)
@@ -39,9 +41,6 @@ func (m *Manager) SetLegionAnchor(ownerID string, pos rl.Vector2) {
 	}
 }
 
-// DissolveLegion marks every remaining specter as dying (owner died/left).
-// Returns true if any specter was newly dissolved, so callers can broadcast
-// the event exactly once.
 // HasLegion reports whether an owner still has specters on the field. The
 // scripted rescue uses it to know when its summoned Necromante is done.
 func (m *Manager) HasLegion(ownerID string) bool {
@@ -51,6 +50,20 @@ func (m *Manager) HasLegion(ownerID string) bool {
 	return ok
 }
 
+// AnyLegion reports whether ANY owner has a Legiao Espectral on the field.
+// O anel de contato da chefe so e desenhado enquanto isto for verdadeiro:
+// desde 27/09/2026 ele so machuca espectro (network/host_boss_contact.go), e
+// um anel vermelho visivel sem legiao nenhuma ensinaria o jogador a fugir de
+// algo que nao o fere.
+func (m *Manager) AnyLegion() bool {
+	m.necroMutex.RLock()
+	defer m.necroMutex.RUnlock()
+	return len(m.Legions) > 0
+}
+
+// DissolveLegion marks every remaining specter as dying (owner died/left).
+// Returns true if any specter was newly dissolved, so callers can broadcast
+// the event exactly once.
 func (m *Manager) DissolveLegion(ownerID string) bool {
 	m.necroMutex.Lock()
 	defer m.necroMutex.Unlock()
@@ -118,6 +131,39 @@ func StepLegions(m *Manager, enemies []*entity.Enemy, solid collision.Solid, dt 
 		l.prune()
 		if l.Spent() {
 			delete(m.Legions, owner)
+		}
+	}
+	return events
+}
+
+// DamageSpectersInRadius cobra dano de todo espectro dentro de um raio de um
+// ponto — o anel de contato da chefe do mapa 7 (boss_contact.go), pelo MESMO
+// caminho que StepLegions ja usa para o revide dos inimigos comuns: marca
+// Dying e devolve o evento de morte, sem broadcast. Quem chama (o pacote
+// network) e quem sabe como replicar aos clientes.
+//
+// Nao mexe em enemies vivos nem aplica dano a eles — o anel so machuca quem
+// ENCOSTA no corpo, e o unico corpo aqui e o da propria chefe, que nao e um
+// Specter.
+func DamageSpectersInRadius(m *Manager, center rl.Vector2, radius, dmg float32) []LegionEvent {
+	events := make([]LegionEvent, 0)
+	m.necroMutex.Lock()
+	defer m.necroMutex.Unlock()
+	for owner, l := range m.Legions {
+		for _, s := range l.Specters {
+			if s.Dying {
+				continue
+			}
+			if rl.Vector2Distance(center, s.Position) > radius {
+				continue
+			}
+			s.Health -= dmg
+			if s.Health <= 0 {
+				s.Dying = true
+				events = append(events, LegionEvent{
+					OwnerID: owner, SpecterDied: true, SpecterPos: s.Position,
+				})
+			}
 		}
 	}
 	return events
@@ -219,7 +265,8 @@ func (m *Manager) SpecterCount() int {
 func (m *Manager) DrawLegions() {
 	m.necroMutex.RLock()
 	defer m.necroMutex.RUnlock()
-	for _, l := range m.Legions {
-		l.Draw()
+	// Ordem estavel, nao a do mapa: ver draw_order.go.
+	for _, id := range orderedIDs(m.Legions) {
+		m.Legions[id].Draw()
 	}
 }

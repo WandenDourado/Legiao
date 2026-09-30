@@ -74,6 +74,12 @@ func (c *Client) drainStaleSnapshots(msg Message) Message {
 		if !ok {
 			continue
 		}
+		if next.Type == MsgCompress {
+			// Tudo depois do marcador e deflate: parar aqui, e readLoop
+			// troca o leitor antes de ler a proxima linha.
+			c.inflatePending = true
+			return msg
+		}
 		if next.Type != msg.Type {
 			c.handleMessage(c.drainStaleSnapshots(next))
 			continue

@@ -18,6 +18,8 @@ Single entry point for AI agents. Read this file first. Do not read every doc by
 - Use build tags for platform behavior (`//go:build android` / `//go:build !android`), not runtime `if isAndroid` checks.
 - Use `world.Bounds` or map-derived dimensions for world logic. Do not use screen constants for camera, projectile, spawn, or collision bounds.
 - Do not run destructive cleanup, commit, push, publish, or upload artifacts unless explicitly requested.
+- `assets/` holds only what the game loads at runtime (the Android build copies it whole into the APK). Original generated sheets (`*_source.png`) go to `art/source/`; old/unused variants (`*_old.*`) are deleted, not kept next to the live file.
+- `doc/` holds only current-state reference docs (how the system works now). Never create or leave planning/execution documents there. A task plan, implementation proposal, or step-by-step execution doc goes in `plans/` instead; once the plan is fully executed, delete it from `plans/` rather than leaving it around, and record the outcome as a `doc/changelog.md` entry plus an update to the relevant area doc.
 
 ## Docs Routing
 
@@ -28,6 +30,8 @@ Single entry point for AI agents. Read this file first. Do not read every doc by
 | Android build, APK/AAB, APK assets | `doc/android.md` |
 | Input, joystick, aim, sprint | `doc/controls.md` |
 | Cadencia de ataque, cooldown, morte/revive, game over, modo teste | `doc/combat_rules.md` |
+| Velocidade de jogador/monstro/projetil, ritmo geral | `doc/game_speed.md` (OBRIGATORIO antes de mexer em qualquer Speed) |
+| Tamanho de texto/HUD, escala de interface | `doc/settings.md` (secao Interface) + `internal/ui/text.go` |
 | Multiplayer, host/client, discovery, combat/projectile sync | `doc/network.md` |
 | Diálogo/narrativa, roteiro de mapa, pausa de cena | `doc/dialogue.md` |
 | Camera, map bounds, world-space rendering | `doc/camera.md` |
@@ -36,10 +40,14 @@ Single entry point for AI agents. Read this file first. Do not read every doc by
 | Estilo visual para gerar assets novos | `doc/art_style.md` (bioma sombrio: seção 11) |
 | Criar/redesenhar mapa (zonas, bioma, densidade) | `skills/create-tiled-map/SKILL.md` |
 | Gerar/integrar arte de cenário (atlas, manifesto, keying) | `skills/create-tiled-assets/SKILL.md` |
+| Tirar fundo magenta / rosa residual em qualquer arte gerada | `doc/matte_magenta.md` + `skills/remove-magenta-matte/SKILL.md` |
 | Progressão da campanha, ultimate por fase, cena de resgate | `doc/combat_rules.md` |
 | Desktop build/run | `doc/running_desktop.md` |
 | Desempenho: custo de render, VRAM, banda de rede, otimizacao | `doc/performance.md` |
 | Criar ou revisar magia/skill: custo por quadro, culling, colisao | `doc/skill_performance.md` (OBRIGATORIO) |
+| Ver/afinar o visual de uma magia sem compilar o jogo | `skills/preview-skill-effects/SKILL.md` |
+| Trilha de fase, som de magia, raio de audicao | `doc/audio.md` |
+| Tela de Configuracoes, volumes por barramento, opcoes de video/controles/interface/jogador | `doc/settings.md` |
 | Product scope or feature intent | `doc/overview.md` |
 
 `doc/changelog.md` is history, not prerequisite reading. Use it only when investigating regressions or appending a new entry.
@@ -67,6 +75,17 @@ colisão e integração no mapa. Companheira da `create-tiled-map`, que decide
 Este ambiente não gera imagem: o entregável é o **prompt**, e a integração
 recomeça quando o usuário devolve o PNG.
 
+### remove-magenta-matte
+
+Skill file: `skills/remove-magenta-matte/SKILL.md`
+
+Use quando sobrar rosa do matte `#FF00FF` numa arte já recortada — contorno
+rosa, halo, ou pontos rosa dentro do cabelo/frestas — e para auditar arte nova.
+Troca a cor pela do miolo vizinho mantendo a luminância (não apaga o traço) e
+protege violeta pintado de propósito (Necromante). Teoria e números medidos em
+`doc/matte_magenta.md`. Retratos novos já saem limpos: `key_and_frame.py` chama
+a limpeza sozinho.
+
 ### create-character-abilities
 
 Skill file: `skills/create-character-abilities/SKILL.md`
@@ -76,6 +95,18 @@ Use for character ability/spell (magia) work:
 - Improving the procedural visuals of an existing spell (raylib primitives, particles, blend modes, animation timing — never image assets).
 
 Do not use for character sprite/art generation or installation, or Android builds.
+
+### preview-skill-effects
+
+Skill file: `skills/preview-skill-effects/SKILL.md`
+
+Use para VER o visual de uma magia sem compilar o jogo: um harness HTML/canvas
+de arquivo unico que porta o desenho procedural (raylib -> canvas 2D, blending
+aditivo incluso) e roda no navegador, com sliders para os numeros em discussao.
+
+Companheira da `create-character-abilities`, que decide *o que a magia faz*;
+esta so espelha *como ela e desenhada*. O preview nao julga fps, culling nem
+raio de jogabilidade — isso continua sendo F3 e `doc/skill_performance.md`.
 
 ### install-character-sprites
 

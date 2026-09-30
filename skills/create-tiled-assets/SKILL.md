@@ -89,7 +89,7 @@ audit, integrate, build. Respect the generation budget the user states.
 text-to-image tool. The prompt itself is the deliverable:
 
 1. Write the prompt (template below), say which reference images to attach and
-   exactly where to save the result: `assets/tilesets/<set>_source.png`.
+   exactly where to save the result: `art/source/tilesets/<set>_source.png`.
 2. **STOP.** Never fabricate a placeholder or proceed on an imagined sheet.
 3. When the user returns the image, resume at *Key the matte* and finish the
    integration exactly like a generator host would.
@@ -102,7 +102,7 @@ text-to-image tool. The prompt itself is the deliverable:
 2. **Generate / hand off** per host mode. One visual set = one generation call
    (spec Global Rules): palette, lighting, stroke weight and scale only stay
    consistent within a single call.
-3. **Key the matte.** `key_matte.py <set>_source.png --output <set>.png` strips
+3. **Key the matte.** (Cross-pipeline rules — measured matte `(236,3,226)`, green as discriminant, re-color instead of delete, trapped interior pockets: `doc/matte_magenta.md`.) `key_matte.py <set>_source.png --output <set>.png` strips
    the magenta background. A source that already has real alpha passes through
    unchanged. What it does, and why each step exists:
 
@@ -323,7 +323,7 @@ measured numbers of the approved pieces into the prompt.
 
 ## Audit trail
 
-- `assets/tilesets/<set>_source.png`, `<set>b_source.png`, `<set>c_source.png` —
+- `art/source/tilesets/<set>_source.png`, `<set>b_source.png`, `<set>c_source.png` —
   every generated sheet, never overwritten; the runtime atlas is `<set>.png`.
 - `work/tiled-assets/prompt-*.md` — the exact prompt of each generation, with
   the correction passes numbered.

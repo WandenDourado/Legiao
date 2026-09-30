@@ -29,9 +29,9 @@ assets/
     terrain_dark_grass.png        # pilha escura: grama cheia (material 4)
     terrain_dark_grass_sparse.png # grama rala (material 5)
     terrain_bare_soil.png         # terra nua (material 6)
+    terrain_forest_path.png       # caminho pisado (material 8, mapas 2 e 3)
     terrain_siege_gravel.png      # material 9  (mapa 3: pátio de obra da fortaleza)
     terrain_dark_flagstone.png    # material 10 (mapa 3: laje da esplanada)
-    terrain_trail.png             # fita da trilha, RGBA (alpha = perfil do caminho)
     forest_trees.png              # atlas do forest_manifest (carvalho grande)
     forest_pine.png               # atlas do forest_pine_manifest (pinheiro dourado)
     terrain_toppings.tsx     # unico tileset referenciado pelo mapa (firstgid 400)
@@ -42,8 +42,11 @@ assets/
     siege_defenses.png       # atlas do siege_defenses_manifest (mapa 3: barricadas, estacas, braseiro)
     terrain_toppings_fortress.png/.tsx  # 3o kit de topping (firstgid 464): cascalho e laje
     village_vegetation.png   # atlas do vegetation_manifest
-    *_source.png             # folhas geradas, nunca sobrescritas (trilha de auditoria)
 ```
+
+As folhas geradas originais (`*_source.png`, nunca sobrescritas — trilha de
+auditoria) ficam em `art/source/tilesets/`, fora de `assets/`, para não irem
+para dentro do APK.
 
 Atlas de manifesto **não tem `.tsx`**: o recorte vem do manifesto, não de
 aritmética de grade. Só o tileset de toppings, que é de tiles 1×1 de verdade,
@@ -346,8 +349,7 @@ reconstruir a malha inteira a cada abertura seria o mesmo custo do
 carregamento do mapa, para uma mudança de meia dúzia de células.
 
 **F4** (desktop) desenha a malha (verde = livre, vermelho = bloqueada) e a
-rota atual de cada bot e monstro. Ver `doc/plan_navegacao_bots_monstros.md`
-para o desenho completo.
+rota atual de cada bot e monstro.
 
 ### A caixa do jogador fica nos pés, não no centro
 
@@ -390,53 +392,43 @@ jogador aparece **nos pés dele**, que é onde ela é testada.
 
 ## Trilhas
 
-Uma trilha é uma **fita de arte ao longo de uma curva** — nem tile, nem material.
+Até 31/08/2026 a trilha era uma **fita de arte ao longo de uma curva**,
+desenhada em geometria imediata por cima do terreno a cada quadro (`trail.go`,
+`trail_renderer.go`). Deixou de existir: era o item mais caro do desenho no
+mobile — uma camada translúcida quase do tamanho da tela numa GPU de blocos — e
+o próprio material que ela desenhava por cima já existia no chão.
+`terrainForestPath` (material 8, `terrain_renderer.go`) já ficava no FUNDO da
+pilha escura desde que foi criado, então a grama ao redor já desbotava para
+dentro dele — só faltava alguém pintar o caminho com ele.
 
-Medindo a arte de referência: o maior degrau de verdor entre colunas vizinhas é
-2.12 num perfil que vai de 19.2 a 8.6, e o miolo do caminho *ainda tem grama*
-(verdor 10.8 contra 16.5 na grama cheia). Não existe borda para recortar. Então
-a arte é desenhada como está, e o próprio perfil dela, medido coluna a coluna,
-virou o canal **alpha** de `terrain_trail.png` — a fita desenha o caminho e
-deixa de fora as margens de grama da imagem, que eram o que a fazia arrastar
-verde para dentro dos outros biomas.
+A troca foi assar a curva: o `world_02` e o `world_03` tinham cada um um objeto
+polilinha na objectgroup `trails` (a mesma forma descrita acima, com a
+propriedade `width`), e essa curva foi reamostrada e suavizada OFFLINE — o
+mesmo algoritmo que `trail.Path` fazia em tempo de execução, só que rodado uma
+vez — para decidir quais células do chão sob a fita viram material 8. O
+resultado foi escrito direto na camada `ground` de cada mapa, e a objectgroup
+`trails` foi apagada dos dois arquivos: não há mais curva nenhuma para
+carregar, suavizar ou desenhar em tempo de execução, é só chão pintado como
+qualquer outro material da pilha.
 
-**Por que não tile.** Um tile de caminho reto precisa de peça de canto desenhada
-para cada curva: rotação só produz horizontal a partir de vertical, ela não
-inventa canto. E prenderia o traçado à grade de 128 px.
+No `world_03` a trilha agora encosta na esplanada (materiais 9/10) em vez de
+parar 6 células antes dela — o traçado original não chegava lá; a decisão de
+estender foi do Gui (31/08/2026). Células que já eram esplanada (9 ou 10) nunca
+são sobrescritas por material 8: a fortaleza é chão CONSTRUÍDO, não terra que o
+caminho gastou.
 
-**Por que não campo de distância por pixel.** Perguntar a cada pixel qual o ponto
-mais próximo da curva quebra na virada: no lado de fora, um leque inteiro de
-pixels responde o mesmo vértice, a distância percorrida trava ali e a textura
-roda em catavento. Com geometria, o `v` é um número por vértice e linear entre
-eles por construção.
-
-Objeto polilinha na objectgroup `trails`, com uma propriedade só:
-
-| Propriedade | Padrão | Significado |
-|---|---|---|
-| `width` | 512 px | largura da fita, que é também a cada quanto a textura repete ao longo do trajeto |
-
-Duas regras que a fita impõe:
-
-- A normal de cada junta é a média das duas direções e cada quad reaproveita a
-  aresta do anterior. Sem isso haveria vão na parte de fora da curva, e
-  sobreposição misturaria a arte semitransparente contra ela mesma, imprimindo
-  um degrau claro em cada emenda.
-- A fita dobra sobre si mesma no lado de dentro de uma curva de raio menor que a
-  meia-largura. `Trail.Path` reamostra a 24 px e suaviza com raio de meia-
-  largura para arredondar os cantos da polilinha, mas o traçado no Tiled ainda
-  precisa de folga: com 512 px de largura, pelo menos 2 células entre viradas.
-
-| File | Responsibility |
-|---|---|
-| `internal/tilemap/trail.go` | Leitura das polilinhas, reamostragem e suavização da curva. |
-| `internal/tilemap/trail_renderer.go` | Emite os quads texturizados da fita. |
-| `work/tiled-assets/build_trail.py` | Gera `terrain_trail.png` a partir da referência, medindo o alpha dela. |
-| `work/tiled-map-world02/preview_terrain.py` | Espelha bioma e fita fora do jogo, rasterizando cada quad em dois triângulos com UV por baricêntricas. |
-
-A trilha é desenhada logo depois do terreno e antes do `ground_detail`: ela é
-chão, e tudo que fica em pé sobre o chão vem por cima dela.
-
+Custo novo: mínimo. `assets/tilesets/terrain_trail.png` e
+`terrain_trail_source.png` foram apagados; nada mais os referencia.
+`terrainForestPath` estreou com `terrain_dirt.png` — a MESMA arte clara da
+pilha verde (vila) — e por isso o caminho ficou claro demais para uma floresta
+sombria, defeito relatado pelo Gui no mesmo dia. Não é uma peça de arte nova: é
+`terrain_dirt.png` regrado (ganho por canal, técnica de
+`work/tiled-assets/match_biome_tint.py`) para a luminância dos vizinhos da
+pilha escura (151 → ~63, contra 55-102 do resto da pilha) e ladrilhado a 512 px
+como eles — passou a ser material `span` (`spanMaterials`), o único da pilha
+escura que ainda não era. Custa a mesma ~1 MB de VRAM que qualquer outra folha
+de 512 px da pilha (§2.1 de `doc/performance.md`), carregada só quando o mapa
+cita o material.
 ## Portais
 
 Um portal é um objeto na objectgroup `portals`. Quem pisa nele troca de mapa.
@@ -519,7 +511,7 @@ porque o portão da fortaleza (`portal_portao_da_fortaleza`) fica **dentro**
 da zona `castle_climax`, ao norte — atravessar a zona arma a emboscada do
 clímax, e o portal fecha de novo até a emboscada ser resolvida. O que **não**
 podia continuar era um bot tratando "portal ativo" como "vá até lá agora":
-ver `doc/plan_avanco_bots_e_gargula.md` §A2, causa 4, e `travelDest`
+ver `travelDest`
 (`internal/bot/steering.go`) — o portal só é destino de um bot quando não há
 nada por perto para lutar **e** um humano já está na porta.
 
@@ -544,7 +536,7 @@ aplica a correção ao corpo que ela move.
 - **Humano**: o próprio cliente roda `World.UpdateArenaGate` todo quadro para
   o seu jogador local (`game/loop.go`), e por isso obedece — a autoridade da
   posição de um humano é o cliente dele (`MsgInput`).
-- **Bot**: é um corpo que só o host move (`doc/plan_bots_de_classe.md` §2).
+- **Bot**: é um corpo que só o host move.
   Nenhum cliente aplica a regra a ele, então a mesma correção tem de rodar no
   host, por bot, keyed em `botRuntime.arenaLocked` — o espelho de
   `arenaGate.returnLocked`, mas por agente em vez de por travessia local.
@@ -615,7 +607,7 @@ Regras que valem a pena não reinventar:
 
 ### Quem entra no portal some e espera
 
-Com bots no grupo (`doc/plan_bots_de_classe.md`) a porta quase não abria: um
+Com bots no grupo a porta quase não abria: um
 bot entrava e saía do retângulo o tempo todo, e "todos dentro ao mesmo tempo"
 nunca ficava verdadeiro por mais de um quadro. A regra agora: **quem pisa na
 zona do portal some da tela e congela**, liberando o pequeno retângulo para o
@@ -785,7 +777,6 @@ distribui para todos os passes.
 | Terreno (`TerrainRenderer.eachCell`) | intervalo de células |
 | Tile layers (`drawTileLayer`) | intervalo de células |
 | Peças de manifesto (`ManifestRenderer.Draw`) | interseção do **retângulo desenhado** |
-| Fita de trilha (`TrailRenderer.ribbon`) | interseção da caixa de cada quad |
 
 Três regras que valem entender antes de mexer:
 
@@ -798,15 +789,26 @@ Três regras que valem entender antes de mexer:
   pixels acima, a casa ancora no pé da parede. Cortar pela célula âncora faria
   a copa sumir enquanto o tronco ainda está abaixo da tela. O retângulo
   desenhado é exato e por isso não leva margem.
-- **O terreno leva margem de 1 célula, a trilha e os props não.** A margem
+- **O terreno leva margem de 1 célula, os props não.** A margem
   cobre o quad que atravessa a borda da tela; quem é testado pelo retângulo
   exato não precisa dela.
 
-A trilha é cortada apesar de tudo caber num batch só, porque cada quad custa
-doze chamadas de cgo (cor, coordenada e vértice por canto) e uma trilha longa
-emite centenas por quadro. O `travelled` e a aresta anterior continuam
-avançando mesmo no quad pulado — sem isso a textura saltaria ao reentrar na
-tela e a emenda abriria.
+## O retângulo de origem usa o tamanho de tile do TILESET, não do mapa
+
+`drawTileLayer` calcula o offset da peça no atlas (`srcX`/`srcY`) a partir de
+`ts.TileWidth`/`ts.TileHeight` — o tamanho de tile declarado pelo **tileset**.
+O retângulo de origem (`srcRect`) tem de usar essas mesmas dimensões, e não
+`tileW`/`tileH` (o tamanho de tile do **mapa**, usado só para posicionar a
+célula na tela).
+
+Quando um tileset casa com o grid do mapa (o caso comum) os dois números são
+iguais e não faz diferença. Quando não casam — um tileset com tile maior ou
+menor que o do mapa — usar `tileW`/`tileH` no tamanho da origem soma um
+deslocamento calculado com um passo (`ts.TileWidth`) a uma janela de tamanho
+diferente (`tileW`), e a amostra invade a linha ou coluna vizinha do atlas:
+um fio de 1 px da peça ao lado vazando pela borda da peça atual. Corrigido em
+09/2026 (`doc/changelog.md`); vale para qualquer mapa que misture tilesets de
+tamanhos diferentes, não só o que expôs o bug.
 
 `MapRenderer.Draw` (sem câmera) usa `EverythingVisible()`: quem não tem câmera
 não pode cullar, e desenhar tudo é o comportamento que existia antes.
@@ -821,6 +823,76 @@ visível é cortada:
 | `world_01` | 3.323 | 258 | 398 | 13× |
 | `world_02` | 12.702 | 825 | 1.065 | 15× |
 | `world_03` | 23.044 | 1.071 | 1.530 | **22×** |
+
+## Só se desenha a CAMADA que aparece
+
+O culling acima responde *quantas células* cada passe visita. Ele não toca no
+outro fator do custo, que é **quantas camadas cada célula recebe** — e é esse
+que decidia o desempenho no celular.
+
+O terreno é empilhado (ver "As pilhas"): a célula recebe a grama base mais uma
+camada por material abaixo do próprio, e **o quad de cada camada cobre a célula
+inteira**. Logo o custo por célula é a altura do material dela na pilha:
+
+| Mapa | Quads por célula | Por quê |
+|---|---|---|
+| `world_01` | 1,23 | vila verde, quase tudo grama pura (topo da pilha) |
+| `world_02` | 4,16 | pilha escura, quatro estágios de mata |
+| `world_03` | **5,40** | pilha escura + esplanada: a laje negra são **oito** quads empilhados |
+| `world_04` | 3,15 | pilha do castelo |
+| `world_05`–`07` | 2,3–2,6 | |
+
+Essa coluna é a curva de desempenho relatada em jogo, mapa a mapa: o 1 fluido,
+o 2 e o 3 travando, o 4 em diante melhor que os dois mas nunca tão bom quanto o
+1. Nada disso aparece em contagem de draw call — depois do batch por material
+são ~10 chamadas em qualquer mapa —, e é por isso que passou despercebido: o
+que muda é o número de **fragmentos**, não o de chamadas.
+
+**A observação que resolve:** quando os oito vizinhos de uma célula carregam o
+mesmo material, ela não tem borda nenhuma para desbotar. `side()` devolve 1 nos
+quatro lados, nenhum dos quatro termos de canto entra (todos exigem um canto
+*desligado*) e o dither é pesado por `mask*(1-mask)`, que zera. A máscara sai
+**1,0 exata**, as texturas de material não têm canal alfa, e o quad fica
+**opaco** — tudo que foi desenhado sob ele é invisível.
+
+`fullyLinked` (`terrain_mask.go`) é esse teste; `TerrainRenderer.prepareCoverage`
+o roda uma vez por mapa, no `PrepareMasks`, e guarda um bool por célula;
+`TerrainRenderer.hidden` faz cada passe perguntar antes de desenhar. **Célula
+cercada desenha um quad só, o do próprio material.** Entre 80% e 94% das
+células dos sete mapas estão nessa condição.
+
+A cobertura é calculada **antes** do teste de batch, de propósito: ela vale
+para os dois caminhos de desenho, e um aparelho que caísse no caminho por
+célula perderia justamente a otimização de que mais precisa.
+
+Os quatro shaders ganharam o mesmo atalho pelo outro lado: com os oito vizinhos
+ligados, saem direto na amostra da textura, pulando oito `smoothstep`, quatro
+`length()` e o `sin()` do ruído. Um corta as camadas **escondidas**, o outro
+barateia as **visíveis**.
+
+Conferido por `work/perf/verify_terrain_occlusion.py`, que (a) replica a
+fórmula do shader em Python e prova que ela devolve 1,0 exato para toda
+`edgeWidth` declarada, (b) recalcula a verdade a partir do JSON de cada mapa e
+prova que nenhum quad pulado estava sob célula não cercada, e (c) mede:
+
+| Mapa | Quads/quadro (1080p, com culling) | Com oclusão | Fator |
+|---|---|---|---|
+| `world_01` | 258 | 245 | 1,05× |
+| `world_02` | 804 | 288 | 2,80× |
+| `world_03` | **1.049** | **295** | **3,56×** |
+| `world_04` | 641 | 278 | 2,30× |
+| `world_05` | 471 | 241 | 1,95× |
+| `world_06` | 520 | 242 | 2,14× |
+| `world_07` | 513 | 303 | 1,69× |
+
+O que a tabela mostra não é só a redução: é que o custo de terreno **deixa de
+depender da fase**. Os sete mapas passam a custar a mesma coisa.
+
+Do lado do Go, `TestHiddenOnlyEverHidesWhatAnOpaqueCellCovers`
+(`terrain_occlusion_test.go`) trava a regra: toda vez que `hidden` manda pular
+um quad, o teste recalcula por conta própria que a célula está cercada. A falha
+segura é sempre desenhar — sem cobertura calculada, ou com a célula fora da
+grade dela, `hidden` devolve `false`.
 
 ## Uma troca de shader por MATERIAL, nao por celula
 
@@ -910,14 +982,14 @@ no canto superior direito, atrás do mesmo F3.
 **O painel é feito para ser lido numa captura de tela e diagnosticado depois**,
 sem quem lê ter de lembrar em que mapa estava. Essa regra é explícita porque
 foi violada: a primeira captura chegou sem o nome do mapa e a fase teve de ser
-deduzida pelos números (`trilha 0 quads` só acontece no `world_01`).
+deduzida pelos números.
 
 ```text
 world_01   host   2560x1440          <- mapa, papel na rede, resolução
 fps 60   quadro 16.7 ms   PIOR 18.2 ms
 cpu: mapa 2.1   entidades 0.8   resto 13.8 ms
-terreno 500 quads / 155 binds de shader
-tiles 35   props 22   trilha 0 quads   celulas 5520
+terreno 500 quads / 1420 ocultos / 155 binds de shader
+tiles 35   props 22   celulas 5520
 inimigos 83 vivos / 14 desenhados   projeteis 3
 pos 3456,2789   celula 27,21
 ```
@@ -929,7 +1001,7 @@ Cada linha responde uma pergunta que a ausência dela deixaria em aberto:
 | mapa / papel / resolução | identifica a captura; host e cliente rodam caminhos de desenho **diferentes**, e a resolução é o que dá sentido à contagem de células |
 | fps / quadro / **PIOR** | o pior quadro é o número que importa; laranja acima de 20 ms |
 | cpu: mapa / entidades / resto | separa submissão de CPU do que é GPU e vsync |
-| terreno / tiles / props | verifica o culling: se subir, algum caminho escapou dele |
+| terreno / **ocultos** / tiles / props | verifica o culling: se `terreno` subir, algum caminho escapou dele. `ocultos` é o par da oclusão de camada — ela não muda pixel nem draw call, então esse contador é o único lugar onde ela aparece se parar de funcionar |
 | inimigos vivos / desenhados | separa "caro de desenhar" de "caro de simular" |
 | pos / célula | situa a amostra; duas capturas do mesmo mapa só se comparam sabendo de onde vieram |
 

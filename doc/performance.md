@@ -92,7 +92,9 @@ parte do problema** e não mudam um pixel do que aparece na tela.
 
 **R1 — Culling de câmera — IMPLEMENTADO (09/08/2026).**
 `internal/tilemap/viewport.go` + os passes de `renderer.go`,
-`terrain_renderer.go`, `vegetation.go` e `trail_renderer.go`. Medido em
+`terrain_renderer.go` e `vegetation.go` (`trail_renderer.go` existia quando
+isto foi medido; a trilha foi assada no terreno em 31/08/2026 e o arquivo
+não existe mais — ver `doc/tilemap.md`, seção "Trilhas"). Medido em
 `work/perf/verify_viewport.py`: `world_03` de 23.044 para 1.071 quads em média
 (1.530 no pior caso), **22×**; `world_02` 15×; `world_01` 13×. O script prova
 que nenhuma célula visível é cortada, calculando a verdade de forma
@@ -149,6 +151,35 @@ delicada do projeto (`doc/tilemap.md` documenta em detalhe por que a pilha e a
 rampa são o que são). **Só vale começar depois de R1–R3 medidos**, porque
 R1–R3 podem já ter tirado o problema da zona crítica.
 
+**R8 — Oclusão de camada — IMPLEMENTADO (04/09/2026).**
+`internal/tilemap/terrain_renderer.go` (`prepareCoverage`, `hidden`),
+`fullyLinked` em `terrain_mask.go`, o atalho equivalente nos quatro shaders.
+
+**Este item não estava neste documento, e a falta dele é o próprio achado.**
+Toda a Parte 1 mede *quads* e *draw calls* — R1 e R4 cortaram os dois, e mesmo
+assim o mapa 2 e o 3 continuaram travando no celular. O que faltava medir era
+o **overdraw**: o terreno é desenhado empilhado e cada camada cobre a célula
+inteira, então o custo por célula é a altura do material dela na pilha, e isso
+o culling não toca.
+
+| Mapa | Quads por célula | Quads/quadro a 1080p, com o culling |
+|---|---|---|
+| `world_01` | 1,23 | 258 |
+| `world_02` | 4,16 | 804 |
+| `world_03` | **5,40** | **1.049** |
+| `world_04` | 3,15 | 641 |
+| `world_05`–`07` | 2,3–2,6 | 471–520 |
+
+A coluna é a curva relatada em jogo, fase a fase. A correção: quando os oito
+vizinhos de uma célula carregam o mesmo material, a máscara sai 1,0 exata e a
+textura não tem canal alfa — o quad é **opaco**, e a grama base mais todas as
+camadas abaixo dela são desperdício certo. 80% a 94% das células dos sete mapas
+estão nessa condição. Depois: 245–303 quads por quadro em **todos** os mapas, e
+o custo de terreno deixa de depender da fase. Ver `doc/tilemap.md`, seção "Só se
+desenha a CAMADA que aparece". Conferido por
+`work/perf/verify_terrain_occlusion.py` e travado por
+`TestHiddenOnlyEverHidesWhatAnOpaqueCellCovers`.
+
 **R5 — `manifestOwnsGID` fora do laço de tiles (impacto médio, risco baixo).**
 Resolver uma vez no `Load()` um `map[int]bool` de GIDs pertencentes a
 manifesto, ou melhor: um `set` de `firstgid` de tileset de manifesto. Hoje
@@ -164,6 +195,27 @@ custa uma linha corrigir e evita que o toggle dependa de quem desenha.
 
 ---
 
+## 1.5 Áudio: a música travava porque o quadro travava
+
+A trilha engasgar nos mapas 2 e 3 não era defeito de áudio, era o mesmo defeito
+de render visto pelo ouvido. `sound.Update` alimenta o stream **uma vez por
+quadro**, e o sub-buffer padrão do raylib é `sampleRate/30` — cerca de 33 ms de
+folga. Um único quadro mais longo que isso deixa o dispositivo sem dado antes
+do próximo `UpdateMusicStream`.
+
+Isso explica os três regimes de uma vez: o `world_01` nunca passa de 33 ms e a
+música é limpa; o 2 e o 3 passam sempre; o 4 em diante fica em cima da linha, e
+o que se ouve é a trilha "quase fluindo".
+
+**A1 — IMPLEMENTADO (04/09/2026).** `musicBufferFrames = 4096` em
+`internal/sound/music.go`, aplicado com `rl.SetAudioStreamBufferSizeDefault`
+antes de `InitAudioDevice`: ~93 ms de folga a 44,1 kHz. Não conserta o quadro
+longo — quem faz isso é o R8 — mas remove o acoplamento: uma queda de fps passa
+a custar fluidez de imagem, e não áudio picotado. Os efeitos das magias não são
+stream (`rl.Sound` carrega o arquivo inteiro) e não são tocados por isto.
+
+---
+
 ## 2. Memória e VRAM
 
 ### 2.1 Medida (VRAM = largura × altura × 4 bytes, que é o que a GPU guarda)
@@ -173,8 +225,16 @@ custa uma linha corrigir e evita que o toggle dependa de quem desenha.
 | Atlas de manifesto (9) | sim, em todo mapa | **71,9 MB** |
 | Texturas de terreno (10) | sim, em todo mapa | 6,8 MB |
 | Toppings do mapa | por mapa | 2–6 MB |
-| Fita de trilha | se o mapa tem trilha | 1,0 MB |
 | **Total por mapa** | | **~82–86 MB** |
+
+(A fita de trilha ocupava 1,0 MB quando o mapa tinha uma. Não existe mais:
+a trilha foi assada no terreno em 31/08/2026 — ver `doc/tilemap.md`, seção
+"Trilhas". O material que ela virou, `terrainForestPath`, já estava nas
+"Texturas de terreno" da linha acima — não é custo adicional, só trocou de
+arquivo: estreou reaproveitando `terrain_dirt.png` da pilha verde, saiu
+claro demais para a floresta sombria (defeito relatado no mesmo dia) e
+ganhou textura própria, `terrain_forest_path.png`, do mesmo tamanho que
+qualquer outra folha de 512 px da pilha escura.)
 
 O `world_01` de fato usa: `village_vegetation` (4 MB), `forest_trees` (1,5 MB),
 `village_buildings` (6 MB), `village_fence_v2` (16 MB), pilha verde (0,75 MB) e
@@ -191,7 +251,8 @@ Sprites (carregados sob demanda, e isso está certo):
 | | |
 |---|---|
 | 5 folhas de personagem | 3,75 MB cada = 18,8 MB |
-| 5 `reference.png` | 6,0 MB cada = 30,0 MB |
+| 5 `reference.png` (card de seleção) | 6,0 MB cada = 30,0 MB |
+| 5 `portrait.png` (caixa de diálogo) | 5,6 MB cada, carregados por mapa |
 | Inimigos (orc idle+walk, slime, lobo) | 13,5 MB |
 
 `ShowCharacterSelect` carrega os 5 `reference.png` (30 MB) e descarrega ao
@@ -230,11 +291,20 @@ trabalho de arte, não de código, e passa pela `create-tiled-assets`.
 No Android, considerar formato comprimido de GPU (ETC2/ASTC) — a economia é de
 4× a 8× em VRAM e o custo é qualidade e pipeline de build.
 
-**M5 — Retrato de diálogo com teto (impacto baixo, risco baixo).**
-`portraitCache` passa a descarregar ao trocar de mapa, ou guarda no máximo o
-elenco da cena atual. 30 MB residentes por 200×250 px de retrato na tela é
-desproporcional — o retrato podia inclusive ser uma versão reduzida da
-`reference.png`, gerada no build.
+**M5 — IMPLEMENTADO (03/09/2026).** `portraitCache` já descarregava por mapa
+desde a rodada anterior; agora o retrato também deixou de ser a
+`reference.png`. Cada orador carrega um `portrait.png` próprio de 1152x1280
+(5,6 MB) em vez da referência de 1024x1536 (6,0 MB).
+
+A economia de memória é pequena e não era o objetivo — a arte separada existe
+porque o retrato e o card respondem a perguntas diferentes (ver
+`doc/dialogue.md`). O que a descrição original propunha, "uma versão reduzida
+da `reference.png` gerada no build", teria economizado mais e resolvido menos:
+uma redução da arte de corpo inteiro continua com o rosto pequeno demais para
+uma caixa de diálogo.
+
+O teto de VRAM por mapa continua sendo o cache por fase, não o tamanho do
+arquivo.
 
 ---
 
@@ -628,8 +698,9 @@ não produz o desconforto sozinho. Continua valendo corrigir, porque a correçã
 Duas coisas somadas:
 
 - O terreno **não define filtro de textura**, então usa o padrão do raylib, que
-  é `POINT` (vizinho mais próximo). Sprites (`ApplySpriteFilter`) e a fita da
-  trilha usam `BILINEAR` explicitamente.
+  é `POINT` (vizinho mais próximo). Sprites (`ApplySpriteFilter`) usam
+  `BILINEAR` explicitamente. (A fita de trilha também usava — foi assada no
+  terreno em 31/08/2026 e não desenha mais nada em tempo de execução.)
 - A câmera não é ancorada em pixel: `Camera.Target` recebe `p.Position`, que é
   `float32` (`camera.go`), e `Offset` é `sw/2` — meio pixel em tela de largura
   ímpar.
@@ -1581,6 +1652,24 @@ impacto e na ordem inversa de risco visual: (1) lotear o broadcast de meteoros
 no tique de rede em vez de um por nascimento; (2) semear a chuva para host e
 cliente sortearem a mesma sequencia, reduzindo 600 mensagens a uma; (3) metade
 das particulas com o dobro do raio.
+
+**ATUALIZACAO (31/08/2026): `MeteorRainInterval` deixou de ser fixo.** O que
+esta secao chamava de "decisao de design" era, na verdade, um numero calibrado
+so para o `world_02`/`world_05` e aplicado sem ajuste a mapas onze vezes
+menores — o `world_06` e o `world_07`, que sao justamente os dois unicos mapas
+onde o Mago tem a suprema em campanha. `MeteorRainIntervalFor`
+(`internal/skill/meteor.go`) agora deriva o intervalo da area do mapa,
+mantendo constante a densidade (nascimentos por segundo por area) que a chuva
+sempre controlou de fato. O QUE CONTINUA VALENDO AQUI: `MeteorRainRefInterval`
+(o nome novo do 0,015 de entao) permanece o regime medido nesta secao para o
+`world_05` — ~93 nascimentos/s x 1,4 s = ~93 simultaneos, ~2.550 particulas —,
+e `MeteorRainMinInterval` (mesmo valor) virou o TETO explicito que nenhum mapa
+maior que o `world_05` pode furar. Mapas menores nascem menos meteoros, entao
+o problema de rede acima (broadcast por meteoro) encolhe nos mapas onde a
+chuva de fato aparece em campanha, tornando os proximos passos (C1..C3 acima)
+ainda menos urgentes ali, mas continua valendo se um mapa futuro for maior que
+o `world_05`. Ver doc/combat_rules.md ("A chuva mede-se por densidade, nao por
+contagem") e `internal/skill/meteor_scale_test.go`.
 
 **A regra que saiu daqui** virou `doc/skill_performance.md`, obrigatorio para
 qualquer magia nova (a rota esta no `AGENTS.md` e a `create-character-abilities`

@@ -135,6 +135,10 @@ func LoadTiledMap(path string) (*TiledMap, error) {
 	if err := json.Unmarshal(data, &m); err != nil {
 		return nil, err
 	}
+	// Mapa novo, arte de novo inteira: a troca de peca por posicao
+	// (piece_swap.go) vale para o mapa que estava em campo, e um canhao
+	// destruido no corredor nao pode marcar um ponto do mapa seguinte.
+	ClearWreckedPieces()
 
 	mapDir := filepath.Dir(path)
 	for i := range m.Tilesets {

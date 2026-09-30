@@ -106,14 +106,18 @@ func (h *Host) ReconcileBots() {
 			removedIDs = append(removedIDs, botKey)
 		case !humanPresent && botKey == "":
 			id := botIDFor(char)
+			// Mesma vida que um humano da classe teria: um bot e um jogador
+			// do host, e a Paladina bot precisa dos mesmos 300 para fazer o
+			// trabalho de linha de frente (entity.MaxHealthFor).
+			botMaxHealth := entity.MaxHealthFor(char)
 			state := PlayerState{
 				PlayerID:  id,
 				X:         int(h.PlayerSpawn.X),
 				Y:         int(h.PlayerSpawn.Y),
 				Color:     "", // empty on purpose: the class art is the identity (plan §1)
 				Character: string(char),
-				Health:    100,
-				MaxHealth: 100,
+				Health:    botMaxHealth,
+				MaxHealth: botMaxHealth,
 			}
 			if vacated, ok := h.vacatedBodies[char]; ok {
 				// A human of this class just aged out of ReconnectGrace

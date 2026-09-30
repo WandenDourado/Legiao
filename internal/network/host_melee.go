@@ -39,7 +39,26 @@ func (h *Host) performSwordAttack(playerID string, origin, dir rl.Vector2) {
 		}
 	}
 
+	// O mesmo arco derruba canhao (mapa 6). Fica aqui, e nao num sistema a
+	// parte, porque para quem joga e UM golpe: a espada acerta o que estiver
+	// na frente dela, e nao importa se aquilo e bicho ou pedra armada.
+	hitCannons, fallen := h.damageCannonsInSweep(sweep, dmg)
+	h.publishCannonState(hitCannons)
+	h.announceCannonsFallen(playerID, fallen)
+
 	h.broadcastMelee(playerID, origin, dir, sweep.Empowered)
+}
+
+// announceCannonsFallen mostra a queda dos postos que zeraram: a explosao em
+// cima de cada um, nas duas pontas. A vida e a troca de arte ja foram por
+// publishCannonState; aqui e so o estouro.
+func (h *Host) announceCannonsFallen(playerID string, fallen []rl.Vector2) {
+	for i, pos := range fallen {
+		// O estouro na maquina do host tambem: broadcastCannonBall so fala com
+		// os clientes, e quem derrubou o canhao esta olhando para ele.
+		skill.AddCannonBurstAt(true, pos)
+		h.broadcastCannonBall("impact", "cannonfall"+playerID+string(rune('a'+i)), pos, rl.Vector2{})
+	}
 }
 
 // broadcastMelee replicates a sword sweep on every client.

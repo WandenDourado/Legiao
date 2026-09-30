@@ -26,6 +26,34 @@ The gate itself is `Host.beginAttackCooldown`
 it applies identically to the host's own attacks and to every `MsgAttack` a
 client sends.
 
+### O raio sagrado ficou largo o bastante para curar (31/08/2026)
+
+O ataque básico da Sacerdotisa cura o aliado que ele **atravessa**
+(`Host.checkHolyProjectileHeals`, 12 HP, uma vez por aliado por tiro, sem
+consumir o projétil). O teste é `raio do projétil + PlayerSize`, e com o raio
+antigo (13) a folga era de **33 px**. Curar exigia acertar o corpo do aliado em
+cheio, com ele em movimento e a horda chegando: na prática, curar era um
+acidente feliz e não uma coisa que ela fazia.
+
+`HolyAttackRadius` foi para **20**, levando a folga a **40 px** — exatamente
+dois raios de corpo (`PlayerSize` 20), que é a promessa em uma frase: *perdoa um
+corpo inteiro de erro de mira*.
+
+O caminho até esse número tem uma lição: a primeira tentativa foi 26, e ela
+esbarrou no outro limite. Como `drawHolyProjectile` desenha a partir do mesmo
+número, dobrar o raio dobrou a bola de luz na tela, e um tiro que sai várias
+vezes por segundo virou um farol. **O raio do projétil é ao mesmo tempo regra e
+desenho** — é isso que o mantém honesto (o que a tela mostra é o que acerta) e é
+isso que limita quanto ele pode crescer. Uma área de cura invisível e maior que
+o corpo do tiro resolveria a mira e mentiria na tela; foi descartada por isso.
+
+Consequência aceita: o tiro também acerta inimigos mais fácil (`raio +
+HitRadius`). Ela continua com o menor dano por tiro do elenco (18).
+
+`internal/entity/projectile_holy_test.go` trava a faixa dos dois lados —
+perdoar pelo menos um corpo inteiro de erro de mira, e nunca virar aura (senão
+o ataque básico faria o trabalho do Santuário sem recarga).
+
 ## Skill Cooldowns
 
 Each skill declares `Cooldown()` in the ability registry, gated by
@@ -39,9 +67,9 @@ is how the Mago's fireball is kept from shipping without a recharge again.
 | Character | Q | R |
 |---|---|---|
 | Mago | Bola de Fogo 6s | Chuva de Meteoros 60s |
-| Sacerdotisa | Santuario 14s | Area Angelical 60s |
+| Sacerdotisa | Santuario 14s (aura movel, +25% de velocidade) | Area Angelical 60s |
 | Arqueiro | Rajada de Flechas 6s | Flechas Celestiais 30s (2 charges) |
-| Paladina | Escudo Sagrado 6s | Avatar dos Deuses 60s |
+| Paladina | Escudo Sagrado 6s (cura 20% ao lançar) | Avatar dos Deuses 60s |
 | Necromante | Cemiterio 12s | Legiao Espectral 60s |
 
 Each value is one constant in `internal/skill/` (`FireballCooldown`,
@@ -58,6 +86,62 @@ refuse the cast.
 | Android | On top of the Q and R buttons (`ui.SkillButton.Draw`), plus a dimming ring on the fire button for the attack cadence. |
 | Desktop | Pip bar at the bottom of the screen, one per bound ability (`ui.DrawSkillBar`, fed by `game.DrawSkillCooldownBar`). Slots are spaced by whatever is wider, the pips or the skill names, so long names like "Chuva de Meteoros" cannot print over their neighbour. |
 
+### O Santuário deixou de ser um lugar (31/08/2026)
+
+Pedido do Gui. O Q da Sacerdotisa criava uma zona de cura no chão, 120 px à
+frente dela. Enquanto a zona vivia, curar custava **posição**: a curandeira
+ficava presa a um ponto que a luta já tinha abandonado, e o grupo tinha de
+voltar até o círculo.
+
+Agora a aura é ancorada NA Sacerdotisa. `Host.anchorSanctuaries` recola cada
+aura no dono **antes** de a cura ser cobrada — a ordem é a regra inteira:
+reancorar depois cobraria a cura deste quadro no círculo do quadro passado, e
+com ela andando a borda medida ficaria sempre um passo atrás do que o jogador
+vê. Raio (200), duração (7s), cura (12/s) e recarga (14s) não mudaram.
+
+`SanctuarySpeedBonus` (25%) vale **só para a conjuradora**, e só na janela de
+cura — o fade final é desenho, a habilidade já acabou. Aliados dentro da aura
+recebem a cura, não a mobilidade: o bônus existe para ela decidir onde a cura
+acontece, não para virar deslocamento do time. Não há mensagem de rede nova; a
+aura já é replicada no lançamento e envelhece com o mesmo relógio nos dois
+lados, então cada máquina deriva o multiplicador (`Manager.SanctuaryMoveMultiplier`).
+Como o movimento do jogador é previsto na própria máquina, é lá que ele é
+aplicado (`game.ApplyMoveBuff`); a bot Sacerdotisa recebe o mesmo fator em
+`applyBotIntent`, para a habilidade não valer coisas diferentes conforme quem
+segura o personagem.
+
+Uma Sacerdotisa tem **uma** aura: a coleção é indexada por dono e relançar
+renova (nunca empilha), como o Escudo Sagrado da Paladina.
+
+### O Escudo Sagrado paga nos dois momentos (27/08/2026)
+
+O Q da Paladina só adiava dano: lançá-lo com a vida cheia ou no fim dava
+exatamente na mesma, e perdê-lo era uma perda seca. Duas mudanças pedidas pelo
+Gui deram peso aos dois momentos da magia.
+
+**Lançar cura.** `ShieldCastHeal` (20% da vida **máxima**) é devolvido no
+lançamento, inclusive no relançamento — quem gasta a recarga para renovar o
+escudo antes de ele estourar paga em tempo e recebe a mesma vida. Fração e não
+valor fixo porque a vida máxima é do personagem. A magia pede a cura ao host
+por `ability.HostLike.HealPlayerFraction`; a conta é a mesma do Santuário.
+
+**Estourar machuca.** Quando a absorção zera o escudo, `burstBrokenShield`
+cobra `ShieldBreakDamage` (32) de todo inimigo dentro de `ShieldBreakRadius` —
+que é a própria borda desenhada da aura, para o jogador mirar a explosão pelo
+que vê na tela. A régua dos 32 é o lobo: 80% dos 40 de vida dele. O número diz
+o que o estouro **não** pode ser — ele não limpa a matilha sozinho, abre espaço
+e termina quem já estava ferido. `host_shield_test.go` trava as duas relações
+(contra a vida do lobo, e contra a mordida dele) e o teto de 34% da vida na
+cura, para a Paladina não virar a própria Sacerdotisa.
+
+O estouro é cobrado nos **quatro** caminhos de dano a jogador (mordida, esfera
+da sentinela, bola de canhão, chefe), em quatro cópias e não numa abstração,
+pela razão já escrita em `applySentryOrbDamage`: as quatro têm de concordar, e
+concordar por leitura é mais seguro do que por abstração apressada. O teste de
+"foi este golpe que quebrou" é `had && hpAfter <= 0` — `AbsorbShieldDamage`
+recusa escudo já quebrado, então `had` verdadeiro com HP zerado só pode ser o
+golpe atual.
+
 ## Death And Revival
 
 A dead player stays on the field: the body is drawn from the same sprite sheet
@@ -70,6 +154,29 @@ facing. It does not move, attack or cast.
 | Revive delay | `entity.RespawnDelay` = 30s |
 | Health on revive | `entity.RespawnHealthPercent` = 30% |
 | Revive position | Where the player fell |
+| Grace after revive | `entity.RespawnGrace` = 2,5 s de imunidade |
+| Step during the grace | `entity.RespawnGraceSpeed` = 1,4× |
+| Cue | the body blinks colour ↔ grayscale (`entity.InvulnBlinkGray`) |
+
+**O fôlego do renascer (27/09/2026).** O corpo levanta onde caiu, e nas fases
+de horda o lugar onde ele caiu é o meio da horda: com 30% de vida e nenhuma
+janela, morrer de novo antes de conseguir andar era a regra. Agora
+`tickRespawns` chama `grantRespawnGrace` (`network/host_respawn_grace.go`):
+imunidade pelo mesmo `GrantInvulnerability` do resgate (todo caminho de dano já
+o consulta) e passo extra. O passo tem duas metades, pela mesma razão do
+Santuário: o humano move o próprio corpo, então o bônus é armado na máquina
+dele (`network.ArmLocalRespawnBoost`, na borda morto → vivo de
+`game.SyncLocalPlayer`) e entra em `MoveSpeedMultiplier`; o bot é movido pelo
+host, que guarda o relógio dele em `host_respawn_grace.go`. A animação de
+caminhada acompanha qualquer multiplicador de passo (`player_sprite.go`), então
+o pé não desliza — nem no Santuário, que deslizava desde sempre.
+
+O piscar vem de `PlayerState.Invuln` (segundos restantes de janela concedida,
+ver `doc/network.md`) e vale para **toda** janela: renascer, resgate e
+reerguimento da vitória. Nenhuma imunidade do jogo é mais invisível. A gárgula
+não escolhe como alvo quem está imune (`weakestPlayerInRange`) — senão o
+recém-levantado, sempre o de "menos vida", virava o alvo de todas elas, e a
+esfera lenta chegava quando a janela acabava.
 
 The body gets up where it fell: `tickRespawns` never touches X/Y. A dead player
 stops sending input, so the position the host still holds is the spot where it
@@ -86,7 +193,9 @@ undo it.
 
 ## Game Over And Stage Reset
 
-The run ends when every player is dead (`checkGameOver`). The host announces it
+The run ends when every player is dead (`checkGameOver`) — except after the
+stage's boss fell: from then on the run is won and cannot be lost (see
+"A vitória é o fim da luta" below). The host announces it
 once and `Host.UpdateSimulation` returns immediately from then on, so waves,
 enemies and skill effects all stop — the world the players see is the one they
 lost in.
@@ -97,6 +206,42 @@ Only the host can restart, with **F5** or the button on the Game Over overlay
 skill manager, rewinds the wave runner to wave 1, drops every cooldown, and
 puts all players back on the spawn at full health. Clients mirror it from the
 `reset_stage` message.
+
+## Morte dos monstros (desintegração)
+
+Todo monstro que morre vira cinzas levadas pelo vento — slime, lobo, orc,
+gárgula e a Imperatriz (pedido do Gui, 28/09/2026, a partir do preview
+aprovado). **Só visual e sem rede**: nenhuma mensagem nova. Código em
+`internal/entity/death_fx*.go`, ligação com o quadro em
+`internal/game/death_fx.go`.
+
+- **Como a morte é percebida.** Cada máquina compara quem ela desenhou no
+  quadro anterior com a lista autoritativa deste quadro (host:
+  `EntityManager.EnemyAlive`; cliente: o snapshot completo de
+  `InterpolatedEnemies`). Quem sumiu, morreu. Isso cobre todo caminho de dano
+  — inclusive a horda que `endHordeOnVictory` apaga sem evento — e qualquer
+  caminho novo, sem ninguém precisar lembrar de avisar o efeito. Só explode
+  quem estava **na tela** no quadro anterior.
+- **Troca de mundo não é morte.** O renderer informa (mapa, geração da fase)
+  a cada quadro; quando muda, o efeito zera e fica 2 s sem disparar
+  (`deathFXWorldGrace`) — o cliente ainda recebe um snapshot do mapa velho
+  depois da troca.
+- **Pose exata.** A explosão parte do quadro que estava na tela: coluna,
+  linha e espelho do orc, ângulo do slime e do lobo, âncora do pé de
+  orc/gárgula/Imperatriz.
+- **Máscaras.** Cada folha de inimigo é decodificada de novo uma vez, numa
+  goroutine de fundo (só CPU), e cortada em células com cor média, em dois
+  grãos. Morte antes da máscara ficar pronta: o monstro some como antes.
+- **Orçamento.** Teto de fragmentos vivos: 12000 no desktop, 6000 no
+  Android; grão de 4 px no desktop e 5 px no Android (chefe ×1,5). Estourou:
+  grão dobrado; estourou de novo: some sem efeito.
+- **A chefe.** Versão lenta (varredura de 2,4 s). O diálogo de fim de fase
+  (`on_waves_cleared`) espera o corpo dela terminar de se desfazer
+  (`entity.BossDeathFXPlaying`).
+- **Desligável.** Configurações → Vídeo e desempenho → "Monstros viram
+  cinzas" (`settings.DeathEffect`, padrão ligado). Desligar apaga na hora o
+  que estiver em curso.
+- **Números.** `death_fx_tuning.go`, copiados do preview. Mudou lá, muda cá.
 
 ## Corrida de hordas
 
@@ -162,23 +307,113 @@ marcadores `enemy_spawn_*` e sem corrida quase sempre é esquecimento, então
 | Slime | 100 | 100 | 10 | 1,0 s | 25 |
 | Lobo | 40 | 240 | 18 | 0,7 s | 30 |
 | Orc | 600 | 130 | 30 | 1,5 s | 70 |
-| Gárgula | 40 | **0** | **25** | 1,35 s | **global** |
-| Senhora das Trevas | **2000** | **0** | 22 | 4,0 s | 1400 |
+| Gárgula | 40 | **0** | **34** | 1,35 s | **global** |
+| Senhora das Trevas | **45000** | **0** | 22 | 4,0 s | 1400 |
 
-**Gárgula, 14 → 25 de dano (23/08/2026): quatro esferas derrubam um
-personagem** (100 de vida), em vez de oito. Ela só mantém uma esfera no ar por
-vez, e a 300 de velocidade o jogador (200, com vantagem de ângulo) consegue
-desviar — oito acertos era uma ameaça que o grupo absorvia andando, e ela
-existe justamente para ser o tipo de pressão que a Área Angelical **não**
-responde. `network/balance_test.go` trava a relação.
+**Gárgula, 25 → 34 de dano (25/08/2026): três esferas derrubam um
+personagem** (100 de vida), em vez de quatro. Ela só mantém uma esfera no ar
+por vez, e a 300 de velocidade o jogador (200, com vantagem de ângulo)
+consegue desviar. No clímax do mapa 4 a cadência real não é o
+`AttackCooldown` — é o tempo de viagem da esfera, mais longo que o cooldown
+numa travessia de saguão —, então quatro acertos deixavam tempo de sobra para
+o grupo absorver o dano andando e a emboscada nunca derrubava todo mundo
+abaixo de 30% ao mesmo tempo. Continua esquivável: três golpes é o preço de
+ignorar a gárgula, não de enfrentá-la. `network/balance_test.go`
+(`TestThreeSentryOrbsKillACharacter`) trava a relação.
 
-**Senhora das Trevas, 400 → 2000 de vida (23/08/2026).** Os 400 vinham de
-quando ela era o chefe no fim de uma corrida de cinco hordas. Hoje ela comanda a
-**arena** do `world_07`, e ali a vida dela não é um bolo de dificuldade: é o
-**cronômetro** da fase — a corrida é `Endless` e só para quando ela cai
-(`WaveDef.EndsWithBoss`), então a vida dela decide quanto tempo o grupo segura
-os dois portões. Com 400 o cerco final acabava antes de a fase mostrar do que é
-capaz.
+**Senhora das Trevas, 400 → 2000 → 30000 → 45000 de vida (23/08, 27/08 e
+31/08/2026).** Os 400 vinham de quando ela era o chefe no fim de uma corrida de
+cinco hordas. Hoje ela comanda a **arena** do `world_07`, e ali a vida dela não
+é um bolo de dificuldade: é o **cronômetro** da fase — a corrida é `Endless` e
+só para quando ela cai (`WaveDef.EndsWithBoss`), então a vida dela decide
+quanto tempo o grupo segura os dois portões. Com 400 o cerco final acabava
+antes de a fase mostrar do que é capaz; 30000 ainda caía rápido demais quando
+o anel de contato (abaixo) entrou em jogo — ver `entity/enemy_sprite.go`.
+
+### A afinação de 31/08/2026 (`doc/plan_world07_arena_tuning.md`)
+
+Seis ajustes pedidos pelo Gui, todos na mesma direção: apertar o relógio da
+fase e fechar a brecha que deixava a Legião Espectral sozinha decidir a luta.
+
+| Evento | Antes | Depois |
+|---|---|---|
+| Espinhão | a cada 15 s, aviso de 2,1 s | a cada **10 s**, aviso de **1,2 s** |
+| Névoa | a cada 60 s | a cada **30 s** |
+| Gárgula nova | 2 por ciclo de 70 s | **4** por ciclo de 70 s |
+| Leva da horda | a cada 70 s, relógio próprio | **logo depois de cada névoa** (`WaveDef.BossDriven`, `network/host_waves.go`) |
+| Vida da chefe | 30000 | **45000** |
+| Contato com o corpo | nenhum | **dano contínuo** em quem encostar (desde 27/09/2026: **só espectro**, ver abaixo) |
+
+**A janela de desvio do espinhão** (`ThornTelegraph`, `internal/skill/boss_thorn.go`)
+caiu de 2,1 s para 1,2 s, e `bossDodgeWindow`
+(`internal/entity/enemy_boss_anim.go`) caiu junto, para 0,9 s — os dois são o
+MESMO número menos 0,30 s (o tempo até o passo do agachamento na animação de
+ataque), e mexer só num deles crava as patas no chão fora de sincronia com o
+círculo de dano. `TestBossDodgeWindowMatchesThornTelegraph`
+(`internal/entity/enemy_boss_anim_test.go`) trava a relação.
+
+**A horda deixou de ter relógio próprio.** Ela é `BossDriven`
+(`network/host_waves.go`): a leva inteira sai no mesmo quadro em que a névoa
+entra no ar, não mais a cada 70 s por conta própria. A PRIMEIRA leva continua
+saindo sozinha ao entrar na arena — isso já acontecia e não dependia da chefe.
+
+**O anel de contato** (`internal/skill/boss_contact.go`,
+`internal/network/host_boss_contact.go`) é a peça nova: enquanto viva, a chefe
+cobra `BossContactDPS` (18) de dano contínuo de tudo que estiver a
+`BossContactRadius` do corpo dela — **jogadores e espectros da Legião
+Espectral, pelo mesmo caminho**. Não é um ataque: não usa `AttackCooldown`, não
+dispara animação, não escolhe alvo — é uma propriedade do corpo, como o fogo de
+chão é uma propriedade do lugar. Sem isso, os 30 espectros de uma Legião
+colada no corpo dela tiravam sozinhos quase metade da vida antiga (30000) numa
+única ativação; com o anel, uma ativação inteira fica perto de 10% da barra —
+ainda vale usar contra a chefe, sem virar o botão de vitória que era antes
+(a conta está no comentário de `BossContactDPS`).
+
+**Desde 27/09/2026 o anel só fere espectro.** Contra jogador a Imperatriz
+tem **dois golpes e só dois**: espinhão e névoa, os dois com aviso na tela
+(pedido do Gui depois do playtest daquele dia). O anel continua existindo
+pelo motivo que o criou — a Legião colada no corpo dela — e por isso só é
+**desenhado enquanto há Legião em campo** (`Manager.AnyLegion`,
+`game/renderer.go`): um anel vermelho visível que não fere quem o vê ensinaria
+o jogador a fugir de nada. A conta da Legião não mudou.
+
+**Ela também não tem golpe corpo a corpo.** O `EnemyDef` dela declara
+`AttackDamage` 22 / `AttackCooldown` 4,0 / `AttackRange` 1400, e ela passa pelo
+`Enemy.Update` comum — então, até 27/09/2026, o caminho genérico de ataque
+(`checkEnemyPlayerCollisions`, `network/host.go`) cobrava 22 de alguém a até
+**1530 px** dela a cada 4 s, sem animação, projétil nem som. Era o "dano de
+lugar nenhum" do playtest. O host agora pula chefe nesse caminho, como já
+pulava a gárgula. O `AttackDamage` fica na ficha porque é o **revide contra
+espectro** (`StepLegions`) e entra na conta de `BossContactDPS` — zerá-lo
+mudaria a Legião em silêncio. `TestBossDoesNotMeleePlayers` e
+`TestBossContactSparesPlayers` (`network/host_playtest_2709_test.go`) travam as
+duas regras.
+
+**O espinhão mede pelo pé.** A foto (`castThorns`) e o teste
+(`playersInsideThorn`) usam o ponto do pé (`entity.GroundPoint`, a mesma regra
+da colisão de movimento e do portal), não o centro do quadro do sprite. Com o
+centro, a borda de baixo do círculo passava rente à sola: quem fugia para
+baixo tirava o pé do círculo e levava o golpe mesmo assim.
+`TestThornMeasuresTheFeet`.
+
+**`BossContactRadius` é o `Radius` físico dela (130), lido do `EnemyDef`, e o
+centro é `HitCenter()` — não `Position`.** A primeira versão usava um raio
+solto (150) centrado em `Position`, que é o PÉ (por causa do `FootLine` da
+folha de animação); como o corpo visível fica 180 px acima do pé
+(`HitOffsetY`), o anel nascia baixo demais e lia como uma esfera solta no
+chão, sem ligação nenhuma com a sprite — foi relatado exatamente assim depois
+do primeiro playtest. A correção usa `HitCenter()` (a mesma correção de
+altura que a caixa de acerto de espada já usa) e o corpo físico como raio, não
+um número inflado — o dano começa perto de onde a sprite realmente está.
+
+**Consequência para a Paladina.** Ela é a única classe corpo a corpo, e o arco
+da espada alcança até ~340 px do centro da caixa alta da chefe (`HitOffsetY`
+−180, `HitRadius` 200, `SwordRange` 140) — um número deliberadamente maior que
+o corpo físico, para dar folga ao alcance da arma. Contra o anel de contato
+(130 px, o corpo físico) isso deixa o golpe **livre pelo norte e pelos
+flancos**, com folga confortável, e **muito apertado por baixo** — a faixa que
+o golpe alcança vindo de baixo fica perto da borda do anel. Não se fica
+embaixo da aranha: é mecânica, não bug.
 
 A gárgula (`castle_sentry`) é a única criatura que não se move e a única que
 `checkProjectileCollisions` recusa machucar com **projétil comum** — espada e
@@ -196,8 +431,7 @@ distância do disparo (`network.sentryOrbTTLFor`: `dist/velocidade*1,5 + 2s`,
 teto de 40s) em vez de fixo em 9s, e cada gárgula não dispara de novo
 enquanto a própria esfera ainda estiver no ar
 (`skill.SentryHasLiveOrb`) — sem isso, cadência de 1,35s contra uma viagem de
-até 40s empilharia uma dezena de esferas perseguindo o mesmo jogador. Ver
-`doc/plan_avanco_bots_e_gargula.md` §B1/§B2.
+até 40s empilharia uma dezena de esferas perseguindo o mesmo jogador.
 
 Onde ela aparece está em `network/sentries.go`, e as duas portas de entrada são
 diferentes porque os mapas são: no `world_04`, travessia de território, ela é
@@ -320,6 +554,93 @@ verdade não é quanto cada pedra tira, e sim **quantas caem perto de alguém**.
 (`doc/performance.md`) acusar, **é este número que afrouxa primeiro, não o
 dano**.
 
+### A Flecha Celestial derruba um Orc (31/08/2026)
+
+| | De | Para |
+|---|---|---|
+| `CelestialDamage` | 40 | **600** |
+
+A mesma forma de defeito da chuva, do outro lado do elenco: os 40 eram da
+época do slime de 100 de vida, e o orc entrou sem que a suprema do Arqueiro
+fosse reajustada. Quinze flechas para derrubar um único orc de guarnição não é
+uma suprema — é um ataque básico fraco com cooldown.
+
+O contrato é igualdade, não "pelo menos": **600 é a vida do orc**
+(`entity.EnemyTypeGarrison`), então uma flecha derruba um orc e não sobra dano.
+Se a vida do orc mudar, este número muda com ela —
+`TestOneCelestialArrowFellsAnOrc` (`network/balance_test.go`) cobra a razão,
+não o valor, no mesmo formato que `TestOneMeteorTakesFourFifthsOfAnOrc` já
+cobra do lado do Mago.
+
+A diferença entre as duas supremas continua sendo **precisão contra área**: a
+flecha perfura e dana cada inimigo que atravessa **uma vez** — um tiro bem
+alinhado numa fila de orcs derruba a fila inteira, e isso é o prêmio por
+mirar, não uma sobra de dano por unidade.
+
+### A chuva mede-se por densidade, não por contagem (31/08/2026)
+
+`MeteorRainInterval` virou `MeteorRainRefInterval`: uma REFERÊNCIA calibrada
+no `world_05`, não mais um número fixo em todo mapa. `MeteorRainIntervalFor`
+(`internal/skill/meteor.go`) reescala o intervalo de nascimento pela área do
+mapa para manter constante a **densidade** — nascimentos por segundo por
+unidade de área —, que é o que a chuva de fato controla: como ela sorteia
+pontos no mapa **inteiro**, e não em quem ela mira, o que decide quantas
+pedras caem perto de alguém é a área, não a contagem.
+
+Um intervalo fixo espalhava o mesmo número de pedras por áreas que variam
+onze vezes. E o achado que muda a leitura do problema: pela tabela acima, o
+Mago só tem a Chuva de Meteoros em campanha a partir do `world_06` — que,
+junto com o `world_07`, são os **dois menores mapas do jogo**. O padrão
+estava calibrado para um mapa (`world_05`) onde a suprema nunca é lançada em
+campanha, e rodava a 5× e 11× essa densidade nos dois únicos mapas onde ela
+de fato existe na mão do jogador.
+
+| mapa | área (Mpx²) | razão para o `world_05` | intervalo | nasc/s |
+|---|---|---|---|---|
+| `world_01` | 44,24 | 0,469 | 0,0320 | 31,2 |
+| `world_02` | 49,15 | 0,521 | 0,0288 | 34,7 |
+| `world_03` | 68,81 | 0,729 | 0,0206 | 48,6 |
+| `world_04` | 75,50 | 0,800 | 0,0187 | 53,3 |
+| **`world_05`** | 94,37 | 1,000 | **0,0150** | 66,7 |
+| `world_06` | 18,35 | 0,194 | 0,0771 | 13,0 |
+| `world_07` | 8,52 | 0,090 | 0,1662 | 6,0 |
+
+`MeteorRainMinInterval` (0,015) continua sendo o teto de desempenho medido em
+`doc/performance.md` §8, não um número de design — um mapa maior que o
+`world_05` para nele. O `world_05` fica bit a bit idêntico ao que já era;
+nenhum outro mapa fica. Ver `internal/skill/meteor_scale_test.go` para os
+testes que defendem a relação, e `doc/plan_...` (histórico da decisão) para a
+tabela de quantos meteoros cabem na tela por mapa e o botão de calibração
+(`MeteorRainRefInterval`) caso o veredito em jogo for "ficou fraco" no
+`world_06`/`world_07`.
+
+### A vitória é o fim da luta (27/09/2026)
+
+Até esta data, névoa e espinhões já lançados continuavam resolvendo depois da
+queda da chefe. No playtest ela caiu com a névoa no ar: o diálogo final
+congelou a simulação (e o TTL da névoa junto), e quando ele fechou a névoa
+voltou a cobrar 30/s do mapa inteiro contra personagens de 200 de vida — o
+grupo morreu e o Game Over caiu em cima do "Missão Concluída".
+
+Agora, no quadro da queda (`updateBossState`, `network/bosses.go`):
+
+- `clearThreatsOnVictory` (`host_boss_victory.go`) apaga névoa, espinhões e
+  esferas de gárgula em voo; o cliente faz o mesmo ao ver a vida da chefe
+  zerar no `BossState` (`client_boss_victory.go`), sem mensagem nova;
+- `victoryPeace` faz `IsInvulnerable` responder verdadeiro para todo mundo e
+  impede o Game Over até a fase virar — defesa em profundidade para qualquer
+  golpe que ainda esteja em campo.
+
+`TestVictoryClearsBossThreats` trava a regra.
+
+### A chuva ganhou 2% (27/09/2026)
+
+`MeteorRainDensityBoost` = 1,02 multiplica a densidade de referência em todo
+mapa — pedido do Gui depois de a suprema "não ajudar o time" na arena. Fator
+na densidade, não tabela por fase. O `world_05` não muda (está no teto de
+desempenho, que ganha do reforço); no `world_07` são ~92 pedras por chuva
+contra ~90. `TestMeteorRainBoostReachesTheMagoMaps`.
+
 ## O último suspiro (`on_last_stand`)
 
 O terceiro gatilho de diálogo, e o único que dispara **durante** a luta. Ele
@@ -327,9 +648,21 @@ existe para o momento em que um mapa é desenhado para ser perdido, de modo que
 a cena aconteça em vez do Game Over.
 
 Condição (`game.partyIsFalling`): a **janela do clímax do mapa está aberta** E
-ninguém mais de pé, ou todo mundo que ainda está de pé abaixo de **30% da
-vida** (`dialogue.LastStandHealth`). As duas condições, sempre — uma sem a
-outra não é o último suspiro.
+a **vida do grupo somada** está em até **35%** da vida máxima somada
+(`dialogue.LastStandPartyHealth`; morto conta zero, ausente não entra). As
+duas condições, sempre — uma sem a outra não é o último suspiro.
+
+**Até 28/09/2026 a regra era por jogador:** todo mundo de pé abaixo de 30% da
+própria barra. Um único personagem saudável — quase sempre um bot longe da
+briga — segurava a cena, e o grupo tinha de morrer inteiro para o ápice
+começar. Somar o grupo foi o pedido do Gui depois do playtest:
+
+| Grupo de 5 | Vida somada | Dispara? |
+|---|---|---|
+| Todos cheios | 100% | não |
+| Dois cheios, três caídos | 40% | não — ainda é uma luta em pé |
+| Um cheio, quatro caídos | 20% | **sim** |
+| Todos a um terço da barra | 33% | **sim** |
 
 ### A janela do clímax é declarada por mapa, não avaliada solta
 
@@ -587,7 +920,7 @@ onde se recua. Composição pequena e quase toda de **lobo**, porque a 240 ele �
 | `world_03` | 24 → **32** | 136 → **156** |
 | `world_04` | 12 → **18** | 67 → **80** |
 
-O miolo do saguão do mapa 4 fica de fora de propósito: é onde os 22 simultâneos
+O miolo do saguão do mapa 4 fica de fora de propósito: é onde os 30 simultâneos
 da emboscada circulam, e enchê-lo tira o chão da cena do Arqueiro.
 
 ### Desengajar: **sem** curar
@@ -606,17 +939,26 @@ a Sacerdotisa ergue o altar. É a tradução em código de uma frase do briefing
 Uma horda finita, por maior que fosse, seria uma questão de aguentar — bastaria
 matar o último. Repondo-se, ela não tem último.
 
-| | |
-|---|---|
-| Mistura de reposição | 6 orcs + 6 lobos |
-| Onde nasce | **nos marcadores `climax_spawn_*`**, sem filtro de distância |
-| Simultâneos | 10 |
-| Fim | `LastStandDone()`, e nada mais |
+| | Mapa 3 (`world03Climax`) | Mapa 4 (`world04Climax`) |
+|---|---|---|
+| Mistura de reposição | 6 orcs + 6 lobos | **14 orcs + 14 lobos + 6 slimes** (25/08/2026; eram 8 + 12 + 8) |
+| Onde nasce | nos marcadores `climax_spawn_*`, sem filtro de distância | idem |
+| Simultâneos | 10 | **30** (eram 22) |
+| Leva | — | **7 a cada 0,9 s** (eram 5 a cada 1,1 s) |
+| Fim | `LastStandDone()`, e nada mais | idem |
 
 O orc é a massa porque é a criatura mais forte, e é a única cujos números foram
 calibrados contra uma ultimate. Os lobos existem porque um cerco só de orcs, a
 130 de velocidade, deixaria o grupo circular indefinidamente — e circular não
 pode ser uma saída.
+
+**No mapa 4 a massa migrou para o orc e o lobo, e o slime caiu** (8/12/8 →
+14/14/6): o slime é exatamente o que a Legião Espectral e a Área Angelical
+apagam de graça, então slime na reposição alonga a horda sem pressionar — é o
+corpo que faz a fase parecer difícil no HUD e fácil na tela. A leva maior e
+mais rápida é a mesma correção que este clímax (mapa 3) já tinha levado: com
+levas espaçadas o grupo mata cada uma antes da seguinte, e a pressão que leva
+aos 30% de vida nunca se acumula.
 
 **Depois do resgate a horda vira finita.** A Área Angelical não mata ninguém:
 ela ressuscita os caídos uma vez e cura quem está dentro. O que a ultimate faz
@@ -715,8 +1057,8 @@ a magia passa pelo caminho normal de qualquer magia, e o que a fase ainda
 precisa declarar é só QUEM se ergue e QUAL magia devolver carregada.
 
 **O herói é revivido mesmo estando vivo.** A cena dispara com o grupo
-abaixo de 30% da vida, então "vivo" ali quer dizer *por pouco*, e mandá-lo
-para o resgate naquele fiapo desperdiçaria o momento.
+abaixo de 35% da vida somada, então "vivo" ali quer dizer, quase sempre, *por
+pouco*, e mandá-lo para o resgate naquele fiapo desperdiçaria o momento.
 
 **A ultimate dele vem liberada com o resgate, só para esta corrida.** A
 campanha continua entregando a suprema do herói só na fase seguinte
@@ -751,10 +1093,13 @@ campo** — a cena atirava por ele. Agora ela reergue o Arqueiro (humano ou bot)
 devolve a suprema carregada e destravada, e **quem atira é ele**; o bot já sabe
 caçar gárgula (`bot/arqueiro.go`, `huntSentry`).
 
-O julgamento dos canhões do mapa 6 **ficou**, e a diferença é de natureza: o
-Avatar dos Deuses é imunidade total, não um ataque a distância, então sem
-`castCannonJudgment` o resgate devolveria o grupo vivo dentro do mesmo corredor
-bombardeado. Ver "O resgate: o julgamento da Paladina".
+O julgamento dos canhões do mapa 6 **também saiu**, em 27/08/2026, e agora não
+sobrou nenhum. Ele tinha ficado por um motivo que deixou de valer: o Avatar dos
+Deuses é imunidade e não um ataque a distância, então enquanto o canhão fosse
+invulnerável a Paladina não tinha como calá-lo por conta própria. Desde que o
+canhão passou a cair por espada, ela tem — o Avatar deixou de ser só sobreviver
+e virou o pedágio da travessia. Ver "O resgate entrega a ferramenta, não a
+solução".
 
 ### Invulnerabilidade concedida
 
@@ -765,6 +1110,10 @@ efeito próprio. As duas são consultadas no mesmo ponto do caminho de dano.
 Duas regras que os testes travam: a janela **expira** (senão é imunidade
 permanente esquecida em campo), e uma concessão curta **não encurta** uma longa
 que ainda corre.
+
+Desde 27/09/2026 o renascer comum também concede uma janela (ver "Death And
+Revival"), e toda janela **aparece**: ela vai no snapshot
+(`PlayerState.Invuln`) e o corpo pisca colorido ↔ cinza.
 
 ### O resto do grupo também é reerguido
 
@@ -816,30 +1165,76 @@ aparece em `waveRuns`, `climaxRuns`, `garrisons` nem `sentryPosts`
 
 Ao contrário da gárgula sentinela (`enemy_sentry_*`, alcance global, ataca por
 esfera e pode ser ferida por espectro), o canhão do corredor é **decoração do
-Tiled com uma arma de host atrás**: a estátua de gárgula já existente no
-manifesto do castelo, reaproveitada como marco visual (decisão do Gui,
-13/08/2026 — uma sprite de canhão de verdade fica para depois), pareada com um
-marcador `enemy_cannon_*` na camada `spawn`. Ele nunca entra no
-`EntityManager`, não tem sprite própria, não pode ser ferido por espada nem
-por projétil, e só sai de campo quando o julgamento roteirizado da Paladina o
-destrói (ver abaixo). `internal/network/cannons.go` e `host_cannon.go`
-carregam a lógica; `internal/skill/cannon_ball*.go` a bola de fogo em si —
-reta, sem perseguição, no molde da Bola de Fogo do Mago, e não da esfera da
-gárgula.
+Tiled com uma arma de host atrás**: a peça `cannon_west`/`cannon_east` de
+`assets/castle_cannons_manifest.json` (arte própria desde 27/08/2026; antes era
+a estátua de gárgula do manifesto do castelo, reaproveitada como marco visual),
+pareada com um marcador `enemy_cannon_*` na camada `spawn`. Ele nunca entra no
+`EntityManager`: não anda, não caça ninguém e não conta em `EnemiesLeft`.
+`internal/network/cannons.go` e `host_cannon.go` carregam a lógica;
+`internal/skill/cannon_ball*.go` a bola de fogo em si — reta, sem perseguição,
+no molde da Bola de Fogo do Mago, e não da esfera da gárgula.
+
+**Ele atira desde o primeiro quadro da fase.** Fora de `CannonRange` o canhão
+não fica calado: ele varre o corredor na direção do jogador mais **próximo**
+(`cannonAim`), e a bola morre por tempo pouco depois do fim do alcance
+(`CannonBallTTL × CannonBallSpeed` = 4140 px contra 4000 de alcance), então
+ninguém sangra de longe. Dentro do alcance a mira volta a ser a de sempre: o
+jogador com **menos vida**. A mudança é de leitura, não de dano — o grupo via
+metade do corredor em silêncio e só descobria do que se tratava quando já
+estava perto (Gui, 28/08/2026). O alcance continua sendo a linha em que se
+começa a sangrar; deixou de ser a linha em que o corredor começa a existir.
+(A cena de abertura congela o mundo como qualquer diálogo — `loop.go` não roda
+`UpdateSimulation` enquanto ela toca —, então "desde o primeiro quadro" quer
+dizer o primeiro quadro **depois** dela.)
+
+**Ele tem barra de vida**, desenhada nas duas máquinas por
+`entity.DrawStructureHealthBar` a partir de `network/cannon_view.go`. Ela existe
+porque com 150 de vida e 75 por golpe supremo a arte só troca no **segundo**
+acerto — até lá nada na tela responderia, e o jogador não teria como saber se
+está machucando pedra ou perdendo tempo. A **posição** de cada posto as duas
+máquinas leem do mesmo mapa (`SetCannonPosts`, chamado de `ApplyToHost` acima da
+checagem de host); só a vida que sobra viaja, por `MsgCannonState`. Isso resolve
+de graça o cliente que entra no meio da fase: ele já nasce com os postos no
+lugar certo.
+
+**Ele cai por espada, e só por espada** (decisão do Gui, 27/08/2026). Tem
+`CannonMaxHP` de vida e leva dano do arco da Paladina
+(`damageCannonsInSweep`, chamado de `performSwordAttack`); flecha e bola de
+fogo passam sem efeito. Isso é o desenho e não uma limitação: com 3200 px de
+alcance de um lado e 140 px do outro, deixar o Arqueiro resolver o corredor da
+entrada apagaria a travessia inteira. Alguém precisa **chegar** ao canhão, e
+chegar custa 45 de dano a cada 2,2 s por posto — o que só o Avatar dos Deuses
+(imunidade total, 15 s) paga. Quando um posto cai, a arte troca para a versão
+em ruínas pela troca de peça por posição (`internal/tilemap/piece_swap.go`),
+replicada por `MsgCannonWreck`.
 
 | Constante | Valor | Por quê |
 |---|---|---|
-| `CannonDamage` | 45 | Quase metade da vida cheia (100): dói o bastante para o Escudo Sagrado (absorve 50) e a cura da Sacerdotisa serem a resposta certa, não esquiva pura. |
-| `CannonRange` | 3200 px (25 células) | O corredor tem ~48 células do spawn até a sala dos canhões; o alcance chega um pouco além do meio — "até próximo da metade" do briefing. |
+| `CannonDamage` | 45 | Quase metade da vida de uma classe de longe (100): dói o bastante para o Escudo Sagrado (absorve 50) e a cura da Sacerdotisa serem a resposta certa, não esquiva pura. Contra os 300 da Paladina o número lê diferente de propósito — ela é quem atravessa. |
+| `CannonRange` | 4000 px (31 células) | O corredor tem ~48 células do spawn até a sala dos canhões; o bombardeio começa a dois terços do caminho. Eram 3200 ("um pouco além do meio"), e em jogo a primeira metade lia como calma demais — a fase só começava quando o grupo já estava perto (Gui, 27/08/2026). |
 | `CannonCooldown` | 2,2 s por canhão | Os dois postos disparam juntos: uma bola por canhão forma uma parede de fogo de ponta a ponta do corredor a cada salva. |
-| `CannonBallRadius` | 480 px | O diâmetro de 960 px cobre a faixa caminhável de 768 px; as duas bolas se sobrepõem, sem rota lateral de esquiva. |
+| `CannonBallRadius` | 350 px | O corpo da bola: 700 px de diâmetro contra 768 px de faixa caminhável, um pouco **menor** de propósito, para haver alguma esquiva entre as duas bolas. Quem sela o corredor é o estouro, não o corpo. |
+| `CannonBlastRadius` | 630 px (1,8x o corpo da bola) | O impacto pega em **área**: todo jogador dentro do raio sangra, não só o primeiro que a bola encostou. O anel que a explosão desenha expande além disso (~4,6x) — é **onda de choque**, não a zona letal, e ler maior do que machuca é convenção. Amarrar os dois foi correção demais em 27/08 e foi desfeito em 28/08: o defeito que parecia ser disso era o estouro nascer 664 px antes do alvo. |
+| `CannonMaxHP` | 600 | **Derivado, não escolhido**: dois golpes do Avatar (`SwordAvatarDamage` 300) por canhão, quatro pelos dois — ~2,7 s na cadência dela (1,5 golpe/s), deixando a maior parte dos 15 s da suprema para a caminhada, que é a parte difícil. Sem a suprema são cinco golpes por canhão sob bombardeio: o mesmo que impossível, e é para ser. Era 150 quando a espada dava 30/75. |
 
-`TestCannonsOutrunEscudoSagrado` trava a relação entre esses três números e o
-Escudo Sagrado: um jogador parado sob fogo, recarregando o escudo a cada
-`ShieldCooldown`, ainda perde mais vida por ciclo do que o escudo consegue
-repor. Perder essa margem sem querer — aliviando o dano, ou acelerando o
-cooldown do escudo — devolveria o corredor atravessável na força bruta, e o
-clímax deixaria de ser necessário.
+**Onde a explosão nasce decide quem ela alcança.** A bola estoura quando o
+corpo dela encosta em alguém, mas o estouro é posto **sobre a pessoa atingida**
+e não onde a bola estava (`cannonBallImpactPoint`) — é daí que o círculo se
+abre metade para a frente e metade para trás e pega quem vinha atrás. Enquanto
+os dois foram o mesmo teste, a bola parava 664 px antes do alvo: a explosão mal
+alcançava quem foi atingido, nunca alcançava quem estava atrás, e detonando
+longe do alvo vivo ela parecia estourar em cima de cadáveres. Duas tentativas
+de consertar isso pelo tamanho da área (aumentar o raio, esticar numa cápsula)
+não resolveram, porque o problema nunca foi o tamanho: uma explosão que começa
+longe demais não alcança ninguém por mais que se estique.
+
+`TestTheCorridorCannotBeTankedWithoutTheAvatar` trava a relação entre esses
+números e a Paladina: atravessar `CannonRange` a `PlayerSpeed` custa mais dano
+do que ela tem para gastar no caminho (vida cheia + um escudo e uma cura por
+recarga). Perder essa margem sem querer — aliviando o dano, acelerando o
+cooldown do escudo, subindo a vida dela de novo — devolveria o corredor
+atravessável na força bruta, e o Avatar dos Deuses deixaria de ser o pedágio da
+travessia.
 
 ### O gatilho é uma zona, não a horda
 
@@ -850,29 +1245,74 @@ o tempo todo), então ele declara uma zona `corridor_checkpoint`
 a sala deles. `game.partyIsFalling` passa a perguntar por essa zona em vez do
 `WaveState` quando o mapa a declara — ver "O último suspiro" acima.
 
-### O resgate: o julgamento da Paladina
+### O resgate entrega a ferramenta, não a solução
 
-Quando a cena fecha a última fala, `ResolveLastStand` concede o Avatar dos
-Deuses **e** chama `castCannonJudgment`, que destrói diretamente os dois
-canhões declarados pelo mapa: um resgate roteirizado precisa de um alvo
-**preciso**, não de algo que o jogador teria de mirar, e a Paladina não teria
-como mirar dois canhões atrás de uma porta fechada de qualquer forma.
-`RestoreCannons` os repõe se a fase reiniciar.
+Aqui morava o **julgamento da Paladina**: `ResolveLastStand` destruía os dois
+canhões junto com o resgate. Saiu em 27/08/2026, a pedido do Gui, e com ele saiu
+o último julgamento roteirizado do jogo (o do Arqueiro, no mapa 4, já tinha
+saído em 23/08/2026 — ver "Não há mais NPC").
 
-É o **único** julgamento roteirizado que sobrou. O do Arqueiro, no mapa 4, saiu
-em 23/08/2026 — ver "Não há mais NPC" — porque lá existe um Arqueiro em campo
-capaz de mirar, e a cena estava atirando no lugar dele. Aqui não existe magia da
-Paladina que alcance um canhão: o Avatar é imunidade.
+O que a cena entrega agora é o de sempre: gente de pé, com vida, e a suprema
+recarregada e destravada. E a suprema é **exatamente** a ferramenta que o
+corredor pede, porque a tabela de progressão já dizia que a Paladina só ganha o
+Avatar dos Deuses na fase seguinte à dela — no mapa 6 ela **não o tem** até o
+resgate acontecer. O ciclo da fase é esse: o grupo avança até onde o Escudo
+Sagrado aguenta, cai, a cena reergue a Paladina com o Avatar, e **ela** atravessa
+e derruba os canhões a espada. `RestoreCannons` os repõe de pé se a fase
+reiniciar, e `ClearWreckedPieces` devolve a arte inteira junto.
+
+**O orçamento da travessia é apertado de propósito, e é uma única conta.** A
+15 s de Avatar e 200 px/s de caminhada cabem 3000 px de deslocamento; tirando
+os ~540 px gastos parada batendo e os 768 px entre um posto e o outro, sobram
+~1690 px de aproximação sob imunidade. É daí que sai `bot.CannonAvatarRange`
+(1600 px) — a distância em que a Paladina bot levanta a suprema. Quem mexer em
+`CannonMaxHP`, `SwordAvatarDamage`, `AvatarDuration` ou `PlayerSpeed` mexe
+nessa conta; `TestBotCannonApproachFitsInsideTheAvatar` falha quando ela deixa
+de fechar.
+
+### A Paladina bot também atravessa
+
+Como só a espada dela derruba um canhão, um grupo **sem Paladina humana**
+ficaria preso no corredor para sempre — o bot dela nem sabia que os canhões
+existiam, já que não são `entity.Enemy`. Por isso `bot.View` ganhou `Cannons`
+(os postos de pé, fora de `Foes` de propósito) e `bot/paladina.go` ganhou
+`huntCannon`, com prioridade sobre tudo: enquanto houver canhão de pé, calar o
+corredor é a única coisa que só ela faz.
+
+Ela aproxima com o Escudo Sagrado de pé, levanta o Avatar a
+`CannonAvatarRange`, e a partir daí **não volta mais** — `huntFor` (a duração
+da suprema, copiada em `bot.CannonHuntWindow` porque `bot` não importa `skill`)
+mantém a missão mesmo com `UltimateReady` já falso, senão o quadro seguinte ao
+lançamento a encontraria sem suprema no meio do corredor e ela daria meia-volta.
+`host_bot_cannon_test.go` costura os números dos três pacotes.
 
 ### O portal fecha o ciclo, por enquanto
 
 Não existe mapa de chefe ainda (fase 7). O portal no fim do corredor aponta de
 volta para `world_01.json` — a mesma regra que a última fase da campanha já
 usava antes deste mapa existir (decisão do Gui, 13/08/2026) — e
-`campaign_portals_test.go` cobra a cadeia inteira. Não há bloqueio de
-`WaveState` no portal: o que impede alcançá-lo cedo demais são os dois
-canhões, não uma porta trancada (o mesmo padrão dos mapas 3 e 4, ver
-`game/portal_gate.go`).
+`campaign_portals_test.go` cobra a cadeia inteira.
+
+**A saída é a recompensa por calar os canhões** (Gui, 28/08/2026). Não há
+`WaveState` para esperar — o corredor não tem horda —, então `PortalsUnlocked`
+ganhou uma segunda exceção ao lado da fase 3: enquanto houver canhão de pé
+(`network.CannonsStanding`), o portal fica **invisível e inerte**, porque
+`portalReveal` governa tanto o desenho quanto a entrada. Antes ele estava
+aberto desde o primeiro quadro e o que impedia alcançá-lo era só o bombardeio:
+dava para correr por baixo do fogo com sorte e pular a fase inteira.
+
+A pergunta é "há canhão de pé?" e não "este mapa é o 6?", então a regra nasce e
+morre com os postos que o mapa declara, e nenhum outro mapa paga por ela
+existir. `game/portal_gate_cannon_test.go` guarda os três casos (fechado com um
+de pé, aberto quando o último cai, inexistente sem postos), e o reinício de
+fase fecha o portal junto ao repor os canhões (`ResetCannonBars`).
+
+Um cliente que **entra no meio da fase** monta os postos sozinho do mapa, todos
+de pé, e só receberia `MsgCannonState` se alguém batesse num canhão depois
+disso — ficaria com a saída fechada enquanto o grupo a atravessa. Por isso
+`sendCannonStateTo` manda o estado atual no join, irmão de `sendDialogueTo` e
+pela mesma razão: quem chega no meio tem de chegar no mesmo ponto da fase em
+que todo mundo está.
 
 ## Teclas de desenvolvimento (desktop)
 

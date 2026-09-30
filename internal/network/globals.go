@@ -102,7 +102,7 @@ func GetAllPlayers() map[string]PlayerState {
 // monta esse PlayerState a partir do que a maquina dele sabe: posicao, quadro
 // de animacao, vida. Ele NAO sabe se o host decidiu que este corpo esta parado
 // dentro de um portal — `InPortal` e `Absent` sao veredictos do host, que
-// chegam no snapshot a 20 Hz.
+// chegam no snapshot a 20 Hz. `Invuln` (a janela de imunidade) tambem.
 //
 // Usar UpdatePlayerState aqui substituia a entrada INTEIRA sessenta vezes por
 // segundo, apagando os dois veredictos entre um snapshot e o proximo. O efeito
@@ -119,6 +119,7 @@ func UpdateLocalPlayerState(p PlayerState) {
     if known, ok := RemotePlayers[p.PlayerID]; ok {
         p.InPortal = known.InPortal
         p.Absent = known.Absent
+        p.Invuln = known.Invuln
     }
     RemotePlayers[p.PlayerID] = p
 }

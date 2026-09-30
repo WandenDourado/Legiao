@@ -45,3 +45,35 @@ func (e *Enemy) push(delta rl.Vector2, solid collision.Solid) {
 	width, height := EnemyFootprint(e)
 	e.Position = collision.Resolve(e.Position, delta, width, height, solid)
 }
+
+// Knockback empurra o inimigo para LONGE de `from`, e devolve se ele saiu do
+// lugar. Hoje so o estouro do Escudo Sagrado usa (network/host_shield_burst.go).
+//
+// Duas regras herdadas de ResolveEnemyOverlap, e nao inventadas aqui:
+//
+//   - QUEM NAO ANDA NAO E EMPURRADO. Uma gargula sentinela e a Senhora das
+//     Trevas tem `Speed 0` porque sao POSTOS: o mapa decidiu onde elas ficam.
+//     Arrastar uma delas com uma explosao seria o mesmo defeito que a horda
+//     empurrando a chefe para fora da ancora, que ja custou caro uma vez.
+//   - O empurrao passa pelo resolvedor de mapa (`push`), entao ninguem
+//     atravessa parede: um inimigo encurralado contra a pedra simplesmente
+//     nao anda, em vez de ser arremessado para dentro dela.
+//
+// A velocidade fica intacta de proposito, tambem como em `push`: o corpo
+// desliza, o sprite nao gira. O bicho e jogado para tras sem parar de encarar
+// quem o jogou.
+func (e *Enemy) Knockback(from rl.Vector2, distance float32, solid collision.Solid) bool {
+	if e.Speed <= 0 || distance <= 0 {
+		return false
+	}
+	delta := rl.Vector2Subtract(e.Position, from)
+	if delta.X == 0 && delta.Y == 0 {
+		// Em cima do centro exato: sem direcao para fugir. Empurra para baixo,
+		// na direcao da camera, que e a unica escolha que nao esconde o bicho
+		// atras do proprio jogador.
+		delta = rl.NewVector2(0, 1)
+	}
+	before := e.Position
+	e.push(rl.Vector2Scale(rl.Vector2Normalize(delta), distance), solid)
+	return e.Position != before
+}

@@ -4,12 +4,15 @@ package network
 
 import (
 	"bufio"
+	"compress/flate"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/WandenDourado/Legiao/internal/ability"
 	"github.com/WandenDourado/Legiao/internal/collision"
@@ -22,9 +25,12 @@ import (
 
 // Host represents the server that manages the authoritative game state.
 type Host struct {
-	listener   net.Listener
-	peers      map[string]*ClientConn // key: remote address
-	peersMutex sync.Mutex
+	listener net.Listener
+	// onlineListener e a sala no relay (host_online.go), nil fora dele.
+	// Guardado sob peersMutex.
+	onlineListener net.Listener
+	peers          map[string]*ClientConn // key: remote address
+	peersMutex     sync.Mutex
 	// Authoritative game state: all connected players
 	players      map[string]*PlayerState // key: player ID
 	playersMutex sync.RWMutex
@@ -57,6 +63,12 @@ type Host struct {
 	// boss sao os relogios da luta: espinhao, nevoa e o aviso da conjuracao.
 	// Ver host_boss.go.
 	boss bossClocks
+	// bossDeathHandled trava o disparo do reerguimento da vitoria numa unica
+	// vez por queda. Sem isso, todo quadro em que updateBossState nao acha a
+	// chefe viva reergueria o grupo de novo — inofensivo num jogador parado,
+	// mas um bug de verdade assim que alguem morre DEPOIS da vitoria. Zerado
+	// em InstallBoss, para a proxima tentativa poder reergue-los de novo.
+	bossDeathHandled bool
 
 	stageSentries []tilemap.SpawnPoint
 	// sentriesArmed e quantos postos de sentinela ja foram OCUPADOS nesta
@@ -71,9 +83,17 @@ type Host struct {
 	// stageCannonPosts sao os postos `enemy_cannon_*` do mapa em jogo (mapa
 	// 6), guardados para RestoreCannons repor no reinicio de fase.
 	stageCannonPosts []tilemap.SpawnPoint
-	// liveCannons e o estado em campo dos canhoes: posicao e se ja foi
-	// destruido pelo julgamento do ultimo suspiro. Ver cannons.go.
-	liveCannons []*cannonPost
+	// liveCannons e o estado em campo dos canhoes: posicao, vida e se ja
+	// caiu. Ver cannons.go.
+	//
+	// cannonsMutex existe desde que o canhao passou a levar dano de espada
+	// (27/08/2026): a vida e escrita pelo golpe, que chega na goroutine de
+	// quem atacou (mensagem de cliente, laco de entrada do host ou tique de
+	// bot), e lida pelo tique da simulacao, que decide quem dispara. Antes
+	// disso a lista so era escrita no carregamento do mapa e no reinicio, e
+	// nao tinha dois lados.
+	cannonsMutex sync.Mutex
+	liveCannons  []*cannonPost
 	// World bounds for spawn positions and projectile validation
 	WorldBounds world.Bounds
 	PlayerSpawn rl.Vector2
@@ -145,6 +165,17 @@ type ClientConn struct {
 	// lock global durante a escrita em todas as conexoes faz um cliente lento
 	// travar os outros.
 	writeMu sync.Mutex
+	// out e a fila de envio assincrono (host_peer_writer.go); nil = envio
+	// sincrono, so em testes que montam o ClientConn a mao.
+	out *outbox
+	// z comprime o fluxo depois do marcador MsgCompress. So a goroutine de
+	// envio toca nele, sob writeMu.
+	z *flate.Writer
+	// Balde de fichas da taxa de mensagens (host_guard.go); so a goroutine de
+	// leitura desta conexao toca.
+	tokens     float64
+	rateAt     time.Time
+	rateWarned time.Time
 	// Done channel signals that the client has disconnected.
 	done chan struct{}
 	// superseded is set by supersedeConnection (host_rejoin.go) on the OLD
@@ -158,9 +189,19 @@ type ClientConn struct {
 	superseded atomic.Bool
 }
 
-// send escreve uma mensagem ja serializada nesta conexao, com o terminador de
-// linha e o flush. Todo caminho de envio passa por aqui.
+// send entrega uma mensagem ja serializada a esta conexao. Todo caminho de
+// envio passa por aqui. Com a fila ligada (conexoes reais) so empilha e volta
+// na hora - o laco do jogo nunca espera a rede (host_peer_writer.go).
 func (c *ClientConn) send(data []byte) error {
+	if c.out != nil {
+		t := messageType(data)
+		return c.out.push(outItem{data: data, typ: t, snapshot: isSnapshotType(t)})
+	}
+	return c.sendSync(data)
+}
+
+// sendSync escreve e da Flush na hora. So para ClientConn sem fila (testes).
+func (c *ClientConn) sendSync(data []byte) error {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
 	if _, err := c.writer.Write(data); err != nil {
@@ -194,26 +235,35 @@ func StartHost(port int, playerID string, color string, charType string, playerS
 		Skills:             skill.NewManager(),
 		announce:           newAnnouncer(),
 	}
-	// Register host as a player in the authoritative state
+	// Register host as a player in the authoritative state.
+	// A vida vem do PERSONAGEM (entity.MaxHealthFor): a Paladina tem 300, o
+	// resto 100. Era literal aqui, e em outros tres lugares.
+	hostMaxHealth := entity.MaxHealthFor(entity.CharacterType(charType))
 	h.players[playerID] = &PlayerState{
 		PlayerID:  playerID,
 		X:         int(h.PlayerSpawn.X),
 		Y:         int(h.PlayerSpawn.Y),
 		Color:     color,
 		Character: charType,
-		Health:    100,
-		MaxHealth: 100,
+		Health:    hostMaxHealth,
+		MaxHealth: hostMaxHealth,
 		IsDead:    false,
 	}
 	log.Printf("[Host] StartHost: registered host %s, players map now has %d entries", playerID, len(h.players))
-	go h.acceptLoop()
+	go h.acceptLoop(ln)
 	return h, nil
 }
 
-func (h *Host) acceptLoop() {
+// acceptLoop atende um listener: o TCP da LAN e, com jogo online, tambem o
+// do relay (host_online.go). Um listener fechado encerra o laco; antes ele
+// girava para sempre registrando erro depois de Host.Close.
+func (h *Host) acceptLoop(ln net.Listener) {
 	for {
-		conn, err := h.listener.Accept()
+		conn, err := ln.Accept()
 		if err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
 			log.Printf("host accept error: %v", err)
 			continue
 		}
@@ -221,9 +271,10 @@ func (h *Host) acceptLoop() {
 		client := &ClientConn{
 			conn:   conn,
 			writer: bufio.NewWriter(conn),
-			reader: bufio.NewReader(conn),
+			reader: bufio.NewReaderSize(conn, maxClientLine),
 			done:   make(chan struct{}),
 		}
+		client.startWriter()
 		h.peersMutex.Lock()
 		h.peers[conn.RemoteAddr().String()] = client
 		log.Printf("[Host] New client connected: %s", conn.RemoteAddr().String())
@@ -249,18 +300,21 @@ func (h *Host) handleClient(c *ClientConn) {
 			h.playersMutex.Unlock()
 			h.BroadcastRoster()
 		}
+		c.stopWriter()
 		c.conn.Close()
 		close(c.done)
 		h.peersMutex.Lock()
 		delete(h.peers, c.conn.RemoteAddr().String())
 		h.peersMutex.Unlock()
 	}()
-	decoder := json.NewDecoder(c.reader)
 	for {
-		var msg Message
-		if err := decoder.Decode(&msg); err != nil {
+		msg, err := readClientMessage(c.reader)
+		if err != nil {
 			log.Printf("decode error from %s: %v", c.conn.RemoteAddr(), err)
 			return
+		}
+		if !c.allowMessage(time.Now()) {
+			continue
 		}
 
 		// While a dialogue is on screen the world is frozen for everyone. A
@@ -273,6 +327,11 @@ func (h *Host) handleClient(c *ClientConn) {
 
 		switch msg.Type {
 		case MsgJoin:
+			// Sala cheia ou versao diferente: recusa com motivo e encerra
+			// (host_guard.go).
+			if !h.admitJoin(c, msg.Payload) {
+				return
+			}
 			// A fresh spawn and a reconnect with a KNOWN playerID both come
 			// through here; handleJoin (host_rejoin.go) tells them apart and
 			// does the roster/state/dialogue/map fan-out either way.
@@ -330,6 +389,10 @@ func (h *Host) handleClient(c *ClientConn) {
 				continue
 			}
 			h.HandleSkillMessage(skill.PlayerID, skill.Skill, float32(skill.TargetX), float32(skill.TargetY))
+
+		case MsgPing:
+			// Eco: o cliente mede a latencia pelo proprio relogio.
+			h.sendTo(c, Message{Type: MsgPong, Payload: msg.Payload})
 
 		case MsgTestMode:
 			var tm TestModePayload
@@ -422,6 +485,8 @@ func (h *Host) UpdateSimulation(dt float32) {
 	// Revive whoever finished their countdown (frozen during a Game Over).
 	h.tickRespawns(dt)
 	h.tickInvulnerability(dt)
+	tickRespawnGrace(dt)
+	h.publishInvulnerability()
 
 	// Free any slot whose ReconnectGrace ran out. Before the game-over check
 	// below, so a slot that just expired stops holding the party hostage in
@@ -432,6 +497,12 @@ func (h *Host) UpdateSimulation(dt float32) {
 	h.playersMutex.Lock()
 	allDead := checkGameOver(h.players)
 	h.playersMutex.Unlock()
+	// Com a chefe caida a corrida ja foi ganha e nao pode mais ser perdida
+	// (victoryPeace, host_boss_victory.go): um Game Over aqui cairia em cima
+	// da cena de encerramento, que foi o bug do playtest de 27/09/2026.
+	if h.victoryPeace() {
+		allDead = false
+	}
 	if allDead {
 		// O ultimo suspiro segura o fim: a cena so vale se acontecer ANTES do
 		// Game Over ser anunciado, senao o resgate chega depois do jogo ter
@@ -575,6 +646,15 @@ func (h *Host) checkEnemyPlayerCollisions(attackedEnemies map[string]bool) {
 		if e.Type == entity.EnemyTypeCastleSentry {
 			continue
 		}
+		// A chefe tambem nao bate por proximidade (playtest de 27/09/2026,
+		// plans/plan_playtest_27_09.md §2). Ela passa pelo Enemy.Update comum,
+		// que com AttackRange 1400 devolvia "atacou" a cada AttackCooldown e
+		// este laco tirava vida de alguem a ate 1530 px dela — sem animacao,
+		// sem projetil, sem som: o "dano de lugar nenhum" relatado. Os golpes
+		// dela contra jogador sao espinhao e nevoa (host_boss.go), e so eles.
+		if entity.GetEnemyDef(e.Type).IsBoss() {
+			continue
+		}
 		for playerID, p := range h.players {
 			if p.IsDead {
 				continue
@@ -597,6 +677,11 @@ func (h *Host) checkEnemyPlayerCollisions(attackedEnemies map[string]bool) {
 				dmg := e.AttackDamage
 				if leftover, hpAfter, had := h.Skills.AbsorbShieldDamage(playerID, dmg); had {
 					h.broadcastShieldEvent(playerID, hpAfter)
+					// hpAfter zerado com `had` verdadeiro so pode ser ESTE
+					// golpe: AbsorbShieldDamage recusa escudo ja quebrado.
+					if hpAfter <= 0 {
+						h.burstBrokenShield(playerID)
+					}
 					if leftover <= 0 {
 						break // fully absorbed: no health damage this attack
 					}
@@ -649,7 +734,7 @@ func (h *Host) sendStateToClient(c *ClientConn) {
 
 	// COMPLETO, com identidade. Este e o unico snapshot que o cliente novo
 	// recebe sabendo de nada, e e dele que o cache de identidade nasce.
-	state := StateUpdatePayload{Players: players}
+	state := StateUpdatePayload{Players: players, StageGen: StageGeneration(), GameOver: GameOver, HostT: hostNowMs()}
 	data, err := json.Marshal(state)
 	if err != nil {
 		log.Printf("failed to marshal state update: %v", err)
@@ -699,7 +784,8 @@ func (h *Host) sendEnemyIdentityTo(c *ClientConn) {
 	if len(states) == 0 {
 		return
 	}
-	payload, err := json.Marshal(EnemyUpdatePayload{Enemies: states, Wave: GetWaveState()})
+	payload, err := json.Marshal(EnemyUpdatePayload{Enemies: states, Wave: GetWaveState(), HostT: hostNowMs(),
+		Boss: GetBossState(), SentriesAwake: SentriesAwake()})
 	if err != nil {
 		log.Printf("[Host] falha ao serializar identidade de inimigos: %v", err)
 		return
@@ -757,7 +843,7 @@ func (h *Host) BroadcastStateUpdate() {
 		wire = append(wire, slimPlayer(p))
 	}
 
-	state := StateUpdatePayload{Players: wire}
+	state := StateUpdatePayload{Players: wire, StageGen: StageGeneration(), GameOver: GameOver, HostT: hostNowMs()}
 	data, err := json.Marshal(state)
 	if err != nil {
 		log.Printf("failed to marshal state update: %v", err)
@@ -793,7 +879,7 @@ func (h *Host) BroadcastRoster() {
 	pruneRemotePlayersLocked(players)
 	RemotePlayersMutex.Unlock()
 
-	data, err := json.Marshal(StateUpdatePayload{Players: players})
+	data, err := json.Marshal(StateUpdatePayload{Players: players, StageGen: StageGeneration(), GameOver: GameOver, HostT: hostNowMs()})
 	if err != nil {
 		log.Printf("failed to marshal roster: %v", err)
 		return
@@ -826,8 +912,12 @@ func (h *Host) BroadcastFullState() {
 	// segundo em diante o receptor completa pelo cache. Com 83 inimigos no
 	// world_03 isso e ~45 bytes por monstro por tique que deixam de existir.
 	enemyPayload := EnemyUpdatePayload{
+		HostT:   hostNowMs(),
 		Enemies: h.announce.wireEnemies(enemyStates),
 		Wave:    GetWaveState(),
+		Boss:    GetBossState(),
+		// A porta das gargulas viaja no mesmo pacote que as proprias gargulas.
+		SentriesAwake: SentriesAwake(),
 	}
 	data, err := json.Marshal(enemyPayload)
 	if err != nil {
@@ -952,6 +1042,9 @@ func (h *Host) sendTo(c *ClientConn, msg Message) {
 func (h *Host) Close() error {
 	h.listener.Close()
 	h.peersMutex.Lock()
+	if h.onlineListener != nil {
+		h.onlineListener.Close()
+	}
 	for _, p := range h.peers {
 		p.conn.Close()
 	}
@@ -978,6 +1071,11 @@ func (h *Host) HandleAttack(playerID string, targetX, targetY float32) {
 			h.performSwordAttack(playerID, startPos, dir)
 		} else if proj := entity.NewAttackProjectile(playerID, charType, startPos, dir); proj != nil {
 			h.EntityManager.AddProjectile(proj)
+			// O lado host do som do ataque basico. O cliente deduz o mesmo
+			// evento do instantaneo de projeteis (client_attack_sound.go); a
+			// Paladina nao passa por aqui porque o golpe dela ja soa dentro
+			// de skill.NewSwordSweep, que os dois lados executam.
+			entity.PlayAttackSound(charType, startPos)
 			log.Printf("[Host] Player %s fired %s projectile %s", playerID, proj.Kind, proj.ID)
 		}
 	}
@@ -1030,7 +1128,12 @@ func (h *Host) BroadcastSkill(skillID string, ownerID string, center rl.Vector2)
 		h.broadcastSanctuary(ownerID, center)
 	case "shield":
 		h.broadcastShieldEvent(ownerID, skill.ShieldMaxHP)
-	case "angelic_area", "divine_avatar", "spectral_legion":
+	case "angelic_area", "divine_avatar", "spectral_legion", "meteor_sigil":
+		// "meteor_sigil" e o selo do Mago, e NAO a chuva: os meteoros ja
+		// viajam um a um por broadcastUltimate("meteor_rain", ...) em
+		// host_ultimate.go. Sao dois ids porque o cliente faz coisas
+		// diferentes com eles — um vira uma pedra caindo, o outro a marca aos
+		// pes do conjurador.
 		h.broadcastUltimate(skillID, ownerID, center, rl.Vector2{})
 	}
 }

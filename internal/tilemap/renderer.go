@@ -12,8 +12,6 @@ type MapRenderer struct {
 	Map       *TiledMap
 	Textures  map[string]rl.Texture2D
 	Terrain   *TerrainRenderer
-	Trail     *TrailRenderer
-	trails    []Trail
 	Manifests []*ManifestRenderer
 	// Collision is optional and used only by the F3 debug overlay.
 	Collision *CollisionGrid
@@ -58,13 +56,6 @@ func (mr *MapRenderer) Load() {
 			mr.Terrain.PrepareMasks(layer)
 		}
 	}
-	mr.trails = Trails(mr.Map)
-	if len(mr.trails) > 0 {
-		mr.Trail = NewTrailRenderer()
-		// A curva e dado do MAPA: resolvida uma vez aqui em vez de a cada
-		// quadro dentro do desenho, que era onde ela estava.
-		mr.Trail.Prepare(mr.trails)
-	}
 	// SO os manifestos cujas pecas este mapa realmente coloca.
 	mr.Manifests = NewManifestRenderers(mr.Map)
 	log.Printf("[Tilemap] mapa carregado: %d tilesets, %d manifestos, %d texturas na VRAM",
@@ -80,9 +71,6 @@ func (mr *MapRenderer) Unload() {
 	if mr.Terrain != nil {
 		mr.Terrain.Unload()
 	}
-	mr.Trail.Unload()
-	mr.Trail = nil
-	mr.trails = nil
 	for _, m := range mr.Manifests {
 		m.Unload()
 	}
@@ -144,6 +132,7 @@ func (mr *MapRenderer) drawVisibleLayers(view Viewport) {
 	for _, layer := range mr.Map.Layers {
 		mr.drawLayer(layer, view)
 	}
+	mr.drawManifests("ground_detail", view)
 	mr.drawManifests("structures_back", view)
 	mr.drawManifests("foreground", view)
 	mr.Collision.DrawDebug(view)
@@ -156,6 +145,12 @@ func (mr *MapRenderer) drawLayersUpTo(stopBefore string, view Viewport) {
 		}
 		mr.drawLayer(layer, view)
 	}
+	// `ground_detail` vem ANTES de `structures_back` e das entidades: e o papel
+	// da peca que esta pintada NO chao — sigilo, marca, respingo de cera. Ele
+	// existia no manifesto e no validador desde sempre, mas nao era desenhado
+	// aqui, entao todo objeto com esse papel sumia em silencio (foi o que
+	// aconteceu com os dez sigilos da arena).
+	mr.drawManifests("ground_detail", view)
 	mr.drawManifests("structures_back", view)
 	// Collision cells are drawn before entities so the player footprint,
 	// drawn by the caller, stays readable on top of them.
@@ -185,11 +180,14 @@ func (mr *MapRenderer) drawLayer(layer Layer, view Viewport) {
 	if !layer.Visible || layer.Type != "tilelayer" {
 		return
 	}
+	// Flores, galhos e pedrinhas: desligaveis em Configuracoes > Graficos
+	// (ground_detail.go). So a camada de TILES — os sigilos da arena sao
+	// pecas de manifesto com o mesmo papel e ficam sempre.
+	if layer.Name == "ground_detail" && !groundDetailVisible {
+		return
+	}
 	if layer.Name == "ground" && mr.Terrain != nil {
 		mr.Terrain.Draw(layer, mr.Map.TileWidth, mr.Map.TileHeight, view)
-		// Trails belong to the ground: on top of the terrain, under the
-		// detail scattered over it and under everything standing on it.
-		mr.Trail.Draw(mr.trails, view)
 		return
 	}
 	mr.drawTileLayer(layer, view)
@@ -221,7 +219,15 @@ func (mr *MapRenderer) drawTileLayer(layer Layer, view Viewport) {
 			localID := gid - ts.FirstGID
 			srcX := float32((localID % ts.Columns) * ts.TileWidth)
 			srcY := float32((localID / ts.Columns) * ts.TileHeight)
-			srcRect := rl.NewRectangle(srcX, srcY, tileW, tileH)
+			// O retangulo de ORIGEM tem de usar o tamanho de tile do
+			// TILESET (ts.TileWidth/ts.TileHeight), nao o do mapa
+			// (tileW/tileH): sao a mesma coisa quando o tileset casa com
+			// o grid do mapa, mas quando nao casam, usar tileW/tileH aqui
+			// amostra a linha/coluna vizinha do atlas — um fio de 1 px da
+			// peca ao lado vazando pela borda da peca atual. O destino
+			// continua no grid do MAPA (tileW/tileH): e ele quem manda no
+			// tamanho da celula desenhada na tela.
+			srcRect := rl.NewRectangle(srcX, srcY, float32(ts.TileWidth), float32(ts.TileHeight))
 			dstX := float32(col) * tileW
 			dstY := float32(row) * tileH
 			tex, ok := mr.Textures[ts.ImagePath]

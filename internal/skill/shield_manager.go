@@ -1,6 +1,8 @@
 package skill
 
 import (
+	"github.com/WandenDourado/Legiao/internal/sound"
+
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -9,6 +11,7 @@ import (
 // ActivateShield creates a shield for ownerID or, if one is already active,
 // regenerates it back to full strength (values never stack).
 func ActivateShield(m *Manager, ownerID string, pos rl.Vector2) {
+	sound.PlayAt(sound.SFXShield, pos)
 	m.shieldMutex.Lock()
 	defer m.shieldMutex.Unlock()
 	if m.Shields == nil {
@@ -64,6 +67,26 @@ func (m *Manager) SetShieldAnchor(ownerID string, pos rl.Vector2) {
 	}
 }
 
+// ShieldPosition devolve onde o escudo de ownerID esta ancorado.
+//
+// Existe para o estouro (network/host_shield.go): quando o escudo quebra, o
+// dano em area sai do CENTRO DA AURA, e a aura ja e sincronizada com o dono
+// todo quadro por SetShieldAnchor. Ler daqui em vez de ir buscar a posicao do
+// jogador evita que quem cobra o estouro precise do playersMutex — tres dos
+// quatro caminhos de dano nao o seguram nesse ponto, e um segura.
+//
+// O escudo continua no mapa durante a animacao de estilhaco (shieldBreakTime),
+// entao ele ainda esta aqui no quadro em que quebrou.
+func (m *Manager) ShieldPosition(ownerID string) (rl.Vector2, bool) {
+	m.shieldMutex.RLock()
+	defer m.shieldMutex.RUnlock()
+	s, ok := m.Shields[ownerID]
+	if !ok {
+		return rl.Vector2{}, false
+	}
+	return s.Position, true
+}
+
 // RemoveShield drops ownerID's shield immediately (e.g., owner died).
 func (m *Manager) RemoveShield(ownerID string) {
 	m.shieldMutex.Lock()
@@ -96,7 +119,8 @@ func (m *Manager) UpdateShields(dt float32) {
 func (m *Manager) DrawShields() {
 	m.shieldMutex.RLock()
 	defer m.shieldMutex.RUnlock()
-	for _, s := range m.Shields {
-		s.Draw()
+	// Ordem estavel, nao a do mapa: ver draw_order.go.
+	for _, id := range orderedIDs(m.Shields) {
+		m.Shields[id].Draw()
 	}
 }

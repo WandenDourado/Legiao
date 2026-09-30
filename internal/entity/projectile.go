@@ -25,24 +25,52 @@ const (
 
 // Per-kind tuning for basic attacks.
 const (
+	// AS VELOCIDADES LEVAM GameSpeed E OS TEMPOS DE VIDA SAO DIVIDIDOS PELO
+	// MESMO FATOR (ver gamespeed.go e o bloco de tempos de vida abaixo). O
+	// produto dos dois e o ALCANCE, e ele tem de ficar identico: AttackReach,
+	// o guarda de territorio e os alcances dos bots (bot/tuning.go) leem esse
+	// produto. O tiro chega mais rapido ao mesmo lugar.
 	FireballAttackDamage float32 = 25
-	FireballAttackSpeed  float32 = 420
+	FireballAttackSpeed  float32 = 420 * GameSpeed
 	FireballAttackRadius float32 = 20
 
 	HolyAttackDamage float32 = 18
 	HolyAttackHeal   float32 = 12
-	HolyAttackSpeed  float32 = 380
-	HolyAttackRadius float32 = 13
+	HolyAttackSpeed  float32 = 380 * GameSpeed
+	// HolyAttackRadius subiu de 13 para 20 para a cura por tiro ser jogavel
+	// sem o projetil virar um farol (Gui, 31/08/2026, em dois passos).
+	//
+	// O raio sagrado cura o aliado que ATRAVESSA, e o teste e
+	// `raio + PlayerSize` (host.checkHolyProjectileHeals). Com 13, a folga era
+	// de 33 px — um terco do corpo do aliado a mais que o corpo dele. Na
+	// pratica a Sacerdotisa tinha de acertar o companheiro em cheio, num alvo
+	// que se move, enquanto a horda vem: curar era acidente feliz e nao uma
+	// coisa que ela FAZIA.
+	//
+	// A primeira tentativa foi 26, e ela mostrou o outro limite: como o mesmo
+	// numero desenha o projetil, dobrar o raio dobrou a bola de luz na tela e
+	// o ataque basico ficou grande demais para um tiro que sai varias vezes
+	// por segundo. 20 e o meio termo — e nao um meio termo arbitrario: a folga
+	// vira 40 px, exatamente DOIS raios de corpo (PlayerSize 20), que e a
+	// promessa em uma frase — "perdoa um corpo inteiro de erro de mira". O
+	// teste em projectile_holy_test.go cobra essa relacao, nao o literal.
+	//
+	// O numero e do PROJETIL inteiro, entao ele tambem alarga o acerto contra
+	// inimigos (`raio + HitRadius`) e o desenho — de proposito: um unico raio
+	// significa que o que a tela mostra e o que acerta, e uma area de cura
+	// invisivel maior que o corpo do tiro seria mentira visual. Ela continua o
+	// personagem de menos dano por tiro (18).
+	HolyAttackRadius float32 = 20
 
 	ArrowAttackDamage float32 = 22
-	ArrowAttackSpeed  float32 = 700
+	ArrowAttackSpeed  float32 = 700 * GameSpeed
 	ArrowAttackRadius float32 = 10
 
 	// NecroAttackLifesteal is the flat HP restored to the Necromante per
 	// enemy hit by a shadow skull.
 	NecroAttackDamage    float32 = 22
 	NecroAttackLifesteal float32 = 8
-	NecroAttackSpeed     float32 = 400
+	NecroAttackSpeed     float32 = 400 * GameSpeed
 	NecroAttackRadius    float32 = 16
 )
 
@@ -56,11 +84,16 @@ const (
 // cabeca la e a forma classica dessa relacao envelhecer sem ninguem notar.
 const (
 	// ProjectileLifetime e o tempo de vida padrao de um ataque basico.
-	ProjectileLifetime float32 = 2.0
+	//
+	// Dividido por GameSpeed para o ALCANCE nao mudar quando a velocidade
+	// sobe: 420 x 2,0 e 567 x 1,48 dao os mesmos 840 px. Sem a divisao, subir
+	// o ritmo do jogo esticaria o alcance de todo mundo em silencio — e a
+	// Flecha Celestial se mede contra o Orc.
+	ProjectileLifetime float32 = 2.0 / GameSpeed
 	// ArrowLifetime e mais curto de proposito: a flecha e a mais rapida do
 	// elenco (700), e sem encurtar a vida dela o Arqueiro atiraria de quase o
 	// dobro da distancia de todo mundo.
-	ArrowLifetime float32 = 1.6
+	ArrowLifetime float32 = 1.6 / GameSpeed
 )
 
 // AttackReach e ate onde o ataque basico de um personagem CHEGA, em px.
@@ -140,18 +173,18 @@ func AttackKindFor(ct CharacterType) string {
 
 // Projectile represents a projectile fired by a player.
 type Projectile struct {
-	ID       string
-	OwnerID  string // Player who fired it
-	Kind     string // Visual/behavior kind (KindFireball, KindHoly, ...)
-	Position rl.Vector2
-	Velocity rl.Vector2
-	Damage   float32
-	Heal     float32 // Healing applied to allies (KindHoly only)
+	ID        string
+	OwnerID   string // Player who fired it
+	Kind      string // Visual/behavior kind (KindFireball, KindHoly, ...)
+	Position  rl.Vector2
+	Velocity  rl.Vector2
+	Damage    float32
+	Heal      float32 // Healing applied to allies (KindHoly only)
 	Lifesteal float32 // HP restored to the OWNER on enemy hit (KindNecroSkull)
-	Radius   float32
-	Color    string
-	IsActive bool
-	Lifetime float32 // Seconds until despawn
+	Radius    float32
+	Color     string
+	IsActive  bool
+	Lifetime  float32 // Seconds until despawn
 
 	// HealedAllies tracks which players this projectile already healed so a
 	// holy bolt heals each ally at most once while passing through.
@@ -317,28 +350,42 @@ func drawFireballProjectile(pos rl.Vector2, dirX, dirY float32) {
 
 // drawHolyProjectile renders the Sacerdotisa's basic attack: a radiant sacred
 // orb with a soft golden halo and a light cross sparkle.
+//
+// TODA MEDIDA E FRACAO DE HolyAttackRadius, e nao um numero solto: quando o
+// raio dobrou (13 -> 26), a versao anterior — que tirava 4 px fixos do nucleo —
+// teria virado uma bola branca chapada de 22 px, porque o desconto nao
+// acompanha a escala. Em fracao, o tiro grande e o mesmo desenho, so que maior.
+//
+// O nucleo solido fica bem MENOR que o raio de acerto (0,42x) e o brilho
+// aditivo cresce em cima dele: e a regra da paleta da Sacerdotisa (o branco
+// ocupa a menor area, o dourado espalha), e e o que impede um projetil de 26 px
+// de parecer uma bola de tinta atravessando a tela.
 func drawHolyProjectile(pos rl.Vector2) {
 	t := rl.GetTime()
-	pulse := float32(math.Sin(t*10)) * 1.5
-
-	// Bright core.
-	rl.DrawCircleV(pos, HolyAttackRadius-4+pulse*0.5, rl.NewColor(255, 250, 230, 255))
+	pulse := 1 + 0.06*float32(math.Sin(t*10))
+	r := HolyAttackRadius * pulse
 
 	rl.BeginBlendMode(rl.BlendAdditive)
-	// Golden halo.
-	rl.DrawCircleGradient(int32(pos.X), int32(pos.Y), HolyAttackRadius*2.4+pulse,
-		rl.NewColor(255, 226, 130, 150), rl.Blank)
+	// Halo dourado largo -> corpo de luz no tamanho do acerto -> nucleo.
+	rl.DrawCircleGradient(int32(pos.X), int32(pos.Y), r*2.2,
+		rl.NewColor(255, 226, 130, 130), rl.Blank)
+	rl.DrawCircleGradient(int32(pos.X), int32(pos.Y), r*0.95,
+		rl.NewColor(255, 240, 180, 200), rl.Blank)
 	// Rotating cross sparkle (four rays of light).
 	ang := float32(t) * 1.8
 	for i := 0; i < 4; i++ {
 		a := ang + float32(i)*(math.Pi/2)
 		ray := rl.NewVector2(
-			pos.X+float32(math.Cos(float64(a)))*(HolyAttackRadius*1.9),
-			pos.Y+float32(math.Sin(float64(a)))*(HolyAttackRadius*1.9),
+			pos.X+float32(math.Cos(float64(a)))*(r*1.9),
+			pos.Y+float32(math.Sin(float64(a)))*(r*1.9),
 		)
 		rl.DrawLineEx(pos, ray, 2.5, rl.NewColor(255, 245, 190, 170))
 	}
 	rl.EndBlendMode()
+
+	// Bright core, desenhado por ultimo e em blending normal: e a unica parte
+	// que precisa ficar solida contra qualquer fundo.
+	rl.DrawCircleV(pos, r*0.42, rl.NewColor(255, 250, 230, 255))
 }
 
 // drawArrowProjectile renders the Arqueiro's basic attack: a wooden arrow with

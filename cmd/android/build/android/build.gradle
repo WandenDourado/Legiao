@@ -20,10 +20,10 @@ android {
     defaultConfig {
         ndkVersion "25.2.9519653"  // NDK version that supports 16KB pages
         applicationId "br.wandendourado.legiao"
-        minSdkVersion 21
-        targetSdkVersion 35
-        versionCode 15
-        versionName '1.1.2'
+        minSdkVersion 24
+        targetSdkVersion 36
+        versionCode 24
+        versionName '1.2.1'
     }
 
     packagingOptions {

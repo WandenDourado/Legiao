@@ -19,11 +19,11 @@ const (
 	// ArrowSpreadDeg is the TOTAL cone angle covered by the volley (fan).
 	ArrowSpreadDeg float32 = 50
 	// ArrowSpeed is the arrow travel speed (world units/sec).
-	ArrowSpeed float32 = 950
+	ArrowSpeed float32 = 950 * gameSpeed
 	// ArrowRange is the max distance an arrow travels before despawning.
 	ArrowRange float32 = 950
 	// ArrowTTL is a safety lifetime cap.
-	ArrowTTL float32 = 2.0
+	ArrowTTL float32 = 2.0 / gameSpeed
 	// ArrowDamage is the damage dealt per arrow (single target).
 	ArrowDamage float32 = 15
 	// ArrowHitRadius is the collision radius used against enemies.

@@ -71,7 +71,8 @@ func RemoveCannonBall(host bool, id string, burst bool) {
 }
 
 // AddCannonBurstAt deixa uma explosão numa posição sem que haja bola local —
-// o caminho do cliente, que pode receber o impacto antes de ter a bola.
+// o caminho do cliente, que pode receber o impacto antes de ter a bola, e o do
+// canhão destruído, que explode sem bola nenhuma.
 func AddCannonBurstAt(host bool, pos rl.Vector2) {
 	st, mu := cannonStore(host)
 	mu.Lock()
@@ -137,8 +138,9 @@ func DrawCannonBalls(host bool) {
 	st, mu := cannonStore(host)
 	mu.RLock()
 	defer mu.RUnlock()
-	for _, b := range st.Balls {
-		b.Draw()
+	// Ordem estavel, nao a do mapa: ver draw_order.go.
+	for _, id := range orderedIDs(st.Balls) {
+		st.Balls[id].Draw()
 	}
 	for _, b := range st.Bursts {
 		b.Draw()

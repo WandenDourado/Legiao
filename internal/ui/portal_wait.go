@@ -21,12 +21,12 @@ func NewPortalWaitPanel() *PortalWaitPanel {
 // Layout recomputes the button from the current screen size.
 func (p *PortalWaitPanel) Layout(sw, sh float32) {
 	width := sw * 0.18
-	if width < 140 {
-		width = 140
+	if width < Px(140) {
+		width = Px(140)
 	}
 	height := sh * 0.07
-	if height < 44 {
-		height = 44
+	if height < Px(44) {
+		height = Px(44)
 	}
 	p.button = rl.NewRectangle(sw/2-width/2, sh*0.62, width, height)
 }
@@ -51,8 +51,8 @@ func (p *PortalWaitPanel) Draw(sw, sh float32, showButton bool) {
 		msg = "Aguardando o grupo"
 	}
 	size := int32(sh * 0.03)
-	if size < 20 {
-		size = 20
+	if size < int32(Px(20)) {
+		size = int32(Px(20))
 	}
 	textWidth := rl.MeasureText(msg, size)
 	rl.DrawText(msg, int32(sw/2)-textWidth/2, int32(sh*0.5), size, rl.RayWhite)
@@ -62,7 +62,7 @@ func (p *PortalWaitPanel) Draw(sw, sh float32, showButton bool) {
 	}
 	p.Layout(sw, sh)
 	rl.DrawRectangleRec(p.button, rl.Fade(rl.DarkGray, 0.85))
-	rl.DrawRectangleLinesEx(p.button, 2, rl.RayWhite)
+	rl.DrawRectangleLinesEx(p.button, max(Px(2), 1), rl.RayWhite)
 	label := "SAIR"
 	labelSize := int32(p.button.Height * 0.4)
 	labelWidth := rl.MeasureText(label, labelSize)

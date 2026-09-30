@@ -5,6 +5,8 @@ cmd/android/build/.gradle/
 cmd/android/build/android/assets/
 *.apk
 *.aab
+# liblegiao.so e gerada pelo androidcompile.bat; so o .gitkeep de cada ABI e versionado
+cmd/android/build/android/libs/**/*.so
 
 # ---- Binarios compilados ----
 *.exe
@@ -22,3 +24,10 @@ _to_delete/
 
 # ---- Local ----
 cmd/android/build/local.properties
+
+# ---- Arquivos pessoais / de ferramenta, fora do codigo do jogo ----
+Claude outputs/
+*.pptx
+~$*
+__pycache__/
+*.pyc

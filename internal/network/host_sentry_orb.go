@@ -41,7 +41,12 @@ func (h *Host) handleSentryOrbTick(dt float32, attackedEnemies map[string]bool) 
 	// grupo alcancar o degrau que a fase declara, a gargula esta em campo, e
 	// desenhada e pode morrer — ela so nao atira. O passo 2 corre sempre, ou
 	// uma esfera ja no ar ficaria congelada no meio da tela.
-	if h.sentriesMayFire() {
+	//
+	// O mesmo veredicto e publicado para a seta de borda de tela
+	// (SentriesAwake): gargula calada nao ganha seta.
+	awake := h.sentriesMayFire()
+	setSentriesAwake(awake)
+	if awake {
 		h.launchSentryOrbs(attackedEnemies)
 	}
 
@@ -121,6 +126,14 @@ func (h *Host) weakestPlayerInRange(e *entity.Enemy) (string, rl.Vector2, bool) 
 		if p.IsDead {
 			continue
 		}
+		// Quem esta imune nao e alvo (27/09/2026, plans/plan_playtest_27_09.md
+		// §4). Recem-levantado com 30% e sempre o de "menos vida", entao toda
+		// gargula do mapa mirava nele — e a esfera lenta chegava bem quando a
+		// janela do renascer acabava. Mirar em quem nao pode ser ferido e
+		// desperdicio para a gargula e armadilha para o jogador.
+		if h.IsInvulnerable(id) {
+			continue
+		}
 		pos := rl.NewVector2(float32(p.X), float32(p.Y))
 		if rl.Vector2Distance(e.Position, pos) > e.AttackRange+e.Radius {
 			continue
@@ -183,6 +196,11 @@ func (h *Host) applySentryOrbDamage(playerID string) {
 	dmg := entity.GetEnemyDef(entity.EnemyTypeCastleSentry).AttackDamage
 	if leftover, hpAfter, had := h.Skills.AbsorbShieldDamage(playerID, dmg); had {
 		h.broadcastShieldEvent(playerID, hpAfter)
+		// hpAfter zerado com `had` verdadeiro so pode ser ESTE golpe:
+		// AbsorbShieldDamage recusa escudo ja quebrado.
+		if hpAfter <= 0 {
+			h.burstBrokenShield(playerID)
+		}
 		if leftover <= 0 {
 			return
 		}

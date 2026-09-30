@@ -30,13 +30,31 @@ const (
 	dialTimeout           = 3 * time.Second
 )
 
+// SessionFailure e o motivo pelo qual uma sessao de cliente terminou sozinha.
+//
+// E um motivo, e nao um texto: a camada de rede diz O QUE aconteceu, e a UI
+// (ui/menu.go) decide como contar isso ao jogador. Antes existia so o booleano
+// gaveUp, e com ele a unica frase possivel era sobre reconexao — o que fez a
+// falha da PRIMEIRA conexao herdar a mensagem errada quando ela finalmente
+// passou a ter mensagem.
+type SessionFailure int
+
+const (
+	// FailureNone: a sessao nao terminou por falha.
+	FailureNone SessionFailure = iota
+	// FailureConnect: a conexao inicial nunca abriu (client_connect.go).
+	FailureConnect
+	// FailureReconnect: a conexao abriu, caiu, e ReconnectWindow esgotou.
+	FailureReconnect
+)
+
 var (
 	reconnectMu      sync.Mutex
 	reconnecting     bool
 	reconnectSince   time.Time
 	reconnectBackoff time.Duration
 	nextAttemptAt    time.Time
-	gaveUp           bool
+	failure          SessionFailure
 )
 
 // Reconnecting reports whether the client is currently trying to get back to
@@ -63,22 +81,32 @@ func ReconnectRemaining() time.Duration {
 	return left
 }
 
-// GaveUp reports whether the client exhausted ReconnectWindow with no host in
-// reach. The UI reads this once to show a clear message and return to the
-// menu instead of leaving the app in limbo; ClearGaveUp resets it so a later
-// session starts clean.
+// GaveUp reports whether the client session ended on its own instead of by
+// the player's choice — either it never managed to connect, or it connected,
+// dropped and exhausted ReconnectWindow. The UI reads this once to show a
+// clear message and return to the menu instead of leaving the app in limbo;
+// ClearGaveUp resets it so a later session starts clean.
 func GaveUp() bool {
 	reconnectMu.Lock()
 	defer reconnectMu.Unlock()
-	return gaveUp
+	return failure != FailureNone
+}
+
+// LastFailure diz QUAL das duas falhas encerrou a sessao, para a UI escolher a
+// frase. FailureNone quando GaveUp e falso.
+func LastFailure() SessionFailure {
+	reconnectMu.Lock()
+	defer reconnectMu.Unlock()
+	return failure
 }
 
 // ClearGaveUp resets the flag GaveUp reports. Call once the menu has taken
 // the player back.
 func ClearGaveUp() {
 	reconnectMu.Lock()
-	gaveUp = false
+	failure = FailureNone
 	reconnectMu.Unlock()
+	setFailureDetail("", nil)
 }
 
 // TickReconnect drives the client-side reconnect state machine. Called once
@@ -86,7 +114,18 @@ func ClearGaveUp() {
 // call, like network.CurrentHost.UpdateSimulation is for the host; the state
 // machine itself lives entirely here, not in loop.go.
 func TickReconnect() {
-	if Role != "client" || CurrentClient == nil {
+	if Role != "client" {
+		return
+	}
+	// A conexao INICIAL tem a sua propria vigilancia, e ela vem antes do teste
+	// de CurrentClient de proposito: era exatamente o "CurrentClient nil sem
+	// ninguem olhando" que deixava um dial pendurado parecer um jogo
+	// funcionando (client_connect.go).
+	if Connecting() {
+		tickConnect()
+		return
+	}
+	if CurrentClient == nil {
 		return
 	}
 	if !Reconnecting() {
@@ -124,6 +163,20 @@ func triggerReconnect(reason string) {
 	nextAttemptAt = time.Now()
 	reconnectMu.Unlock()
 
+	// O DIALOGO CAI JUNTO COM A CONEXAO.
+	//
+	// Enquanto a conexao esta de pe, o estado do dialogo e do host e so dele.
+	// Caida, o que sobrou aqui e uma cena congelada que esta maquina nao tem
+	// como avancar nem encerrar — e DialogueActive e o portao de pausa de todo
+	// o jogo. Guardar esse resto era metade do bug de 20/09/2026: a outra
+	// metade era o host calar no rejoin (sendDialogueTo, dialogue.go).
+	//
+	// Zerar aqui e o par de la: durante a tentativa quem fala e o overlay de
+	// reconexao (ui/reconnect_overlay.go), e o que o host tiver para dizer
+	// sobre a cena chega no rejoin — inclusive "nao ha cena". Cobre tambem o
+	// caso inverso, cair FORA de um dialogo e voltar DENTRO de um.
+	SetDialogueState(DialogueState{})
+
 	log.Printf("[Reconnect] conexao perdida (%s); tentando reconectar a %s", reason, ServerAddress)
 	CurrentClient.dropConn()
 }
@@ -145,7 +198,8 @@ func attemptReconnect() {
 	reconnectMu.Unlock()
 
 	log.Printf("[Reconnect] tentando %s...", ServerAddress)
-	conn, err := net.DialTimeout("tcp", ServerAddress, dialTimeout)
+	conn, err := dialGame(ServerAddress, dialTimeout)
+	setReconnectErr(err)
 	if err != nil {
 		log.Printf("[Reconnect] falhou: %v", err)
 		return
@@ -170,6 +224,13 @@ func attemptReconnect() {
 func rejoin() {
 	resetLiveness()
 	ResetInterpolation()
+	// lastSeenStageGen (client_stage_reconcile.go) e deliberadamente
+	// preservado por uma reconexao, e nao reiniciado aqui: e exatamente
+	// comparar o snapshot pos-reconexao contra o que esta conexao viu por
+	// ULTIMO, antes de cair, que revela se um MsgReset aconteceu enquanto a
+	// tela estava bloqueada (item 2, plan_correcoes_30-08-2026.md). Zerar a
+	// baseline neste ponto apagaria a propria memoria que faz a deteccao
+	// funcionar.
 	RemoteEnemiesMutex.Lock()
 	RemoteEnemies = make(map[string]EnemyState)
 	RemoteEnemiesMutex.Unlock()
@@ -183,17 +244,33 @@ func rejoin() {
 		PlayerID:  LocalPlayerID,
 		Color:     LocalPlayerColor,
 		Character: LocalPlayerCharacter,
+		Compress:  compressDeflate,
+		Proto:     OnlineGameTag,
 	})})
 }
 
 // giveUp ends the session after the reconnect window runs out with no host
 // in reach.
 func giveUp() {
+	log.Printf("[Reconnect] janela de %s esgotada sem reconectar; desistindo", ReconnectWindow)
+	onlineErrMu.Lock()
+	err := lastReconnectErr
+	onlineErrMu.Unlock()
+	if err != nil {
+		setFailureDetail(ServerAddress, err) // so vale para sala online
+	}
+	failSession(FailureReconnect)
+}
+
+// failSession encerra a sessao de cliente com um motivo. E o caminho UNICO: a
+// janela de reconexao esgotada e o dial inicial que nunca completou
+// (client_connect.go) terminam os dois por aqui, e por isso terminam iguais —
+// o laco do jogo ve SessionEnded e volta ao menu, e o menu conta o motivo.
+func failSession(kind SessionFailure) {
 	reconnectMu.Lock()
 	reconnecting = false
-	gaveUp = true
+	failure = kind
 	reconnectMu.Unlock()
-	log.Printf("[Reconnect] janela de %s esgotada sem reconectar; desistindo", ReconnectWindow)
 	if CurrentClient != nil {
 		CurrentClient.dropConn()
 	}
@@ -220,6 +297,10 @@ func ResetClientSession() {
 	reconnectMu.Lock()
 	reconnecting = false
 	reconnectMu.Unlock()
+	// Tambem o estado de conexao: uma sessao que morreu com o dial ainda
+	// pendente deixaria Connecting() verdadeiro, e o proximo menu abriria com
+	// a sobreposicao "Conectando..." de uma tentativa que ja nao existe.
+	resetConnectState()
 
 	Role = ""
 	CurrentClient = nil
@@ -239,6 +320,7 @@ func ResetClientSession() {
 
 	ResetInterpolation()
 	SetDialogueState(DialogueState{})
+	resetStageReconcileBaseline()
 }
 
 // dropConn tears down the current connection without touching Client

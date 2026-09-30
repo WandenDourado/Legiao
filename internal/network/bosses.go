@@ -39,6 +39,7 @@ func BossOfMap(mapPath string) (entity.EnemyType, bool) {
 func (h *Host) InstallBoss(mapPath string, anchor rl.Vector2, hasAnchor bool) {
 	h.bossType, h.bossPresent = "", false
 	h.bossAnchor = anchor
+	h.bossDeathHandled = false
 
 	t, ok := bossOfMap[mapPath]
 	if !ok {
@@ -101,6 +102,35 @@ func (h *Host) updateBossState() {
 	b := GetBossState()
 	b.Health = 0
 	SetBossState(b)
+
+	// A borda vivo->morto so e cruzada UMA vez: bossDeathHandled trava o
+	// reerguimento para nao disparar de novo todo quadro seguinte em que a
+	// chefe continua nao encontrada. O reerguimento acontece AQUI, no instante
+	// da queda, e nao quando a cena final termina - a sequencia pedida e
+	// horda para -> caidos se erguem -> dialogo final -> so entao fogos e
+	// "Missao Concluida", e a horda ja para sozinha (EndsWithBoss, ver
+	// host_waves.go) assim que h.bossDeathHandled vira verdadeiro aqui.
+	if !h.bossDeathHandled {
+		h.bossDeathHandled = true
+		h.clearThreatsOnVictory()
+		h.endHordeOnVictory()
+		h.reviveFallenForVictory()
+	}
+}
+
+// MarkBossVictoryReady libera os fogos e a mensagem "Missao Concluida" no
+// HUD (internal/ui/victory.go, internal/ui/wave_hud.go). So o DialogueDirector
+// chama isto, e so depois que a cena final (gatilho TriggerWavesCleared)
+// termina de falar - antes disso a vitoria ja aconteceu (Health<=0) mas
+// ainda nao foi ANUNCIADA, e e a diferenca entre as duas coisas que este
+// sinalizador existe para guardar.
+func (h *Host) MarkBossVictoryReady() {
+	b := GetBossState()
+	if b.VictoryReady {
+		return
+	}
+	b.VictoryReady = true
+	SetBossState(b)
 }
 
 // BossDown reporta se a fase tem chefe e ele ja caiu. E o que a corrida
@@ -108,4 +138,21 @@ func (h *Host) updateBossState() {
 func BossDown() bool {
 	b := GetBossState()
 	return b.Present && b.Health <= 0
+}
+
+// BossContactCenter devolve o CENTRO VISIVEL da chefe viva — `HitCenter()`,
+// nao `Position` (que e o pe, por causa do `FootLine` da folha) — para quem
+// so precisa saber onde desenhar em cima dela sem entrar no EntityManager. O
+// anel de contato do renderer (`skill.DrawBossContactRing`, chamado do lado
+// host em game/renderer.go) e o unico consumidor hoje.
+//
+// Usar `Position` aqui foi o bug relatado depois do primeiro playtest: o anel
+// nascia no pe dela, 180px abaixo do corpo visivel, e lia como uma esfera
+// solta no chao sem ligacao nenhuma com a sprite.
+func (h *Host) BossContactCenter() (rl.Vector2, bool) {
+	e, alive := h.livingBoss()
+	if !alive {
+		return rl.Vector2{}, false
+	}
+	return e.HitCenter(), true
 }

@@ -1,6 +1,8 @@
 package skill
 
 import (
+	"github.com/WandenDourado/Legiao/internal/sound"
+
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -10,6 +12,7 @@ import (
 // the area stays FIXED on the ground (it does not follow the caster).
 // Recasting replaces the altar; there is never more than one per caster.
 func ActivateAngelic(m *Manager, ownerID string, center rl.Vector2) {
+	sound.PlayAtFor(sound.SFXAngelic, center, AngelicDuration)
 	m.ultMutex.Lock()
 	defer m.ultMutex.Unlock()
 	if m.Angelics == nil {
@@ -98,7 +101,8 @@ func (m *Manager) AdvanceAngelics(dt float32) {
 func (m *Manager) DrawAngelics() {
 	m.ultMutex.RLock()
 	defer m.ultMutex.RUnlock()
-	for _, a := range m.Angelics {
-		a.Draw()
+	// Ordem estavel, nao a do mapa: ver draw_order.go.
+	for _, id := range orderedIDs(m.Angelics) {
+		m.Angelics[id].Draw()
 	}
 }

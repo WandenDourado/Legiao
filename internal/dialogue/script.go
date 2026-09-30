@@ -13,8 +13,9 @@ const (
 	TriggerMapStart Trigger = "on_map_start"
 	// TriggerWavesCleared fires once, when every horde of the map is dead.
 	TriggerWavesCleared Trigger = "on_waves_cleared"
-	// TriggerLastStand fires once, when the party is about to be wiped: every
-	// player dead, or every player still standing below LastStandHealth.
+	// TriggerLastStand fires once, when the party is about to be wiped: the
+	// whole party's health, summed, at or below LastStandPartyHealth of its
+	// summed maximum (the dead count as zero).
 	//
 	// It is the only trigger that fires DURING a fight, and that is the point
 	// — it exists for the moment a map is designed to be lost, so the scene
@@ -41,15 +42,24 @@ func (t Trigger) PerRun() bool {
 	return false
 }
 
-// LastStandHealth is the share of maximum health below which a player counts
-// as "about to fall" for TriggerLastStand.
+// LastStandPartyHealth is the share of the PARTY's health — every present
+// member's health summed (the dead count as zero) over their maximums summed —
+// at or below which the party counts as "about to fall" for TriggerLastStand.
 //
-// It is not zero on purpose: waiting for a full wipe would put the scene after
-// the Game Over the host announces, and a rescue that arrives after the run
-// ended is not a rescue. 30% of the bar is late enough that the party has
-// visibly lost the fight and early enough that someone is still on their feet
-// to hear the line.
-const LastStandHealth = 0.30
+// ATE 28/09/2026 A REGRA ERA POR JOGADOR: todo mundo de pe abaixo de 30% da
+// propria barra. Na pratica um unico personagem saudavel — quase sempre um bot
+// que ficou longe da briga — segurava a cena, e o grupo tinha de morrer
+// inteiro para o apice da fase comecar (relato do playtest). Somar o grupo e o
+// pedido do Gui: um personagem quase cheio com o resto do time caido JA e um
+// grupo perdendo; so o grupo inteiro de vida cheia nao e.
+//
+// Por que 35%. Com os cinco lugares ocupados (vaga de classe vira bot), um
+// personagem cheio e quatro caidos da 20%; dois cheios e tres caidos, 40% —
+// ainda uma luta em pe. Todos a um terco da barra tambem dispara, e esta
+// certo: e um grupo visivelmente perdendo. Nao e zero pelo mesmo motivo de
+// sempre: esperar o wipe poria a cena depois do Game Over, e resgate que chega
+// depois do fim nao e resgate.
+const LastStandPartyHealth = 0.35
 
 // Line is one spoken (or narrated) beat.
 //

@@ -1,0 +1,95 @@
+{
+ "atlas": "assets/tilesets/arena_throne.png",
+ "pieces": {
+  "throne_back": {
+   "source": {
+    "x": 6,
+    "y": 6,
+    "width": 877,
+    "height": 488
+   },
+   "anchor": {
+    "x": 438.5,
+    "y": 736
+   },
+   "role": "foreground",
+   "collision": false,
+   "clipOk": true
+  },
+  "throne_base": {
+   "source": {
+    "x": 6,
+    "y": 494,
+    "width": 877,
+    "height": 248
+   },
+   "anchor": {
+    "x": 438.5,
+    "y": 248
+   },
+   "role": "structures_back",
+   "collision": true,
+   "clipOk": true,
+   "collisionFootprint": {
+    "offsetX": -437.5,
+    "offsetY": -110,
+    "width": 858,
+    "height": 110
+   }
+  },
+  "cocoon_l": {
+   "source": {
+    "x": 889,
+    "y": 6,
+    "width": 126,
+    "height": 428
+   },
+   "anchor": {
+    "x": 63.0,
+    "y": 428
+   },
+   "role": "structures_back",
+   "collision": true,
+   "collisionFootprint": {
+    "offsetX": -51.0,
+    "offsetY": -60,
+    "width": 111,
+    "height": 60
+   }
+  },
+  "cocoon_r": {
+   "source": {
+    "x": 6,
+    "y": 748,
+    "width": 173,
+    "height": 381
+   },
+   "anchor": {
+    "x": 86.5,
+    "y": 381
+   },
+   "role": "structures_back",
+   "collision": true,
+   "collisionFootprint": {
+    "offsetX": -85.5,
+    "offsetY": -60,
+    "width": 170,
+    "height": 60
+   }
+  },
+  "dais_step_h": {
+   "source": {
+    "x": 6,
+    "y": 1135,
+    "width": 965,
+    "height": 136
+   },
+   "anchor": {
+    "x": 0,
+    "y": 136
+   },
+   "role": "structures_back",
+   "collision": false
+  }
+ }
+}

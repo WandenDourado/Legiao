@@ -2,6 +2,7 @@ package skill
 
 import (
 	"github.com/WandenDourado/Legiao/internal/entity"
+	"github.com/WandenDourado/Legiao/internal/sound"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -10,6 +11,7 @@ import (
 
 // SpawnCelestialArrow launches one celestial arrow from start toward dir.
 func SpawnCelestialArrow(m *Manager, ownerID string, start, dir rl.Vector2) {
+	sound.PlayAt(sound.SFXCelestial, start)
 	m.ultMutex.Lock()
 	defer m.ultMutex.Unlock()
 	if m.Celestials == nil {
@@ -62,7 +64,8 @@ func (m *Manager) AdvanceCelestials(dt float32) {
 func (m *Manager) DrawCelestials() {
 	m.ultMutex.RLock()
 	defer m.ultMutex.RUnlock()
-	for _, c := range m.Celestials {
-		c.Draw()
+	// Ordem estavel, nao a do mapa: ver draw_order.go.
+	for _, id := range orderedIDs(m.Celestials) {
+		m.Celestials[id].Draw()
 	}
 }

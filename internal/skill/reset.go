@@ -38,6 +38,7 @@ func (m *Manager) Reset() {
 	m.ultMutex.Lock()
 	m.MeteorRains = nil
 	m.Meteors = make(map[string]*Meteor)
+	m.MeteorSigils = make(map[string]*MeteorSigil)
 	m.Angelics = make(map[string]*AngelicArea)
 	m.Celestials = make(map[string]*CelestialArrow)
 	m.Avatars = make(map[string]*Avatar)

@@ -34,11 +34,21 @@ var manifestSources = []struct {
 	// as faces leste e oeste ficam de perfil nesta projecao, entao o que se ve
 	// e a capa da parede, com a face frontal so na ponta sul.
 	{"assets/castle_walls_vertical_manifest.json", "buildings"},
+	// Os canhoes do corredor final (mapa 6). Folha propria, e nao mais uma
+	// peca do castle_manifest: a peca tem duas versoes — de pe e destruida
+	// pelo julgamento da Paladina — e o host troca uma pela outra em runtime.
+	{"assets/castle_cannons_manifest.json", "buildings"},
 	// As defesas de campo (mapa 3) vivem em `props`: nao sao vegetacao nem
 	// construcao fixa, e a camada separada deixa a auditoria tratar as tres
 	// por regras diferentes.
 	{"assets/siege_defenses_manifest.json", "props"},
 	{"assets/buildings_manifest.json", "buildings"},
+	// A camara de invocacao (mapa 7). Tres folhas separadas porque sao tres
+	// acabamentos diferentes — pedra/ferro, cera acesa e marca de chao —, e uma
+	// folha por acabamento e a regra que mantem paleta e traco consistentes.
+	{"assets/arena_throne_manifest.json", "buildings"},
+	{"assets/arena_candles_manifest.json", "buildings"},
+	{"assets/arena_sigils_manifest.json", "buildings"},
 	{"assets/fences_manifest.json", "fences"},
 }
 
@@ -201,7 +211,7 @@ func (r *ManifestRenderer) Draw(m *TiledMap, role string, view Viewport) {
 			continue
 		}
 		for _, object := range layer.Objects {
-			piece, ok := r.manifest.Pieces[object.Name]
+			piece, ok := r.manifest.Pieces[r.pieceNameAt(object.Name, object.X, object.Y)]
 			if !ok || piece.Role != role {
 				continue
 			}

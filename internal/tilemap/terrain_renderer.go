@@ -27,6 +27,15 @@ const (
 	// biome fades against the VILLAGE grass base and prints a bright green halo
 	// around itself. In the dark stack it fades against the forest grass, which
 	// is the ground actually around it.
+	//
+	// Its TEXTURE, though, was the same terrain_dirt.png the village stack
+	// draws with (31/08/2026 → world_02/world_03: the trail baked into this
+	// material read too bright for a sombre forest — Gui). Measured: 151 mean
+	// luminance against 55-102 for everything else in this stack. It now
+	// draws with its own terrain_forest_path.png, graded down to the same
+	// neighbourhood (~63) from the village dirt's own brushwork — not new
+	// hand-painted art, a colour correction on top of it (see
+	// work/tiled-assets/ for the technique, match_biome_tint.py).
 	terrainForestPath = 8
 	// terrainSiegeGravel and terrainDarkFlagstone are BUILT ground, and they sit
 	// in the dark stack rather than in a stack of their own. A stack of their own
@@ -81,7 +90,7 @@ var terrainTextureFiles = map[int]string{
 	terrainSparseGrass: "assets/tilesets/terrain_dark_grass_sparse.png",
 	terrainBareSoil:    "assets/tilesets/terrain_bare_soil.png",
 	terrainForestGrass: "assets/tilesets/terrain_forest_grass.png",
-	terrainForestPath:  "assets/tilesets/terrain_dirt.png",
+	terrainForestPath:  "assets/tilesets/terrain_forest_path.png",
 
 	terrainSiegeGravel:   "assets/tilesets/terrain_siege_gravel.png",
 	terrainDarkFlagstone: "assets/tilesets/terrain_dark_flagstone.png",
@@ -106,7 +115,7 @@ var terrainTextureFiles = map[int]string{
 // visual change to an approved map, and a separate decision from this one.
 var spanMaterials = map[int]bool{
 	terrainDarkGrass: true, terrainSparseGrass: true, terrainBareSoil: true,
-	terrainForestGrass: true,
+	terrainForestGrass: true, terrainForestPath: true,
 	// Both fortress grounds are 512 px sheets, so they span 4×4 cells 1:1 like
 	// the rest of the dark biome. The flagstone needs it most: at one cell per
 	// sheet every slab would land in the same place in every cell and the
@@ -178,6 +187,18 @@ type TerrainRenderer struct {
 	// masks tem uma textura por material: um texel por celula, com os oito
 	// vizinhos empacotados. Construida uma vez por mapa.
 	masks map[int]rl.Texture2D
+
+	// covered marca as celulas cuja camada de CIMA e opaca — os oito vizinhos
+	// carregam o mesmo material, entao a mascara sai 1,0 exata (ver
+	// fullyLinked em terrain_mask.go). Tudo que essa celula receberia por
+	// baixo, a grama base inclusive, fica escondido sob um quad opaco.
+	//
+	// Um bool por celula da camada `ground`, construido UMA vez no
+	// carregamento do mapa: depende so da camada, que nao muda em runtime.
+	// coveredW/coveredH guardam a grade a que ele corresponde, para uma camada
+	// de outro tamanho nao ser indexada com o mapa errado.
+	covered            []bool
+	coveredW, coveredH int
 }
 
 // NewTerrainRenderer carrega SO as texturas que este mapa pode pintar.
@@ -238,6 +259,7 @@ func (t *TerrainRenderer) Unload() {
 	}
 	t.textures = make(map[int]rl.Texture2D)
 	t.paths = make(map[int]string)
+	t.covered, t.coveredW, t.coveredH = nil, 0, 0
 	t.unloadMasks()
 	if t.enabled {
 		rl.UnloadShader(t.shader)
@@ -262,10 +284,20 @@ func (t *TerrainRenderer) Unload() {
 // cell, and the border mask reads the `ground` layer straight from the map
 // rather than what is already on screen, so a neighbour that was skipped still
 // counts as linked.
+//
+// O culling resolve QUANTAS celulas cada passe visita; ele nao mexe em quantas
+// CAMADAS cada celula recebe, que e o outro fator do custo e o maior deles no
+// celular: a laje negra do world_03 e oito quads de tela cheia empilhados na
+// mesma celula. Quem corta isso e `hidden`, e o passe da grama base e o
+// primeiro a perguntar — ela e a camada que TODA celula recebe e a que fica
+// mais fundo.
 func (t *TerrainRenderer) Draw(layer Layer, tileW, tileH int, view Viewport) {
 	grass := t.textureFor(terrainGrass)
 	grassSpan := t.spanFor(terrainGrass, grass, tileW)
 	t.eachCell(layer, view, func(x, y, kind int) {
+		if t.hidden(x, y, kind, terrainGrass) {
+			return
+		}
 		t.drawPlain(grass, x, y, tileW, tileH, grassSpan)
 	})
 	if !t.enabled {
@@ -285,11 +317,76 @@ func (t *TerrainRenderer) Draw(layer Layer, tileW, tileH int, view Viewport) {
 	}
 	for _, material := range terrainOverlays {
 		t.eachCell(layer, view, func(x, y, kind int) {
-			if paintedWith(kind, material) {
+			if paintedWith(kind, material) && !t.hidden(x, y, kind, material) {
 				t.drawBlended(layer, x, y, tileW, tileH, material)
 			}
 		})
 	}
+}
+
+// prepareCoverage marca as celulas totalmente cercadas pelo proprio material.
+//
+// Chamada uma vez por mapa, de PrepareMasks, e ANTES do teste de batch: a
+// oclusao que ela habilita vale nos dois caminhos de desenho, nao so no rapido.
+func (t *TerrainRenderer) prepareCoverage(layer Layer) {
+	t.covered, t.coveredW, t.coveredH = nil, 0, 0
+	if layer.Width <= 0 || layer.Height <= 0 || len(layer.Data) < layer.Width*layer.Height {
+		return
+	}
+	covered := make([]bool, layer.Width*layer.Height)
+	for y := 0; y < layer.Height; y++ {
+		for x := 0; x < layer.Width; x++ {
+			i := y*layer.Width + x
+			kind := layer.Data[i]
+			if kind == 0 {
+				continue
+			}
+			if _, _, ok := stackRank(kind); !ok {
+				continue
+			}
+			covered[i] = fullyLinked(layer, x, y, kind)
+		}
+	}
+	t.covered, t.coveredW, t.coveredH = covered, layer.Width, layer.Height
+}
+
+// hidden diz se o quad DESTE passe e invisivel nesta celula.
+//
+// O desenho do terreno e empilhado: cada celula recebe a grama base mais uma
+// camada por material abaixo do proprio, e o quad de cada camada cobre a celula
+// INTEIRA. O custo por celula e, portanto, a altura do material dela na pilha —
+// 5,4 quads por celula no world_03 contra 1,2 no world_01, que e a diferenca de
+// desempenho entre os dois mapas no celular.
+//
+// Nada disso e visivel: quando os oito vizinhos carregam o mesmo material, a
+// camada de cima sai com alfa 1,0 exato (fullyLinked, em terrain_mask.go) e
+// esconde tudo que veio antes. Pular esses passes nao muda um pixel — leva o
+// world_03 de 5,40 quads por celula para 1,45, e todo mapa para o patamar do
+// world_01.
+//
+// O material proprio da celula NUNCA e escondido: ele e justamente o quad opaco
+// que esconde os outros.
+func (t *TerrainRenderer) hidden(x, y, kind, material int) bool {
+	if kind == material || t.covered == nil {
+		return false
+	}
+	if outsideCoverage(x, y, t.coveredW, t.coveredH) {
+		return false
+	}
+	if !t.covered[y*t.coveredW+x] {
+		return false
+	}
+	frameStats.QuadsOccluded++
+	return true
+}
+
+// outsideCoverage diz se a celula esta fora da grade para a qual `covered` foi
+// construido — uma camada de outro tamanho, ou um indice que nao existe la.
+// Nesse caso `hidden` responde "nao da para saber", e desenha: a falha segura
+// aqui e sempre desenhar, porque desenhar uma camada escondida custa quadro e
+// esconder uma camada visivel custa buraco no chao.
+func outsideCoverage(x, y, w, h int) bool {
+	return x < 0 || y < 0 || x >= w || y >= h
 }
 
 // eachCell visits every painted cell of the layer INSIDE the viewport, top-left

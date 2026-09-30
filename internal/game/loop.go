@@ -7,6 +7,8 @@ import (
 	"github.com/WandenDourado/Legiao/internal/entity"
 	"github.com/WandenDourado/Legiao/internal/input"
 	"github.com/WandenDourado/Legiao/internal/network"
+	"github.com/WandenDourado/Legiao/internal/settings"
+	"github.com/WandenDourado/Legiao/internal/sound"
 	"github.com/WandenDourado/Legiao/internal/ui"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -21,26 +23,78 @@ import (
 // host in reach, the loop returns here and opens the menu again in a fresh
 // session, exactly like a clean process start.
 func Run(cfg Config) {
+	// settings.Load() ANTES de InitWindow, e nao "logo depois de sound.Init()"
+	// como a leitura mais direta do pedido sugere: o VSync escolhido em
+	// Configuracoes so tem onde pegar se for lido A TEMPO de virar o hint de
+	// criacao do contexto GL, e isso so existe ANTES da janela abrir. Carregar
+	// aqui e reaplicar o audio (abaixo, apos sound.Init) cobre as duas partes
+	// do pedido sem duas leituras do arquivo — ver doc/settings.md, "Ordem de
+	// carregamento (decisao)".
+	loaded := settings.Load()
+	cfg.VSync = loaded.VSync
+	cfg.TargetFPS = int32(loaded.TargetFPS)
+
 	// ANTES de InitWindow: o vsync e um hint de criacao do contexto GL e nao
 	// tem efeito depois que a janela existe. Ver Config.VSync para por que a
 	// falta dele nao aparecia no medidor de quadro — `SetTargetFPS` cadencia,
 	// nao sincroniza, e a imagem rasga do mesmo jeito.
+	//
+	// FlagWindowHighdpi tambem e so hint de criacao: sem ele, num monitor
+	// com escala do Windows diferente de 100% (comum em notebook — e o "ponto
+	// vermelho" fora do botao visto na sessao de teste de 04/09/2026 era
+	// exatamente isso, GetMousePosition() num espaco de pixel diferente do
+	// que GetScreenWidth/Height usam pra desenhar a tela de Configuracoes).
+	// Com a flag os dois passam a falar o mesmo pixel.
+	flags := uint32(rl.FlagWindowHighdpi)
 	if cfg.VSync {
-		rl.SetConfigFlags(rl.FlagVsyncHint)
+		flags |= uint32(rl.FlagVsyncHint)
 	}
-	rl.InitWindow(0, 0, cfg.Title)
+	rl.SetConfigFlags(flags)
+	// (0,0) = resolucao nativa. No celular pode vir menor: Configuracoes >
+	// Graficos > Resolucao, ampliada pelo scaler de hardware (render_scale.go).
+	winW, winH := startupWindowSize(loaded)
+	rl.InitWindow(winW, winH, cfg.Title)
 	defer rl.CloseWindow()
-	// Zero = sem teto proprio, com o vsync cadenciando no refresh do monitor.
-	// Um teto MENOR que o refresh continua valendo (o 30 do celular); um teto
-	// IGUAL ao refresh e inofensivo e um teto que nao bate com ele briga com o
-	// vsync — ver doc/performance.md, "Vsync e teto de quadro".
-	if cfg.TargetFPS > 0 {
-		rl.SetTargetFPS(cfg.TargetFPS)
+	noteDisplaySize(winW, winH, loaded)
+	// A tela de Configuracoes compara isto com a resolucao escolhida para
+	// dizer se ela ja vale ou se pede REINICIAR (ui/render_restart.go).
+	ui.SetStartupWindowSize(winW, winH)
+	// O MESMO fator vai para a interface: todo pixel fixo dela e pixel da
+	// tela nativa, e em 540p ela nao pode dobrar de tamanho (ui/text.go).
+	renderScale := renderZoomScale(winW, winH, loaded)
+	cfg.CameraZoom *= renderScale
+	ui.SetRenderScale(renderScale)
+	if loaded.Fullscreen {
+		// ToggleBorderlessWindowed, nao ToggleFullscreen: a janela ja nasce
+		// do tamanho do monitor (InitWindow(0,0,...) acima), entao entrar
+		// em tela cheia so precisa tirar a borda — ToggleFullscreen troca de
+		// modo de video de verdade, e foi isso que piscava preto ao ligar
+		// "TELA CHEIA" em Configuracoes (sessao de teste de 04/09/2026). Ver
+		// o mesmo comentario em ui/settings_apply_desktop.go.
+		rl.ToggleBorderlessWindowed()
 	}
+
+	// A musica de fase vive pelo processo inteiro: um so InitAudioDevice, e as
+	// trocas de trilha (playSession no mapa inicial, travelTo a cada portal)
+	// so trocam o que esta tocando, nao o dispositivo.
+	sound.Init()
+	defer sound.Shutdown()
+	// Aplica os volumes/geometria/HUD carregados AOS BARRAMENTOS antes do
+	// primeiro quadro (Passo 1) — settings.Load() so troca o MODELO, quem
+	// guarda a propria copia (sound, input, ui) precisa ser avisado.
+	// applyTargetFPS (dentro de ApplyAllSettings) ja chama rl.SetTargetFPS
+	// com o teto carregado — cfg.TargetFPS fica so como o registro do valor
+	// efetivo. Zero = sem teto proprio, com o vsync cadenciando no refresh
+	// do monitor; um teto MENOR que o refresh continua valendo (o 30 do
+	// celular) — ver doc/performance.md, "Vsync e teto de quadro".
+	ui.ApplyAllSettings(loaded)
 
 	for !rl.WindowShouldClose() {
 		playSession(cfg)
 	}
+	// Tira a sala online da lista na hora, sem esperar o relay notar o fim do
+	// sinal de vida (network/host_online.go).
+	network.ShutdownOnline()
 }
 
 // playSession runs the menu and one full match: world load through however
@@ -48,10 +102,11 @@ func Run(cfg Config) {
 func playSession(cfg Config) {
 	sw := float32(rl.GetScreenWidth())
 	sh := float32(rl.GetScreenHeight())
-	cam := NewCamera(sw, sh)
+	cam := NewCamera(sw, sh, cfg.CameraZoom)
 
 	w := LoadWorld("assets/maps/world_01.json")
 	defer func() { w.Unload() }()
+	sound.PlayForMap(w.Path)
 
 	// bounds follows the loaded world and changes with it when a portal swaps
 	// the map, so nothing is ever clamped against the previous map's size.
@@ -76,6 +131,10 @@ func playSession(cfg Config) {
 	// Os retratos ja saem a cada troca de mapa (world_travel.go); isto cobre o
 	// fim da sessao, quando nao houve troca depois da ultima cena.
 	defer ui.UnloadPortraits()
+	// Os glifos dos botoes, ao contrario dos retratos, vivem a sessao inteira
+	// (sao tres, e os botoes existem em todo mapa) — entao este e o UNICO
+	// lugar que os descarrega. Ver ui/action_icons.go.
+	defer ui.UnloadActionIcons()
 
 	network.RemotePlayersMutex.Lock()
 	if state, ok := network.RemotePlayers[network.LocalPlayerID]; ok {
@@ -85,6 +144,13 @@ func playSession(cfg Config) {
 	}
 	network.RemotePlayersMutex.Unlock()
 
+	// Quem volta de um REINICIAR como host (ui/resume_session.go) ja deixou a
+	// fase enfileirada. Aplicada AQUI, antes do primeiro quadro: dentro do
+	// laco o dialogo de abertura do mapa 1 tomaria o quadro antes da viagem.
+	// Sem nada enfileirado (toda sessao comum) e um no-op.
+	w = ApplyPendingTravel(w, p)
+	bounds = w.Bounds
+
 	ts := input.NewTouchState()
 	aj := input.NewAimJoystick()
 	dlg := NewDialogueDirector()
@@ -92,6 +158,30 @@ func playSession(cfg Config) {
 
 	for !rl.WindowShouldClose() && !network.SessionEnded() {
 		dt := rl.GetFrameTime()
+		// Prova de vida do host para o relay: sem quadros (app em segundo
+		// plano, travado), a sala online morre no servidor.
+		network.MarkFrame()
+		// O OUVINTE E O JOGADOR LOCAL. E a distancia ate ELE que decide se um
+		// efeito de magia e ouvido e com que volume (internal/sound/sfx.go),
+		// entao esta linha e o que faz a regra "so quem esta perto escuta"
+		// existir nesta maquina. Fica junto de sound.Update pelo mesmo motivo
+		// que ele: precisa valer tambem nos quadros congelados por dialogo ou
+		// reconexao, onde magias lancadas antes ainda estao no ar.
+		sound.SetListener(p.Position)
+		// "Silenciar em segundo plano" (Configuracoes > Audio): tambem roda
+		// todo quadro, pelo mesmo motivo de sound.Update logo abaixo — um
+		// dialogo ou a reconexao nao podem fazer o jogo esquecer de checar o
+		// foco da janela.
+		updateBackgroundAudioMute()
+		// Roda todo quadro, inclusive quando um dialogo ou a reconexao congelam
+		// o resto do laco logo abaixo: a musica nao para com eles, e os
+		// efeitos ja disparados precisam continuar sendo bombeados.
+		sound.Update()
+		// Depois de sound.Update e antes de qualquer `continue` do laco:
+		// a virada da trilha de vitoria e um ESTADO observado todo quadro
+		// (ver victory_music.go), entao nao pode ficar atras do freio do
+		// dialogo nem do da reconexao.
+		updateVictoryMusic()
 		sw := float32(rl.GetScreenWidth())
 		sh := float32(rl.GetScreenHeight())
 
@@ -102,11 +192,16 @@ func playSession(cfg Config) {
 			network.TickReconnect()
 		}
 
-		// A lost connection owns the frame like a dialogue does: local input
-		// freezes and nothing simulates, but the mirrored world keeps being
-		// drawn as last known so the screen is not simply blank while the
-		// overlay counts down.
-		if network.Role == "client" && network.Reconnecting() {
+		// Estar sem ligacao com o host manda no quadro como um dialogo manda:
+		// a entrada local congela, nada simula, e o mundo espelhado continua
+		// sendo desenhado como visto por ultimo para a tela nao ficar em
+		// branco atras da sobreposicao.
+		//
+		// AwaitingHost, e nao Reconnecting: os dois casos sao o mesmo quadro.
+		// Enquanto a PRIMEIRA conexao nao abre, este bloco nao existia, e o
+		// resultado era um cliente andando por um mapa vazio como se estivesse
+		// jogando — ver network/client_connect.go.
+		if network.Role == "client" && network.AwaitingHost() {
 			cam.Update(p.Position, sw, sh, bounds)
 			DrawFrame(cfg, p, w, &ts, &aj, frameCount, cam)
 			frameCount++
@@ -139,6 +234,7 @@ func playSession(cfg Config) {
 
 		// Local update
 		if !p.IsDead {
+			ApplyMoveBuff(p)
 			p.Update(dir, dt, bounds)
 			ResolveCollision(p, w.Collision)
 			w.UpdateArenaGate(p)
@@ -204,6 +300,11 @@ func playSession(cfg Config) {
 		// mesmo motivo que a viagem: o contador tem de continuar certo na tela
 		// de quem morreu esperando.
 		UpdatePortal(w, p)
+		// A saida se abre pelo mesmo motivo que o portal aparece: quando a
+		// fase termina, nao quando alguem entra nela. Roda todo quadro, em
+		// toda maquina, pelo mesmo motivo de UpdateArenaGate — ver
+		// portal_exit_gate.go.
+		w.UpdatePortalExitGate()
 
 		// Host simulation
 		if network.Role == "host" && network.CurrentHost != nil {

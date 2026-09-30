@@ -42,7 +42,8 @@ func sentryOrbTarget(playerID string) (rl.Vector2, bool) {
 }
 
 // AdvanceClientSkills animates client-side skill visuals for one frame:
-// arrows fly out, shield auras / angelic areas / avatars follow their owners,
+// arrows fly out, shield auras / sanctuary auras / angelic areas / avatars
+// follow their owners,
 // meteors fall, spectral legions hunt (respecting the map's blocked space in
 // solid). Fireball and sanctuary visuals keep their dedicated calls.
 //
@@ -60,18 +61,43 @@ func AdvanceClientSkills(dt float32, solid collision.Solid) {
 	ClientSkills.AdvanceAngelics(dt)
 	ClientSkills.AdvanceCelestials(dt)
 	ClientSkills.AdvanceGraveyards(dt)
+	// Espinhoes e nevoa da chefe (map 7) sao so desenho aqui — o dano e
+	// resolvido no host (host_boss.go) e chega pelos eventos de combate de
+	// sempre. Mas o desenho de cada um DEPENDE de idade (Thorn.Age,
+	// DarkFog.age/TTL: telegrafo, ondulacao, fade), entao sem envelhecer os
+	// dois aqui a marca do espinho ficaria congelada no primeiro quadro e a
+	// nevoa nunca apareceria (DarkFog.Draw usa `age` para o fade de entrada).
+	// O retorno de AdvanceFog (contagem/valor de dano) e ignorado de
+	// proposito: aplicar dano e decisao do host, nao deste cliente.
+	ClientSkills.AdvanceThorns(dt)
+	ClientSkills.AdvanceFog(dt)
 
 	RemotePlayersMutex.Lock()
 	for id, p := range RemotePlayers {
 		pos := rl.NewVector2(float32(p.X), float32(p.Y))
 		ClientSkills.SetShieldAnchor(id, pos)
 		ClientSkills.SetAvatarAnchor(id, pos)
+		// O selo da Chuva de Meteoros segue o Mago aqui pelo mesmo caminho do
+		// avatar. Ele fica ANTES do desvio dos mortos logo abaixo de
+		// proposito: a chuva nao para quando quem a lancou cai, entao a marca
+		// que diz de onde ela veio tambem nao para.
+		ClientSkills.SetMeteorSigilAnchor(id, pos)
 		ClientSkills.SetSwordAnchor(id, pos)
 		ClientSkills.SetLegionAnchor(id, pos)
+		// A aura do Santuario segue a Sacerdotisa como o escudo segue a
+		// Paladina — e some com o dono pelo mesmo motivo: uma aura de cura
+		// desenhada em cima de um corpo caido anuncia uma cura que o host
+		// nao esta dando (ele so cura quem esta vivo).
+		if p.IsDead {
+			ClientSkills.RemoveSanctuary(id)
+			continue
+		}
+		ClientSkills.SetSanctuaryAnchor(id, pos)
 	}
 	RemotePlayersMutex.Unlock()
 	ClientSkills.UpdateShields(dt)
 	ClientSkills.UpdateAvatars(dt)
+	ClientSkills.UpdateMeteorSigils(dt)
 	ClientSkills.AdvanceSwords(dt)
 
 	// Spectral legions chase the latest enemy snapshots (visuals only).

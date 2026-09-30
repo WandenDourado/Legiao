@@ -15,9 +15,30 @@ const (
 	// AngelicFade is the graceful dissipation window at the end.
 	AngelicFade float32 = 1.5
 	// AngelicHealPerSec is the continuous HP restored to allies inside.
-	AngelicHealPerSec float32 = 20
+	//
+	// 20 -> 40 (27/08/2026, a pedido do Gui). O personagem tem 100 de vida
+	// (entity/character.go), entao 20/s levava CINCO segundos para trazer um
+	// aliado do fio da morte ate cheio — quase metade dos doze segundos do
+	// altar. Sob a emboscada do saguao, que tira mais de 20/s de quem esta
+	// cercado, o altar segurava a queda mas nao a REVERTIA, e a suprema lia
+	// como "morre mais devagar" em vez de "o altar se ergueu".
+	//
+	// A 40/s a vida cheia volta em dois segundos e meio, e a diferenca entre
+	// estar dentro e fora do raio de 720 fica obvia em jogo — que e o que uma
+	// suprema tem de fazer.
+	//
+	// ISTO NAO AFROUXA O CLIMAX DO MAPA 4. `partyIsFalling` pede a vida do
+	// GRUPO somada abaixo de `dialogue.LastStandPartyHealth`, e quem responde
+	// por isso ali sao as duas gargulas (alcance 16000, batendo de FORA do
+	// raio do altar; ver network/sentries.go). O que muda e o custo de
+	// ignora-las.
+	AngelicHealPerSec float32 = 40
 	// AngelicResurrectHealthPct is the health fraction the dead return with.
-	AngelicResurrectHealthPct float32 = 0.5
+	//
+	// 0,5 -> 0,7 pelo mesmo motivo: quem o altar reergue volta em pe para a
+	// mesma horda que o derrubou. Com metade da vida, o corpo caia de novo
+	// antes de a cura continua alcanca-lo.
+	AngelicResurrectHealthPct float32 = 0.7
 	// AngelicCooldown is the caster's cooldown in seconds.
 	AngelicCooldown float32 = 60.0
 )

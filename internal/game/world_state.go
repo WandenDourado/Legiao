@@ -68,6 +68,10 @@ type World struct {
 	// arenaGate holds map-local, one-way arena progression. It must belong to
 	// World so arriving on another map cannot inherit a sealed entrance.
 	arenaGate arenaGate
+	// portalExitGate opens any collision footprint a map placed inside its own
+	// portal rectangle once PortalsUnlocked says the phase is done. See
+	// portal_exit_gate.go.
+	portalExitGate portalExitGate
 }
 
 // LoadWorld loads the starting map. A map that cannot be loaded at startup is
@@ -155,6 +159,12 @@ func (w *World) ApplyToHost() {
 	// desenha (game.PortalsUnlocked roda nas duas maquinas), entao ela e
 	// declarada aqui, acima da checagem de host. Ver network/climax_pending.go.
 	network.SetClimaxMap(w.Path)
+	// E os postos de canhao, pela MESMA razao: a barra de vida deles e
+	// desenhada nas duas maquinas, entao a posicao e a vida cheia se instalam
+	// localmente dos marcadores do mapa e so a vida que sobra viaja pela rede
+	// (network/cannon_view.go). Um cliente que entra no meio da fase ja nasce
+	// com os postos no lugar certo.
+	network.SetCannonPosts(w.EnemyCannons)
 
 	host := network.CurrentHost
 	if host == nil {

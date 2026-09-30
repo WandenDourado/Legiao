@@ -101,10 +101,59 @@ const (
 	// retreating bot falls back to, away from whatever enemy is nearest.
 	retreatExtraBack = 300.0
 
+	// A caçada aos canhoes do corredor (mapa 6), so da Paladina.
+	//
+	// CannonStrikeRange e a que distancia do MEIO DO PLINTO ela para de andar
+	// e comeca a bater. Menor que frontRing (140) porque o alvo tem 92 px de
+	// meia-largura (network.cannonHitHalfWidth) e o arco da espada ja recebe
+	// essa meia-largura como folga: parar mais longe faria o golpe passar
+	// raspando.
+	CannonStrikeRange = 120.0
+	// CannonHuntRange e a partir de que distancia do canhao a Paladina assume
+	// a missao. E o alcance do proprio canhao (network.CannonRange, 4000):
+	// mais perto do que isso ela ja esta sangrando de qualquer jeito, e recuar
+	// nao a tira do fogo — so atravessar tira. Mais longe, o corredor ainda
+	// nao e problema dela e ela continua escoltando o grupo.
+	//
+	// TestBotCannonHuntRangeMatchesCannonRange (network/host_bot_cannon_test.go)
+	// prende os dois numeros: quando CannonRange subiu de 3200 para 4000
+	// (27/08/2026, para o bombardeio comecar mais tarde no corredor) este
+	// valor ficou para tras por um bom tempo sem que o teste barrasse o
+	// build — TestBotCannonHuntRangeMatchesCannonRange existia, mas ninguem
+	// tinha reparado na falha. Corrigido junto com o C1 (caixa de acerto do
+	// canhao) por estar bem aqui do lado.
+	CannonHuntRange = 4000.0
+	// CannonAvatarRange e a que distancia ela levanta o Avatar dos Deuses
+	// para atravessar.
+	//
+	// Nao e "assim que ve o canhao": a suprema dura 15 s e ela anda a 200
+	// px/s, entao levantar o escudo divino a 3200 px o gastaria inteiro na
+	// caminhada e ela chegaria mortal. O orcamento: derrubar os dois custa
+	// ~4 golpes a 1,5 golpe/s (~3 s) mais os 768 px entre um posto e outro
+	// (~4 s), sobrando ~8 s de aproximacao — 1600 px.
+	CannonAvatarRange = 1600.0
+	// CannonHuntWindow e por quanto tempo ela SEGUE na missao depois de
+	// levantar a suprema.
+	//
+	// Existe porque `View.UltimateReady` vira falso no instante em que ela
+	// conjura: sem memoria, o quadro seguinte encontraria a Paladina sem
+	// suprema no meio do corredor e ela daria meia-volta — exatamente o pior
+	// momento possivel. O valor e a duracao do Avatar dos Deuses
+	// (skill.AvatarDuration, 15 s) copiada: o pacote bot nao importa skill, do
+	// mesmo jeito que celestialMemory copia o voo da flecha. O teste irmao em
+	// network/host_bot_cannon_test.go avisa se as duas se separarem.
+	CannonHuntWindow = 15.0
+
 	// A5: useful attack range for each class's basic-attack projectile —
 	// AttackSpeed * Lifetime from entity/projectile.go. Firing past this
 	// spends the attack's cadence on a bolt that expires before it can
 	// possibly land. Sacerdotisa already has boltRange for this purpose.
+	//
+	// NAO MUDAM COM entity.GameSpeed, e isso e o conserto funcionando, nao um
+	// esquecimento: o fator multiplica a velocidade e divide o tempo de vida,
+	// entao o PRODUTO — que e o que esta escrito aqui — fica igual. Se algum
+	// dia um destes precisar mudar por causa do ritmo do jogo, e sinal de que
+	// a divisao do tempo de vida ficou para tras em entity/projectile.go.
 	arqueiroAttackRange   = 1120.0 // ArrowAttackSpeed(700) * Lifetime(1.6)
 	magoAttackRange       = 840.0  // FireballAttackSpeed(420) * Lifetime(2.0)
 	necromanteAttackRange = 800.0  // NecroAttackSpeed(400) * Lifetime(2.0)

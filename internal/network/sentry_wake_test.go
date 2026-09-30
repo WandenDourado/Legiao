@@ -43,6 +43,7 @@ func TestSentriesWakeWhenThePartyReachesTheTier(t *testing.T) {
 	h := castleHost(map[string]*PlayerState{
 		"p1": {PlayerID: "p1", X: 500, Y: 500}, // saguao, degrau 3
 	})
+	// Um grupo de um: esse um E a maioria.
 	if !h.sentriesMayFire() {
 		t.Fatal("o grupo alcancou o saguao e as gargulas continuaram caladas")
 	}
@@ -51,6 +52,36 @@ func TestSentriesWakeWhenThePartyReachesTheTier(t *testing.T) {
 	h.players["p1"].X, h.players["p1"].Y = 500, 2500
 	if !h.sentriesMayFire() {
 		t.Error("o grupo recuou e as gargulas voltaram a dormir")
+	}
+}
+
+// UM BATEDOR NAO ACORDA AS TORRES. Era o relato do Gui (27/08/2026): um bot
+// avanca lutando ate 700 px a frente da festa, cruzava a boca do saguao e as
+// gargulas abriam fogo sobre quem ainda subia o corredor.
+func TestOneScoutAheadDoesNotWakeTheSentries(t *testing.T) {
+	h := castleHost(map[string]*PlayerState{
+		"batedor": {PlayerID: "batedor", X: 500, Y: 500}, // saguao, degrau 3
+		"p2":      {PlayerID: "p2", X: 500, Y: 1500},     // corredor
+		"p3":      {PlayerID: "p3", X: 500, Y: 1500},     // corredor
+		"p4":      {PlayerID: "p4", X: 500, Y: 2500},     // vestibulo
+	})
+	if h.sentriesMayFire() {
+		t.Error("um batedor sozinho no saguao acordou as gargulas")
+	}
+}
+
+// E UM RETARDATARIO NAO AS CALA. O contrapeso da regra da maioria: com
+// "todos", um bot preso la atras deixaria a fase 4 sem fogo de longe, e sem
+// ele a emboscada do saguao nao derruba o grupo e o climax nao fecha.
+func TestOneStragglerDoesNotKeepTheSentriesAsleep(t *testing.T) {
+	h := castleHost(map[string]*PlayerState{
+		"p1":        {PlayerID: "p1", X: 500, Y: 500},         // saguao
+		"p2":        {PlayerID: "p2", X: 600, Y: 700},         // saguao
+		"p3":        {PlayerID: "p3", X: 700, Y: 900},         // saguao
+		"retardado": {PlayerID: "retardado", X: 500, Y: 2500}, // vestibulo
+	})
+	if !h.sentriesMayFire() {
+		t.Error("tres de quatro no saguao e as gargulas continuaram caladas")
 	}
 }
 

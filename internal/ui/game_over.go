@@ -23,12 +23,12 @@ func NewGameOverPanel() *GameOverPanel {
 // drawn rectangle and the hit-area can never drift apart.
 func (g *GameOverPanel) Layout(sw, sh float32) {
 	width := sw * 0.30
-	if width < 260 {
-		width = 260
+	if width < Px(260) {
+		width = Px(260)
 	}
 	height := sh * 0.10
-	if height < 56 {
-		height = 56
+	if height < Px(56) {
+		height = Px(56)
 	}
 	g.button = rl.NewRectangle(sw/2-width/2, sh/2+height*0.4, width, height)
 }
@@ -53,8 +53,8 @@ func (g *GameOverPanel) Draw(sw, sh float32, canReset bool) {
 
 	title := "GAME OVER"
 	titleSize := int32(sh * 0.10)
-	if titleSize < 48 {
-		titleSize = 48
+	if titleSize < int32(Px(48)) {
+		titleSize = int32(Px(48))
 	}
 	titleWidth := rl.MeasureText(title, titleSize)
 	rl.DrawText(title,
@@ -64,8 +64,8 @@ func (g *GameOverPanel) Draw(sw, sh float32, canReset bool) {
 
 	subtitle := "Toda a legiao caiu"
 	subSize := int32(sh * 0.035)
-	if subSize < 20 {
-		subSize = 20
+	if subSize < int32(Px(20)) {
+		subSize = int32(Px(20))
 	}
 	subWidth := rl.MeasureText(subtitle, subSize)
 	rl.DrawText(subtitle,
@@ -89,12 +89,12 @@ func (g *GameOverPanel) Draw(sw, sh float32, canReset bool) {
 		fill = rl.Fade(rl.Red, 0.9)
 	}
 	rl.DrawRectangleRec(g.button, fill)
-	rl.DrawRectangleLinesEx(g.button, 3, rl.White)
+	rl.DrawRectangleLinesEx(g.button, max(Px(3), 1), rl.White)
 
 	label := "REINICIAR FASE (F5)"
 	labelSize := int32(g.button.Height * 0.34)
-	if labelSize < 18 {
-		labelSize = 18
+	if labelSize < int32(Px(18)) {
+		labelSize = int32(Px(18))
 	}
 	labelWidth := rl.MeasureText(label, labelSize)
 	rl.DrawText(label,

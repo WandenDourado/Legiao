@@ -8,6 +8,7 @@ package game
 import (
 	"github.com/WandenDourado/Legiao/internal/entity"
 	"github.com/WandenDourado/Legiao/internal/network"
+	"github.com/WandenDourado/Legiao/internal/sound"
 	"github.com/WandenDourado/Legiao/internal/tilemap"
 	"github.com/WandenDourado/Legiao/internal/ui"
 
@@ -36,6 +37,10 @@ func travelTo(current *World, targetMap, targetSpawn string, p *entity.Player) *
 			next.PlayerSpawn = arrival
 		}
 	}
+	// A troca de trilha e um no-op quando o destino e o mesmo mapa que ja esta
+	// tocando (o F8 pode levar a fase atual), entao chamar aqui sempre e
+	// seguro.
+	sound.PlayForMap(next.Path)
 
 	current.Unload()
 	// Os retratos de dialogo saem com o mapa, e nao com a sessao. Cada fase

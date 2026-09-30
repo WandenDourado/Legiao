@@ -66,6 +66,15 @@ func (em *EntityManager) GetEnemy(id string) *Enemy {
 	return em.Enemies[id]
 }
 
+// EnemyAlive reports whether id is still an active enemy. The death effect
+// asks this once per frame for every enemy drawn in the previous one.
+func (em *EntityManager) EnemyAlive(id string) bool {
+	em.enemiesMutex.RLock()
+	defer em.enemiesMutex.RUnlock()
+	e := em.Enemies[id]
+	return e != nil && e.IsActive
+}
+
 // GetAllEnemies returns a slice of all active enemies.
 func (em *EntityManager) GetAllEnemies() []*Enemy {
 	em.enemiesMutex.RLock()

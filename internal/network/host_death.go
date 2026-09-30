@@ -20,7 +20,9 @@ func (h *Host) markPlayerDead(p *PlayerState) {
 }
 
 // tickRespawns advances every dead player's countdown and revives whoever
-// reaches zero, at RespawnHealthPercent of max health.
+// reaches zero, at RespawnHealthPercent of max health — with RespawnGrace
+// seconds of immunity and a faster step to get out of where they fell
+// (host_respawn_grace.go).
 //
 // The body gets up where it fell — X/Y are deliberately left untouched. A dead
 // player stops sending input, so the position the host holds is still the spot
@@ -53,6 +55,7 @@ func (h *Host) tickRespawns(dt float32) {
 
 	for _, p := range revived {
 		log.Printf("[Host] Player %s ressuscitou com %.0f de vida", p.PlayerID, p.Health)
+		h.grantRespawnGrace(p.PlayerID)
 		h.broadcastRespawn(p)
 	}
 }

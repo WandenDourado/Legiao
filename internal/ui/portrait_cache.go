@@ -46,16 +46,40 @@ func portraitTexture(key string) (rl.Texture2D, bool) {
 	if tex, ok := portraitCache[ct]; ok {
 		return tex, tex.ID != 0
 	}
-	def := entity.GetCharacter(ct)
-	if def.ReferenceImagePath == "" {
-		// Cacheado como textura zero para nao tentar ler um arquivo ausente a
-		// cada quadro da fala.
-		portraitCache[ct] = rl.Texture2D{}
-		return rl.Texture2D{}, false
-	}
-	tex := rl.LoadTexture(assets.Path(def.ReferenceImagePath))
+	tex := loadPortrait(entity.GetCharacter(ct))
+	// Uma textura zero tambem e cacheada: sem isso, um personagem sem arte
+	// tentaria ler um arquivo ausente do disco a cada quadro da fala.
 	portraitCache[ct] = tex
 	return tex, tex.ID != 0
+}
+
+// loadPortrait prefere a arte de retrato e cai para a de selecao.
+//
+// A queda existe para ORDEM DE TRABALHO, nao como comportamento permanente: o
+// codigo desta caixa foi escrito antes da arte de retrato existir, e a queda e
+// o que permitiu ele entrar no jogo sem esperar por ela — cada `portrait.png`
+// que aparece na pasta passa a ser usado sozinho, sem tocar em codigo.
+//
+// Ela nao e boa: a arte de selecao e de corpo inteiro, entao desenhada no
+// retangulo do retrato o rosto sai pequeno e o corpo cortado no lugar errado.
+// E melhor que nao ter orador nenhum na tela, e e so isso.
+func loadPortrait(def entity.CharacterDef) rl.Texture2D {
+	for _, path := range []string{def.PortraitImagePath, def.ReferenceImagePath} {
+		if path == "" {
+			continue
+		}
+		if tex := rl.LoadTexture(assets.Path(path)); tex.ID != 0 {
+			// O retrato e desenhado com uns 70% do tamanho da arte, e o card
+			// de selecao com uns 20%. Sem isto o raylib amostra a reducao por
+			// vizinho mais proximo, e fio de ouro, malha de armadura e mecha
+			// de cabelo entram em serrilhado — o mesmo defeito que
+			// entity/enemy_sprite.go ja resolve para as folhas de monstro.
+			rl.SetTextureFilter(tex, rl.FilterBilinear)
+			return tex
+		}
+		log.Printf("[UI] retrato ausente ou ilegivel: %s", path)
+	}
+	return rl.Texture2D{}
 }
 
 // PreloadPortraits sobe de uma vez os retratos que o mapa pode pedir.

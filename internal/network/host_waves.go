@@ -56,18 +56,23 @@ type WaveDef struct {
 	// passa a ser finito — e ai sim matar o ultimo acaba a fase. A ultimate
 	// nao mata ninguem; ela vira o jogo, que e o que uma ultimate deve fazer.
 	Endless bool
-	// EndsWithBoss diz que a reposicao de uma horda `Endless` para quando o CHEFE
-	// da fase cai.
+	// EndsWithBoss diz que uma horda `Endless` acaba quando o CHEFE da fase
+	// cai — reposicao E o que ja estava em campo.
 	//
 	// Sem isto, `Endless` so conhece uma saida: `LastStandDone()`, o resgate da
 	// Sacerdotisa no mapa 3. A arena do mapa 7 tem outra — matar quem comanda o
 	// cerco —, e sem declara-la a fase nunca terminaria: o grupo derrubaria a
 	// chefe e continuaria recebendo levas para sempre.
 	//
-	// Repara que ela para a REPOSICAO, nao a horda. O que ja esta em campo
-	// continua vivo e precisa ser limpo. Matar os trinta no instante em que a
-	// chefe cai seria anticlimatico: some a limpeza final, que e o momento em
-	// que a vitoria assenta.
+	// A primeira versao parava so a REPOSICAO e deixava o que estava em campo
+	// para o grupo terminar, de proposito, para nao cortar a limpeza final.
+	// Um playtest mostrou o custo: a chefe caiu com a leva inteira (28) ainda
+	// viva e circulando a arena, e nada terminava de morrer sozinho — a
+	// corrida ficava presa em "restam 28" para sempre, e com ela o dialogo
+	// final e a vitoria (que so chegam com `WavePhaseCleared`, ver §11-12 do
+	// combate). `(*Host).endHordeOnVictory` (host_boss_victory.go) e quem
+	// fecha essa lacuna: mata a horda inteira (composicao e gargulas) no
+	// mesmo quadro da queda da chefe.
 	EndsWithBoss bool
 	// Ambush faz a horda nascer NOS MARCADORES DECLARADOS, sem o filtro de
 	// anel que as hordas normais usam.
@@ -99,6 +104,16 @@ type WaveDef struct {
 	// uma torre que atira a 1900 px nao pode ser ignorada ate a fase acabar
 	// sozinha.
 	Sentries int
+	// BossDriven tira desta horda o relogio proprio: ela nao conta
+	// SpawnInterval, ela espera o CHEFE mandar via ReleaseBatchNow. Existe
+	// para a arena do mapa 7 (31/08/2026, doc/plan_world07_arena_tuning.md),
+	// onde a leva tem de chegar logo depois da nevoa em vez de derivar para
+	// perto dela com um relogio proprio de 30 s.
+	//
+	// A PRIMEIRA leva de uma horda BossDriven ainda sai sozinha, no instante
+	// em que a horda comeca (ver startWave: spawnTimer zera e a primeira leva
+	// nao depende de ninguem pedir). So as levas SEGUINTES esperam o pedido.
+	BossDriven bool
 }
 
 // Total returns how many enemies the wave contains.
@@ -228,11 +243,24 @@ func (wr *WaveRunner) Update(dt float32, aliveCount int, players []rl.Vector2, s
 			return
 		}
 
-		wr.spawnTimer -= dt
-		if wr.spawnTimer > 0 {
-			return
+		if def.BossDriven {
+			// Sem relogio proprio: spawnTimer so chega a zero quando
+			// startWave() o zerou (a primeira leva, que sai sozinha ao
+			// entrar na horda) ou quando ReleaseBatchNow() pediu a proxima.
+			// Entre um pedido e outro ele fica parcado bem alto, entao dt
+			// nunca o derruba sozinho e a leva nao deriva para perto da
+			// nevoa nem chega dobrada.
+			if wr.spawnTimer > 0 {
+				return
+			}
+			wr.spawnTimer = math.MaxFloat32
+		} else {
+			wr.spawnTimer -= dt
+			if wr.spawnTimer > 0 {
+				return
+			}
+			wr.spawnTimer = def.SpawnInterval
 		}
-		wr.spawnTimer = def.SpawnInterval
 
 		room := def.MaxConcurrent - aliveCount
 		if room <= 0 {
@@ -314,6 +342,16 @@ func (wr *WaveRunner) pendingTotal() int {
 		n += count
 	}
 	return n
+}
+
+// clearPending descarta o que ainda esperava para nascer, sem os fazer
+// nascer. Chamado uma vez, por (*Host).endHordeOnVictory, quando a chefe cai
+// numa horda `EndsWithBoss`: uma leva que ainda esperava a proxima nevoa (que
+// nunca mais vai vir, porque a chefe morta para de conjurar) ficaria contando
+// como "restam N" para sempre sem isto — a corrida nunca chegaria a
+// `WavePhaseCleared`, e com ela nem o dialogo final nem a vitoria.
+func (wr *WaveRunner) clearPending() {
+	wr.pending = nil
 }
 
 // takePending removes one enemy from the pending pool. Types are drawn in
@@ -558,4 +596,23 @@ func (wr *WaveRunner) TakeSentryOrder() int {
 	}
 	wr.sentriesOrdered = true
 	return def.Sentries
+}
+
+// ReleaseBatchNow libera a proxima leva IMEDIATAMENTE numa horda BossDriven,
+// ignorando SpawnInterval. Chamado pelo host no mesmo quadro em que a nevoa
+// entra no ar (ver `Host.updateBoss`), para a leva sair pelos portoes junto
+// da nevoa em vez de bater num relogio proprio que deriva com o tempo.
+//
+// Sem efeito fora de WavePhaseFighting, numa horda que nao e BossDriven, ou
+// enquanto a leva anterior ainda esta pendente de spawn (spawnTimer <= 0 ja
+// significa "pronta para sair neste quadro").
+func (wr *WaveRunner) ReleaseBatchNow() {
+	if wr.phase != WavePhaseFighting {
+		return
+	}
+	def := wr.current()
+	if def == nil || !def.BossDriven {
+		return
+	}
+	wr.spawnTimer = 0
 }

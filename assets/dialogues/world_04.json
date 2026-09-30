@@ -5,23 +5,78 @@
       "id": "world_04_abertura",
       "trigger": "on_map_start",
       "lines": [
-        {"speaker": "", "portrait": "", "text": "O portão se fecha atrás do grupo. O saguão do castelo respira um frio de pedra e água."},
-        {"speaker": "Arqueiro", "portrait": "arqueiro", "text": "Não cheguem perto dos córregos. Há algo nos observando de cada margem."}
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "Como eu suspeitei, os Orcs tomaram o castelo."
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Consigo sentir a energia sombria por todo o castelo, mas parece existir uma origem. E ela está dentro dele."
+        },
+        {
+          "speaker": "Arqueiro",
+          "portrait": "arqueiro",
+          "text": "Estamos sendo observados. Algo espreita pelos cantos desta área."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Não baixem a guarda. Estamos dentro do território inimigo!"
+        }
       ]
     },
     {
       "id": "world_04_climax",
       "trigger": "on_last_stand",
       "lines": [
-        {"speaker": "Arqueiro", "portrait": "arqueiro", "text": "As sentinelas estão fora do alcance... então vou levar a luz até elas."},
-        {"speaker": "", "portrait": "", "text": "Duas flechas celestiais rasgam o saguão e alcançam as ilhas no meio da água."}
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Meu poder não consegue alcançar as sentinelas!"
+        },
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "Essas gárgulas não param de nos atacar! Se continuar assim, não sei por quanto tempo conseguirei manter nosso grupo protegido."
+        },
+        {
+          "speaker": "Arqueiro",
+          "portrait": "arqueiro",
+          "text": "Elas estão muito longe para que minhas flechas alcancem, mas talvez eu consiga atingi-las com o poder dos meus ancestrais."
+        },
+        {
+          "speaker": "Arqueiro",
+          "portrait": "arqueiro",
+          "text": "Que o poder ancestral que corre em minhas veias possa iluminar minhas flechas, para que elas alcancem os céus. Que o celestial guie minha mira!"
+        }
       ]
     },
     {
       "id": "world_04_saida",
       "trigger": "on_waves_cleared",
       "lines": [
-        {"speaker": "", "portrait": "", "text": "Com as sentinelas destruídas, a grande escadaria volta a ficar silenciosa."}
+        {
+          "speaker": "",
+          "portrait": "",
+          "text": "Após as flechas celestiais rasgarem o saguão, alcançando e destruindo as sentinelas, o caminho fica livre."
+        },
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "A cada passo que damos, a pressão dessa energia fica mais forte."
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Isso me preocupa. Não me parece que os Orcs estejam apenas usando o poder da Imperatriz. Temo que possam ter feito algo pior."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Chega de suposições. Não vamos recuar. Seguiremos até a raiz desse mal."
+        }
       ]
     }
   ]

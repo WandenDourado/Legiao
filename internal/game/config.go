@@ -29,6 +29,19 @@ type Config struct {
 	// A flag e um hint de criacao do contexto GL, entao `Run` a aplica ANTES
 	// de `InitWindow`; depois da janela aberta ela nao tem mais efeito.
 	VSync bool
+	// CameraZoom e a escala do mundo na tela: 1 = um pixel de mundo por pixel
+	// de tela; abaixo de 1 a camera se afasta e mostra mais mapa.
+	//
+	// O celular usa 0,8 (27/09/2026, playtest): a tela fisica e pequena, e os
+	// jogadores nao viam o lobo chegando nem a gargula que precisavam derrubar
+	// — o Arqueiro tinha de andar ate ela para saber onde mirar. 0,8 mostra
+	// 25% a mais em cada eixo (~56% mais area). O PC fica em 1,0: a tela
+	// dele ja e grande, e escala nao inteira muda a nitidez do terreno, que e
+	// desenhado com filtro POINT (tilemap/terrain_batch.go).
+	//
+	// ZERO vale 1: um Config montado a mao sem este campo continua valendo o
+	// que sempre valeu.
+	CameraZoom float32
 }
 
 // DefaultConfig returns a default configuration for desktop.
@@ -36,9 +49,10 @@ func DefaultConfig() Config {
 	return Config{
 		Width:     0,
 		Height:    0,
-		Title:     "Legião - Survival Shooter",
-		TargetFPS: 60,
-		VSync:     true,
+		Title:      "Legião - Survival Shooter",
+		TargetFPS:  60,
+		VSync:      true,
+		CameraZoom: 1.0,
 	}
 }
 
@@ -51,5 +65,6 @@ func AndroidConfig() Config {
 		FullScreen: true,
 		TargetFPS:  60,
 		VSync:      true,
+		CameraZoom: 0.8,
 	}
 }

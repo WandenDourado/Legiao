@@ -48,7 +48,15 @@ a par multiplicava por mais 29.
 
 **Quantas entidades em campo** não é o que a magia cria de uma vez, é o
 **regime**: taxa de nascimento × tempo de vida. A Chuva de Meteoros cria um a
-cada 0,025 s e cada um vive 1,4 s, então o regime é 56 — nunca "um meteoro".
+cada 0,015 s e cada um vive 1,4 s, então o regime é 93 — nunca "um meteoro".
+
+Isso vale **no mapa de referência** (`world_05`, 27/08/2026): o intervalo é
+uma densidade escalada pela área do mapa (`skill.MeteorRainIntervalFor`,
+31/08/2026), não mais um número fixo em toda fase. Uma magia que sorteia o
+mapa inteiro — em vez de mirar um alvo — tem o regime **por área**, e a conta
+do regime tem de ser feita contra a área do mapa onde ela de fato é jogada,
+não contra o mapa onde foi calibrada. Ver "A chuva mede-se por densidade, não
+por contagem" em `doc/combat_rules.md`.
 
 ### 2. Desenho — quantas primitivas, e quantas estão na tela
 
@@ -61,7 +69,7 @@ E `entidades desenhadas` tem de ser **as visíveis**, não todas. Ver a Regra 2.
 ### 3. Rede — quantas mensagens por segundo
 
 Toda entidade que o cliente precisa replicar custa uma mensagem. A Chuva de
-Meteoros transmite **uma por meteoro**: 40 por segundo, 600 ao longo da
+Meteoros transmite **uma por meteoro**: ~67 por segundo, ~1.000 ao longo da
 ultimate, cada uma com marshal de JSON e escrita para cada peer.
 
 ---
@@ -115,18 +123,45 @@ da tela cuspindo partículas para dentro dela.
 Por quê: a tela mostra 8,3 Mpx; o `world_02` tem 49,2 Mpx de mundo. Sem
 culling, 83% do desenho é jogado fora depois de pago.
 
+#### Decalque de chão vai antes dos corpos
+
+Culling não é a única pergunta de ordem de desenho. O bloco de magias
+(`ability.DrawAll`) roda **depois** dos corpos em `game/renderer.go`, então
+toda magia que passa por ele fica por cima dos personagens. Para uma magia que
+está no ar (meteoro, flecha) isso é o certo. Para uma magia que é **chão**, é
+o oposto do que ela deveria comunicar — o personagem parece estar debaixo da
+magia em vez de pisar nela.
+
+Duas magias já saíram dessa fila pelo mesmo relato: o pentagrama do Mago
+(10/09/2026) e o **chão** do Cemitério do Necromante (20/09/2026). Ambas são
+desenhadas antes dos corpos, junto com os portais.
+
+O Cemitério mostra o caso mais fino: ele não é todo chão. O efeito foi dividido
+em dois passes — `DrawGround` (solo apodrecido, rim, manchas, miasma e o buraco
+sob cada mão) antes dos corpos, `DrawOverlay` (os ossos das mãos e as almas
+subindo) depois. Mover tudo para antes custaria o efeito dramático: é a mão
+agarrando a perna de quem está dentro que faz a magia dizer o que ela faz.
+
+Ao criar uma magia nova, a pergunta é: **isto está no chão ou no ar?** Se as
+duas respostas forem verdadeiras em partes diferentes, ela tem dois passes.
+
 ### Regra 3 — conte o regime, não o caso único
 
 Escreva o número no comentário da constante:
 
 ```go
-// MeteorRainInterval é o intervalo entre nascimentos.
-// REGIME: 1/0,025 × 1,4 s de vida = ~56 meteoros no ar ao mesmo tempo.
-MeteorRainInterval float32 = 0.025
+// MeteorRainRefInterval é o intervalo entre nascimentos NO MAPA DE REFERÊNCIA.
+// REGIME NO WORLD_05: 1/0,015 × 1,4 s de vida = ~93 meteoros no ar ao mesmo
+// tempo. Em qualquer outro mapa, MeteorRainIntervalFor reescala pela área
+// para manter a MESMA densidade — o regime real depende do mapa, não é um
+// número único para a magia inteira.
+MeteorRainRefInterval float32 = 0.015
 ```
 
 Se o regime passa de ~20 entidades, a magia é um sistema e não um efeito:
-volte e releia as três contas.
+volte e releia as três contas. Para uma magia que sorteia o mapa inteiro, faça
+essa conta **por mapa** (ou pelo menos no maior mapa em que ela é jogável),
+não só no mapa em que foi calibrada — ver a Chuva de Meteoros acima.
 
 ### Regra 4 — interação entre N entidades é O(n²): acumule, aplique uma vez
 
@@ -155,6 +190,19 @@ for i, x := range xs { mover(x, push[i]) }   // 30 chamadas
 Além de 29× mais barato, é **mais correto**: aplicando par a par, o empurrão de
 A muda a posição que o par seguinte lê, e a ordem do laço vira parte do
 resultado.
+
+**Exemplo que NÃO é O(n²): o anel de contato da chefe** (31/08/2026,
+`internal/network/host_boss_contact.go`, `internal/skill/boss_contact.go`).
+Não é "cada um contra cada um" — é UM ponto fixo (o corpo da chefe) contra
+todo mundo, então o custo é O(jogadores + espectros), não O(n²): na pior
+hipótese do jogo (5 jogadores + 30 espectros da Legião Espectral) são 35
+cálculos de distância por tick, agrupados em `BossContactTickEvery` (0,5 s)
+como a névoa — dois tiques por segundo, não sessenta. Sem alocação: os eventos
+de morte de espectro só nascem quando um espectro realmente morre. Ao lado dos
+~2500 pontos de partícula da Chuva de Meteoros isso é ruído, e por isso não
+ganhou uma linha própria na tabela de "Como medir" abaixo — mas se um dia a
+chefe ganhar uma segunda instância viva ao mesmo tempo, o custo deixa de ser
+constante e este parágrafo para de valer.
 
 ### Regra 5 — partícula é cara; `DrawCircleGradient` é um leque de triângulos
 

@@ -86,6 +86,18 @@ Client-side visuals may diverge slightly from host truth (a client arrow may
 fly through an enemy the host already removed). That is accepted across the
 codebase — health/death always comes from host events, never from client sim.
 
+## Ver o que voce desenhou: `preview-skill-effects`
+
+Voce quase nunca consegue rodar o jogo, e o usuario paga um `go build` + uma
+partida para cada rodada de "ficou bom?". Antes de pedir um print, porte o
+desenho para um harness de canvas de arquivo unico e mande junto:
+`skills/preview-skill-effects/SKILL.md` traz a tabela raylib -> canvas, o
+esqueleto e o exemplo pronto. Duas rodadas as cegas no Santuario (31/08/2026)
+morreram por falta disso.
+
+O preview julga cor, silhueta, ritmo, proporcao e parentesco com as magias das
+outras classes. Ele NAO julga fps, culling nem raio — isso e F3, sempre.
+
 ## The visual craft: making spells beautiful
 
 This is the part that separates a gray circle from a spell. Every good effect

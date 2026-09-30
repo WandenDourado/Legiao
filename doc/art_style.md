@@ -367,3 +367,145 @@ Substitui o bloco da seção 10 em asset da mata sombria:
 > No visual effects, no glow, no fog, no cast shadow on the ground, no background,
 > no baked grass or dirt mat under the object, no text, no grid lines.
 > Game grid is 128x128 px per ground cell; a house door is about 150 px tall.
+
+---
+
+## 12. A câmara de invocação (`world_07`)
+
+A arena final é a **única exceção** à proibição de símbolo oculto da seção 11.6,
+e a exceção termina nela.
+
+### 12.1 O que muda, e o que não
+
+A seção 11.6 proíbe **sangue e símbolo oculto** no bioma sombrio. Ali a regra
+está certa e continua valendo: a mata está *doente*, não é cenário de ritual, e
+pentagrama na floresta troca a história que o bioma conta.
+
+A arena conta outra história — é onde a Senhora das Trevas **foi invocada** —, e
+o símbolo no chão é a prova disso. Então:
+
+| | Mata sombria (§11) | Câmara de invocação (§12) |
+|---|---|---|
+| Símbolo oculto | proibido | **permitido**, e só aqui |
+| Sangue | proibido | **proibido** — nada muda |
+
+**Sangue continua fora de todo o jogo.** O motivo é o da própria 11.6: sangue
+muda a classificação etária de um app já publicado sem mudar a leitura da cena.
+Sigilo é riscado na pedra, traçado em cinza, giz e cera endurecida — nunca
+pintado em vermelho.
+
+### 12.2 Decalque de chão: a única peça vista a 0°
+
+Todo o resto do jogo é vista superior 3/4 porque tem altura. Um decalque não
+tem. Ele é desenhado **de cima, a 0°**, sem volume, sem face lateral e sem
+sombra projetada — um círculo lê como círculo e não como elipse.
+
+E ele é **só o traço**: nenhum disco de pedra por baixo, nenhuma mancha de chão
+de outra cor. O terreno aparece entre os traços. É a mesma falha do *ground
+topping* descrita em `tileset_spec.md` — pedir "chão rachado" devolve um disco
+de terreno de outra cor que lê como mancha na célula.
+
+### 12.3 O teto de contraste do decalque é regra de jogabilidade
+
+O espinhão da chefe marca o chão **1,2 s antes** de irromper.
+Um sigilo claro demais compete com esse aviso
+exatamente onde o grupo mais precisa lê-lo.
+
+> **Decalque de chão fica em p90 32–34** — +3 a +5 sobre o chão, e não os +4 a +8
+> de prop comum. Ele é para ser notado quando o jogador olha, não enquanto desvia.
+
+### 12.4 A régua do castelo não é a régua da mata
+
+A regra de realce de 11.4b (+4 a +8 de p90 sobre o chão) foi medida na mata
+sombria. No castelo quem manda são as peças aprovadas, e elas dizem outra coisa:
+
+| Peça aprovada | p90 | lum | sat | Família |
+|---|---:|---:|---:|---|
+| `statues_gargoyle_01` | 35,7 | 15,9 | 13,5 | pedra / ferro |
+| `walls_wall_02` | 34,9 | 19,7 | 13,7 | pedra / ferro |
+| `statues_statue_01` | 39,4 | 17,1 | — | pedra / ferro |
+| `decor_candelabrum_01` | **61,0** | 24,9 | 32,6 | vela acesa |
+| `toppings_stain_01` | 25,9 | 15,2 | 23,1 | marca de chão |
+
+Chão da arena: `terrain_castle_stone` lum 23,6 · p90 28,8 · sat 1,3.
+
+Uma vela **não** vai para p90 35. O candelabro aprovado está em 61 porque cera e
+chama são claras por natureza, e ele lê certo em jogo; forçar a regra genérica
+produz uma vela de pedra. **Cada peça se ajusta à família dela, não à média do
+mapa.**
+
+### 12.5 Saturação é um eixo próprio, e o defeito só aparece depois de escurecer
+
+Achado das folhas da arena, visto no render e não nos números: com o p90 já no
+alvo, a **cera creme saturada virou ouro** e o **giz creme saturado virou
+ferrugem** — que num pentagrama lê como sangue, justo o que o prompt proibiu.
+
+> Corrigir luminância sem corrigir saturação troca um defeito por outro.
+> Alvos medidos: vela ~20, marca de chão ~6, seda/teia ~3.
+
+E o corolário, que custou uma rodada: **matiz médio de pixel escuro é ruído.**
+O candelabro aprovado mede matiz 146° na faixa escura, o que sugere "sombra
+fria" e produziu velas **verdes** quando aplicado. Só faixa clara e saturada tem
+matiz que significa alguma coisa.
+
+### 12.6 Ferramenta
+
+`work/tiled-assets/build_arena_atlases.py` faz o encaixe (saturação, média e
+realce, por família) e `build_arena_manifests.py` escreve os manifestos. Os
+prompts das três folhas estão em `work/tiled-assets/prompt-9/10/11-arena-*.md`.
+
+---
+
+## 13. Retratos de diálogo (`portrait.png`)
+
+A segunda exceção declarada do guia, e ela vale **só** para a arte de retrato de
+diálogo. Tudo o mais — inclusive a `reference.png` da tela de seleção — continua
+sob as seções 1 a 10.
+
+### 13.1 Por que existe exceção
+
+As proibições da seção 2 ("sem efeitos") e a luz fixa da seção 3 existem porque
+um asset de mundo é **iluminado pelo runtime, reusado em qualquer cena e
+espelhado pelo renderizador**. Um retrato de UI não é nada disso: nunca é
+desenhado no mundo, nunca gira, nunca é espelhado, e aparece numa caixa sobre a
+cena congelada.
+
+### 13.2 O que muda, e o que não
+
+| | Asset de mundo (§1–10) | Retrato de diálogo |
+|---|---|---|
+| Prop mágico na mão | proibido | **permitido**, se segurado e estático |
+| Luz de acento colorida | proibida | **permitida**, secundária |
+| Chave principal | superior-esquerda | superior-esquerda, **salvo justificativa na ficção** |
+| Simetria espelhável (§7) | obrigatória | **não se aplica** — pose assimétrica é desejada |
+| Brilho que sangra pelo quadro | proibido | **proibido** |
+| Fundo, chão, sombra projetada | proibidos | **proibidos** |
+| Sangue e símbolo oculto | proibidos | **proibidos** |
+
+A simetria é a liberdade que mais rende: é ela que tira a rigidez de A-pose e
+deixa o retrato ter atitude. A `reference.png`, ao contrário, **continua
+simétrica** — ela é o que semeia folhas de sprite futuras, e o renderizador
+espelha `W→E`.
+
+### 13.3 A inversão de chave do Necromante
+
+Único caso do elenco, e justificado dentro da ficção: a luz forte perto do rosto
+dele é a chama do crânio que ele segura, e ela está abaixo do queixo. Com a
+chave vindo de cima, a chama vira adereço decorativo e o retrato perde o que o
+distingue dos outros quatro.
+
+Uma inversão de chave nova precisa desse mesmo tipo de razão — uma fonte de luz
+visível no próprio quadro —, não preferência de composição.
+
+### 13.4 Contrato técnico
+
+| | Valor |
+|---|---|
+| Tela | 1152 x 1280 (9:10), RGBA com alfa real |
+| Enquadramento | meio-corpo, cortado na coxa pela borda de baixo |
+| Âncora | topo da cabeça em `y = 80`; a arte preenche até a borda de baixo |
+| Geração | matte magenta `#FF00FF` chapado, personagem opaco |
+| Integração | `work/portraits/key_and_frame.py --preset dialogo` (já inclui a limpeza do rosa residual) |
+| Conferência | `skills/remove-magenta-matte/scripts/audit_matte.py` — borda e miolo perto de zero; regras em `doc/matte_magenta.md` |
+
+Os prompts dos cinco personagens estão em `work/portraits/`.

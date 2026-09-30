@@ -465,6 +465,7 @@ func StopDiscovery() {
 	listenerRunning = false
 	queryRunning = false
 	scanRunning = false
+	StopOnlineRoomPoll()
 	// Also stop query responder if running
 	if queryResponderRunning {
 		queryResponderRunning = false

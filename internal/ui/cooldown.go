@@ -22,10 +22,9 @@ func DrawCooldownOverlay(center rl.Vector2, radius, remaining, total float32) {
 	DrawCooldownRing(center, radius, remaining, total)
 
 	text := FormatCooldown(remaining)
-	fontSize := int32(radius * 0.95)
-	if fontSize < 14 {
-		fontSize = 14
-	}
+	// O raio ja vem de uma geometria escalada (DrawSkillBar, action_button),
+	// entao so o piso se aplica aqui. Ver text.go.
+	fontSize := FitTextSize(radius * 0.95)
 	textWidth := rl.MeasureText(text, fontSize)
 	rl.DrawText(text,
 		int32(center.X)-textWidth/2,

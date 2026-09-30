@@ -20,8 +20,9 @@ Legiao is a 2D cooperative LAN survival shooter built in Go with raylib-go. Desk
 | Input processing | `internal/game/input_handler.go`, `internal/input/` |
 | Rendering | `internal/game/renderer.go`, `internal/tilemap/renderer.go` |
 | Entities | `internal/entity/` |
-| Combat/movement/spawn systems | `internal/system/` |
-| Multiplayer | `internal/network/` |
+| Class AI (bots) and routing | `internal/bot/`, `internal/nav/` |
+| Skills and abilities | `internal/skill/`, `internal/ability/` |
+| Multiplayer | `internal/network/`, `internal/relay/` (online) |
 | Menu/HUD | `internal/ui/` |
 | Map data | `assets/maps/`, `assets/tilesets/` |
 

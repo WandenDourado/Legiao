@@ -2,6 +2,8 @@
 
 Read only the document that matches the task. `AGENTS.md` is the required agent entrypoint and contains the routing table.
 
+This folder holds only current-state reference docs (how the system works now). Task plans and step-by-step execution documents live in `../plans/` (created only while a plan is in progress, deleted once executed), not here — see `AGENTS.md` Hard Rules.
+
 ## Current Source Of Truth
 
 | Area | Doc |
@@ -11,6 +13,11 @@ Read only the document that matches the task. `AGENTS.md` is the required agent 
 | Android build and APK assets | `android.md` |
 | Input controls, sprint, aim | `controls.md` |
 | Cadencia de ataque, cooldown, morte, game over | `combat_rules.md` |
+| Ritmo do jogo: velocidade de tudo que se desloca | `game_speed.md` |
+| Trilha de fase, SFX de magia, raio de audicao | `audio.md` |
+| Tela de Configuracoes (audio, video, controles, interface) | `settings.md` |
+| Custo de uma magia/skill por quadro, culling | `skill_performance.md` |
+| Matte magenta: tirar fundo/rosa residual de arte gerada | `matte_magenta.md` |
 | Multiplayer, discovery, sync | `network.md` |
 | Custo de render/VRAM/banda e plano de otimizacao | `performance.md` |
 | Diálogo narrativo e pausa de cena | `dialogue.md` |

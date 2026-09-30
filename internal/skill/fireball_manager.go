@@ -5,6 +5,7 @@ import (
 
 	"github.com/WandenDourado/Legiao/internal/collision"
 	"github.com/WandenDourado/Legiao/internal/entity"
+	"github.com/WandenDourado/Legiao/internal/sound"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -28,9 +29,12 @@ type Manager struct {
 	// events, so one coarse lock keeps the manager struct manageable.
 	MeteorRains []*MeteorRain
 	Meteors     map[string]*Meteor
-	Angelics    map[string]*AngelicArea
-	Celestials  map[string]*CelestialArrow
-	Avatars     map[string]*Avatar
+	// MeteorSigils e o pentagrama que arde aos pes de quem conjurou a chuva:
+	// indexado POR DONO, como os Avatars, porque e um por mago.
+	MeteorSigils map[string]*MeteorSigil
+	Angelics     map[string]*AngelicArea
+	Celestials   map[string]*CelestialArrow
+	Avatars      map[string]*Avatar
 	// Necromante collections (graveyards + spectral legions) share necroMutex.
 	// Efeitos do chefe do mapa 7. Mutex proprio: eles pulsam duas vezes por
 	// segundo (nevoa) e nao devem disputar o `ultMutex`, que serve a eventos
@@ -53,17 +57,18 @@ type Manager struct {
 // NewManager creates an empty skill manager.
 func NewManager() *Manager {
 	return &Manager{
-		Fireballs:   make(map[string]*Fireball),
-		Sanctuaries: make(map[string]*Sanctuary),
-		Arrows:      make(map[string]*Arrow),
-		Shields:     make(map[string]*Shield),
-		Swords:      make(map[string]*SwordSweep),
-		Meteors:     make(map[string]*Meteor),
-		Angelics:    make(map[string]*AngelicArea),
-		Celestials:  make(map[string]*CelestialArrow),
-		Avatars:     make(map[string]*Avatar),
-		Graveyards:  make(map[string]*Graveyard),
-		Legions:     make(map[string]*Legion),
+		Fireballs:    make(map[string]*Fireball),
+		Sanctuaries:  make(map[string]*Sanctuary),
+		Arrows:       make(map[string]*Arrow),
+		Shields:      make(map[string]*Shield),
+		Swords:       make(map[string]*SwordSweep),
+		Meteors:      make(map[string]*Meteor),
+		MeteorSigils: make(map[string]*MeteorSigil),
+		Angelics:     make(map[string]*AngelicArea),
+		Celestials:   make(map[string]*CelestialArrow),
+		Avatars:      make(map[string]*Avatar),
+		Graveyards:   make(map[string]*Graveyard),
+		Legions:      make(map[string]*Legion),
 	}
 }
 
@@ -96,6 +101,7 @@ func (m *Manager) GetAllFireballs() []*Fireball {
 
 // AddFireGround appends a burning ground zone.
 func (m *Manager) AddFireGround(g *FireGround) {
+	sound.PlayAtFor(sound.SFXFireGround, g.Center, FireGroundDuration)
 	m.fireMutex.Lock()
 	defer m.fireMutex.Unlock()
 	m.FireGrounds = append(m.FireGrounds, g)
@@ -112,6 +118,10 @@ func (m *Manager) GetAllFireGrounds() []*FireGround {
 
 // AddExplosion appends a one-shot explosion.
 func (m *Manager) AddExplosion(e *Explosion) {
+	// O SOM DO IMPACTO MORA AQUI, e nao no ponto de colisao, porque a
+	// explosao e a unica coisa que host e cliente criam nos dois lados do
+	// mesmo evento (StepFireballs no host, o evento de impacto no cliente).
+	sound.PlayAt(sound.SFXFireImpact, e.Position)
 	m.fireMutex.Lock()
 	defer m.fireMutex.Unlock()
 	m.Explosions = append(m.Explosions, e)
@@ -119,6 +129,7 @@ func (m *Manager) AddExplosion(e *Explosion) {
 
 // SpawnFireball launches a new fireball from start toward dir (world-space).
 func SpawnFireball(m *Manager, ownerID string, start, dir rl.Vector2) {
+	sound.PlayAt(sound.SFXFireLaunch, start)
 	m.AddFireball(NewFireball(ownerID, start, dir))
 }
 
@@ -231,8 +242,10 @@ func (m *Manager) DrawFire() {
 	for _, g := range m.FireGrounds {
 		g.Draw()
 	}
-	for _, f := range m.Fireballs {
-		f.Draw()
+	// Ordem estavel, nao a do mapa: ver draw_order.go. FireGrounds e
+	// Explosions ja sao slices e ja tem a ordem de insercao.
+	for _, id := range orderedIDs(m.Fireballs) {
+		m.Fireballs[id].Draw()
 	}
 	for _, e := range m.Explosions {
 		e.Draw()

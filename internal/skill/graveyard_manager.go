@@ -2,6 +2,7 @@ package skill
 
 import (
 	"github.com/WandenDourado/Legiao/internal/entity"
+	"github.com/WandenDourado/Legiao/internal/sound"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -35,6 +36,7 @@ func (m *Manager) GetAllGraveyards() []*Graveyard {
 
 // SpawnGraveyard raises cursed ground for ownerID starting at origin along dir.
 func SpawnGraveyard(m *Manager, ownerID string, origin, dir rl.Vector2) *Graveyard {
+	sound.PlayAtFor(sound.SFXGraveyard, origin, GraveyardDuration)
 	g := NewGraveyard(ownerID, origin, dir)
 	m.AddGraveyard(g)
 	return g
@@ -91,11 +93,24 @@ func (m *Manager) AdvanceGraveyards(dt float32) {
 	}
 }
 
-// DrawGraveyards renders every graveyard in world space.
-func (m *Manager) DrawGraveyards() {
+// DrawGraveyardGrounds desenha o CHAO de cada cemiterio. Chamado antes dos
+// corpos (game/renderer.go), junto com o selo do Mago; ver o cabecalho de
+// graveyard_draw.go para por que o efeito vai em dois passes.
+func (m *Manager) DrawGraveyardGrounds() {
 	m.necroMutex.RLock()
 	defer m.necroMutex.RUnlock()
-	for _, g := range m.Graveyards {
-		g.Draw()
+	// Ordem estavel, nao a do mapa: ver draw_order.go.
+	for _, id := range orderedIDs(m.Graveyards) {
+		m.Graveyards[id].DrawGround()
+	}
+}
+
+// DrawGraveyardOverlays desenha as maos e as almas de cada cemiterio, depois
+// dos corpos. E este o passe que GraveyardSkill.Draw entrega ao ability.DrawAll.
+func (m *Manager) DrawGraveyardOverlays() {
+	m.necroMutex.RLock()
+	defer m.necroMutex.RUnlock()
+	for _, id := range orderedIDs(m.Graveyards) {
+		m.Graveyards[id].DrawOverlay()
 	}
 }

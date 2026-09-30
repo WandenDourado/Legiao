@@ -6,7 +6,8 @@ package skill
 //
 // Two different key shapes exist (see Reset, which walks the same
 // collections): Shields/Avatars/Angelics/Legions are keyed BY OWNER, so a
-// single delete finds them; everything else is keyed by its own effect ID
+// single delete finds them (Sanctuaries entrou nesse grupo em 31/08/2026,
+// quando virou aura movel); everything else is keyed by its own effect ID
 // and carries an OwnerID field, so it needs a scan. Only avatar/angelic/
 // legion have a client-side "_end" handler (client.go) — that is the only
 // place an anchored effect's owner vanishing would otherwise leave a visual
@@ -27,6 +28,15 @@ func (m *Manager) ClearOwner(ownerID string) []string {
 	if _, ok := m.Angelics[ownerID]; ok {
 		delete(m.Angelics, ownerID)
 		signals = append(signals, "angelic_end")
+	}
+	// O selo da chuva entra neste grupo pelo mesmo motivo do avatar: ele e
+	// ancorado no dono, entao um dono que some deixa a figura plantada no
+	// chao ate o relogio dela vencer. A CHUVA em si continua caindo — ela nao
+	// pertence a ninguem depois de comecada (MeteorRains nao e indexado por
+	// dono), e sempre foi assim.
+	if _, ok := m.MeteorSigils[ownerID]; ok {
+		delete(m.MeteorSigils, ownerID)
+		signals = append(signals, "meteor_sigil_end")
 	}
 	for id, c := range m.Celestials {
 		if c.OwnerID == ownerID {
@@ -63,13 +73,10 @@ func (m *Manager) ClearOwner(ownerID string) []string {
 	}
 	m.arrowMutex.Unlock()
 
-	m.sanctMutex.Lock()
-	for id, s := range m.Sanctuaries {
-		if s.OwnerID == ownerID {
-			delete(m.Sanctuaries, id)
-		}
-	}
-	m.sanctMutex.Unlock()
+	// O Santuario passou a ser aura ancorada na Sacerdotisa (31/08/2026),
+	// entao ele mudou de lado nesta lista: hoje e indexado por dono, como o
+	// escudo, e um delete basta.
+	m.RemoveSanctuary(ownerID)
 
 	m.swordMutex.Lock()
 	for id, s := range m.Swords {

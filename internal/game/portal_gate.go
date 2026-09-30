@@ -29,7 +29,23 @@ const portalRevealTime float32 = 1.6
 // estado travava a fase: quem entrasse no portal congelava fora da zona da
 // fortaleza e a porta do climax, que exige TODOS os vivos dentro dela, nunca
 // armava. Ver network/climax_pending.go.
+// E COM UMA SEGUNDA EXCECAO, a fase 6. O corredor final nao tem horda nenhuma
+// para limpar: o que fecha aquela fase e calar os dois canhoes, e enquanto um
+// deles estiver de pe o portal do fim continua invisivel e inerte (pedido do
+// Gui, 28/08/2026).
+//
+// Ate aqui o portal do mapa 6 estava aberto desde o primeiro quadro, e o que
+// impedia alcanca-lo era so o bombardeio — dava para correr por baixo do fogo
+// com sorte e pular a fase inteira. Agora a saida e a recompensa por derrubar
+// os canhoes, como em toda outra fase a saida e a recompensa por limpar a
+// horda.
+//
+// A pergunta e "ha canhao de pe?" e nao "este mapa e o 6?": mapa sem canhao
+// responde nao, entao a regra nasce e morre com os postos que o mapa declara.
 func PortalsUnlocked() bool {
+	if network.CannonsStanding() {
+		return false
+	}
 	state := network.GetWaveState()
 	if state.Total == 0 {
 		return !network.ClimaxPending()

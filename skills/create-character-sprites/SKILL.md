@@ -192,6 +192,8 @@ Cost: at most one single-cell generation and zero visual reviews unless `structu
 
 ## Tools
 
+Matte theory shared by every pipeline (why residual pink is a MIXTURE, why green is the discriminant, how violet paint is protected): `doc/matte_magenta.md`. For large reference/portrait art use `skills/remove-magenta-matte`; for 128x192 frames keep using `auto_repair.py`.
+
 - `preflight_renderer.py`: compare the requested export with the live Legiao renderer constants and asset path, then open the PNG and cross-check its alpha, dimensions, and metadata contract.
 - `slice_and_stitch.py`: split a grid (full 2x4 or a partial 1x4 batch via `--grid-rows/--grid-cols/--frame-offset`), key and despill magenta, and downsample production frames once.
 - `normalize_frames.py`: correct small torso/foot-anchor drift to a fixed pivot without clipping or resizing frames.

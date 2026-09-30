@@ -65,6 +65,12 @@ func (t *TerrainRenderer) initBatch() {
 // cada quadro, que e o que edgeMask/cornerMask faziam: oito consultas de
 // vizinho por celula pintada, cada uma varrendo as pilhas linearmente.
 func (t *TerrainRenderer) PrepareMasks(layer Layer) {
+	// A OCLUSAO VEM ANTES DO TESTE DE BATCH, e de proposito: ela e o corte de
+	// custo maior dos dois e vale para os dois caminhos de desenho. Presa
+	// dentro do `if t.batched`, um aparelho que caisse no caminho por celula
+	// (shader de batch que nao compila) perderia justamente a otimizacao de
+	// que ele mais precisa.
+	t.prepareCoverage(layer)
 	if !t.batched {
 		return
 	}
@@ -184,7 +190,7 @@ func (t *TerrainRenderer) drawBatchedOverlays(layer Layer, tileW, tileH int, vie
 		rl.SetShaderValueTexture(t.batchShader, t.maskTexLoc, mask)
 
 		t.eachCell(layer, view, func(x, y, kind int) {
-			if !paintedWith(kind, material) {
+			if !paintedWith(kind, material) || t.hidden(x, y, kind, material) {
 				return
 			}
 			t.drawCellTinted(texture, x, y, tileW, tileH, span)

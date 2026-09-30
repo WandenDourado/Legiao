@@ -25,9 +25,13 @@ func DrawSkillBar(sw, sh float32, entries []CooldownEntry) {
 		return
 	}
 
-	radius := sh * 0.035
-	if radius < 22 {
-		radius = 22
+	// O PIP INTEIRO cresce com a escala do jogador, e nao so a letra dentro
+	// dele: a tecla e o numero de recarga sao derivados do raio (cooldown.go),
+	// entao esticar so a fonte estouraria o circulo. Piso 22 -> 24 em
+	// 20/09/2026, junto com o resto do texto.
+	radius := sh * 0.035 * UIScale()
+	if min := Px(24) * UIScale(); radius < min {
+		radius = min
 	}
 	gap := radius * 0.7
 	labelSize := labelFontSize(radius)
@@ -85,11 +89,8 @@ func DrawSkillBar(sw, sh float32, entries []CooldownEntry) {
 }
 
 // labelFontSize is the skill-name size derived from the pip radius, floored so
-// the names stay legible on a small window.
+// the names stay legible on a small window. O raio ja vem escalado, entao aqui
+// e so o piso — ver text.go.
 func labelFontSize(radius float32) int32 {
-	size := int32(radius * 0.5)
-	if size < 12 {
-		size = 12
-	}
-	return size
+	return FitTextSize(radius * 0.5)
 }

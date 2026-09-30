@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/WandenDourado/Legiao/internal/sound"
+
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -11,23 +13,133 @@ import (
 const (
 	// MeteorRainDuration is how long the rain keeps spawning meteors.
 	MeteorRainDuration float32 = 15.0
-	// MeteorRainInterval is the delay between meteor spawns (~40/sec: the
-	// rain must feel apocalyptic and sweep the whole map clean).
-	MeteorRainInterval float32 = 0.025
+	// MeteorRainRefArea e a area do world_05 (8192 x 11520), o mapa contra o
+	// qual a chuva foi calibrada em 27/08/2026.
+	MeteorRainRefArea float32 = 8192 * 11520
+	// MeteorRainRefInterval e o intervalo de nascimento NAQUELA area (o
+	// world_05). Em qualquer outro mapa ele e reescalado por
+	// MeteorRainIntervalFor para manter a DENSIDADE — ver o comentario
+	// daquela funcao.
+	//
+	// 0,025 -> 0,015 (27/08/2026, a pedido do Gui): de ~40 para ~67
+	// nascimentos por segundo NO WORLD_05. REGIME (doc/skill_performance.md):
+	// 1/0,015 x 1,4 s de vida = ~93 meteoros no ar ao mesmo tempo naquele
+	// mapa, contra os ~56 de antes, e ~1000 na chuva inteira contra 600.
+	//
+	// Este numero e o valor que `doc/combat_rules.md` ja documentava desde
+	// 23/08 ("A Chuva de Meteoros mede-se contra o Orc") e que o codigo nunca
+	// recebeu — junto com o dano abaixo. A tabela de la e este arquivo agora
+	// concordam.
+	//
+	// 31/08/2026: virou uma REFERENCIA, nao mais um numero fixo em todo mapa.
+	// O sorteio e sobre o mapa inteiro (StepMeteorRains recebe worldW/worldH),
+	// entao um intervalo fixo espalhava o mesmo numero de pedras por areas que
+	// variam onze vezes — o world_07, o menor mapa do jogo e um dos dois onde
+	// a suprema de fato existe em campanha (a outra fase, world_06, e o
+	// unico lugar antes dele), recebia a mesma densidade do world_05, so que
+	// 11x mais concentrada. MeteorRainIntervalFor corrige isso mantendo a
+	// densidade (nascimentos por segundo por unidade de area) constante. Ver
+	// doc/combat_rules.md ("A chuva mede-se por densidade, nao por
+	// contagem").
+	//
+	// O CUSTO ESTA MEDIDO E TEM ONDE SER PAGO. O desenho ja e cullado por
+	// meteoro e por particula desde 22/08 (doc/performance.md §8), entao o
+	// que sobe de verdade e a REDE: `tickMeteors` transmite um evento POR
+	// meteoro. Se o cliente cair na chuva, o proximo passo ja esta escrito
+	// naquele documento e nao e baixar esta constante — e lotear o broadcast
+	// no tique de rede, ou semear a chuva para host e cliente sortearem a
+	// mesma sequencia (600 mensagens viram uma). Mapas menores que o world_05
+	// ja tem menos meteoros com este reescalonamento, entao a pressao de rede
+	// so cresce se um mapa novo for maior que o world_05.
+	MeteorRainRefInterval float32 = 0.015
+	// MeteorRainMinInterval e o TETO DE DESEMPENHO, nao um numero de design:
+	// 0,015 e o regime medido em doc/performance.md secao 8 (~93 meteoros
+	// simultaneos, ~2.500 particulas no world_05). Um mapa maior que o
+	// world_05 para aqui — MeteorRainIntervalFor nunca desce abaixo disto,
+	// mesmo que a densidade constante pedisse mais.
+	MeteorRainMinInterval float32 = 0.015
+	// MeteorRainDensityBoost multiplica a DENSIDADE de referencia: 1,02 = 2% a
+	// mais de pedras por area em todo mapa (27/09/2026, a pedido do Gui
+	// depois do playtest: na arena a suprema "nao conseguiu ajudar o time", e
+	// o ajuste pedido foi sutil de proposito). Entra como fator na densidade,
+	// e nao como tabela por fase, pelo mesmo motivo de MeteorRainIntervalFor:
+	// a chuva mede-se por densidade.
+	//
+	// O world_05 NAO muda: ele ja esta no teto de desempenho
+	// (MeteorRainMinInterval), e o teto ganha do reforco. Na campanha isso nao
+	// custa nada — o Mago so tem a Chuva a partir do world_06
+	// (game.UltimatesGrantedOn), e 06 e 07 sao os dois menores mapas do jogo,
+	// longe do teto. Na arena (world_07) sao ~90 pedras numa chuva de 15 s;
+	// com 1,02, ~92.
+	MeteorRainDensityBoost float32 = 1.02
 	// MeteorRainCooldown is the caster's cooldown in seconds.
 	MeteorRainCooldown float32 = 60.0
 	// MeteorFallTime is how long a meteor streaks down before impact.
 	MeteorFallTime float32 = 0.9
 	// MeteorImpactRadius is the area-damage radius on ground impact.
 	MeteorImpactRadius float32 = 160
-	// MeteorImpactDamage kills any current enemy caught in the impact (100 HP
-	// today): the ultimate is meant to clear the map of monsters.
-	MeteorImpactDamage float32 = 100
+	// MeteorImpactDamage e o dano de area de UM impacto.
+	//
+	// 100 -> 480 (27/08/2026, a pedido do Gui: "um meteoro deve tirar 80% da
+	// vida de um orc"). E o valor que `doc/combat_rules.md` e
+	// `TestOneMeteorTakesFourFifthsOfAnOrc` (network/balance_test.go) ja
+	// exigiam desde 23/08 — o teste estava vermelho porque a constante ficou
+	// para tras. O numero e derivado, nao escolhido: o orc
+	// (EnemyTypeGarrison) tem 600 de vida em entity/enemy_sprite.go, e 80%
+	// disso e 480. Se a vida do orc mudar, este numero muda junto.
+	//
+	// Os 100 vinham de quando o slime de 100 de vida era o elenco inteiro, e
+	// a frase do comentario antigo — "mata qualquer inimigo pego no impacto" —
+	// deixou de ser verdade no dia em que o orc entrou: a chuva varria o campo
+	// de slime e lobo e deixava os orcs de pe, que sao justamente os que
+	// decidem a fase.
+	//
+	// DELIBERADAMENTE ABAIXO DE 600: um meteoro nao mata o orc, dois matam. A
+	// suprema arrasa a massa e ABRE o orc para o grupo terminar; ela nao
+	// resolve a fase sozinha.
+	MeteorImpactDamage float32 = 480
 	// meteorImpactTime is the impact flash/shockwave duration.
 	meteorImpactTime float32 = 0.5
+	// meteorSoundLen e por quanto tempo o estrondo de UM impacto soa antes de
+	// desvanecer. E mais curto que o arquivo (2,9 s) de proposito: a chuva
+	// derruba pedras a cada 15 ms, e uma cauda longa por impacto empilharia
+	// dezenas de estrondos ate virar um zumbido continuo. Com este prazo, e
+	// com o intervalo minimo do catalogo (sound/sfx.go), o que se ouve e um
+	// bombardeio em que cada queda ainda se distingue.
+	meteorSoundLen float32 = 1.2
 	// meteorFallDist is how far up-right the meteor spawns from its target.
 	meteorFallDist float32 = 780
 )
+
+// MeteorRainIntervalFor devolve o intervalo de nascimento para um mapa deste
+// tamanho, mantendo constante a DENSIDADE (nascimentos por segundo por
+// unidade de area) calibrada no world_05, vezes MeteorRainDensityBoost.
+//
+// POR QUE DENSIDADE, E NAO CONTAGEM. A chuva e a unica suprema que nao
+// escolhe alvo: ela sorteia pontos no mapa INTEIRO. Entao o que ela controla
+// nao e quantas pedras caem, e sim quantas caem PERTO DE ALGUEM — e isso e
+// area. Com intervalo fixo, o world_07 (8,5 Mpx2) recebia as mesmas 1.000
+// pedras do world_05 (94,4 Mpx2): onze vezes a densidade, no menor mapa do
+// jogo.
+//
+// E COM O ZOOM FIXO POR PLATAFORMA (game/camera.go: 1,0 no PC, 0,8 no
+// celular desde 27/09/2026) a janela visivel tem a mesma area de mundo em toda
+// fase, entao densidade constante e tambem CONTAGEM NA TELA constante — o
+// custo de desenho por quadro deixa de depender do mapa. No celular essa
+// contagem e ~1,56x a do PC (a area que 0,8 mostra a mais).
+//
+// Funcao pura de proposito: ela e o ponto de teste. Ver meteor_scale_test.go.
+func MeteorRainIntervalFor(worldW, worldH float32) float32 {
+	area := worldW * worldH
+	if area <= 0 {
+		return MeteorRainRefInterval // mundo degenerado: nao inventa densidade
+	}
+	iv := MeteorRainRefInterval * (MeteorRainRefArea / area) / MeteorRainDensityBoost
+	if iv < MeteorRainMinInterval {
+		return MeteorRainMinInterval
+	}
+	return iv
+}
 
 var meteorSeq uint64
 
@@ -73,6 +185,11 @@ func (mt *Meteor) Advance(dt float32) (impactedNow, finished bool) {
 	if !mt.Impacted && mt.Age >= MeteorFallTime {
 		mt.Impacted = true
 		impactedNow = true
+		// Aqui dentro, e nao em StepMeteors: `Advance` e o caminho comum do
+		// host e do cliente, e a queda e deterministica dos dois lados, entao
+		// o estrondo nasce no mesmo instante em toda maquina sem custar um
+		// evento de rede.
+		sound.PlayAtFor(sound.SFXMeteor, mt.Target, meteorSoundLen)
 		mt.Trail.Burst(mt.Target, 26, 220, 520, 0.45, 22, rl.Orange)
 		mt.Trail.Burst(mt.Target, 14, 120, 300, 0.5, 14, rl.Yellow)
 	}

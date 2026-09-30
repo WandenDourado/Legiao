@@ -33,8 +33,6 @@ import (
 	"sync"
 
 	"github.com/WandenDourado/Legiao/internal/entity"
-
-	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 // O resgate atende duas pessoas diferentes, com dois tamanhos.
@@ -138,15 +136,18 @@ func (h *Host) ResolveLastStand() {
 	// primeiro lobo desfazia o que ela acabou de fazer.
 	h.reviveParty(saved)
 
-	// O mapa 6 tem um SEGUNDO ATO, e ele nao e uma magia: os dois canhoes do
-	// corredor sao destruidos pelo roteiro. Isto continua roteirizado — e nao
-	// entregue a Paladina como as outras supremas — porque o Avatar dos Deuses
-	// e imunidade total, nao um ataque a distancia: sem esta parte o resgate do
-	// mapa 6 devolveria o grupo vivo dentro do mesmo corredor bombardeado.
-	// Ver castCannonJudgment.
-	if h.stageMap == "assets/maps/world_06.json" && saved != "" {
-		h.castCannonJudgment(saved)
-	}
+	// O MAPA 6 NAO TEM SEGUNDO ATO (mudanca de 27/08/2026, a pedido do Gui).
+	//
+	// Aqui morava um julgamento roteirizado que destruia os dois canhoes junto
+	// com o resgate. Ele fazia a cena resolver o corredor sozinha: o grupo
+	// caia, a cena rodava, os canhoes explodiam e a fase seguia. O corredor
+	// era um obstaculo que se atravessava perdendo.
+	//
+	// Agora a cena entrega so o que ela sempre entregou — gente de pe, com
+	// vida e com a suprema recarregada — e o corredor continua de pe junto com
+	// ela. Quem derruba os canhoes e a Paladina, com o Avatar dos Deuses para
+	// atravessar e a espada para bater (cannons.go). O resgate volta a ser
+	// resgate, e nao a solucao da fase.
 
 	if saved == "" {
 		// Nao deveria acontecer: ReconcileBots mantem exatamente um bot por
@@ -158,27 +159,6 @@ func (h *Host) ResolveLastStand() {
 		return
 	}
 	log.Printf("[UltimoSuspiro] %s se ergueu; a ultimate e dele", saved)
-}
-
-// castCannonJudgment e o resgate do mapa 6: com o Avatar dos Deuses erguido,
-// a Paladina alcanca o fim do corredor e destroi os dois canhoes de uma vez.
-//
-// Isto e roteirizado a parte da magia selecionavel — Avatar dos Deuses e
-// imunidade total, nao um ataque a distancia — porque o resgate precisa de um
-// contrato PRECISO: os canhoes declarados pelo mapa, e nao um alvo que o
-// jogador teria de mirar. A Paladina nao anda fisicamente ate la — a narracao
-// do dialogo e que conta a corrida, e a explosao acontece em cima do canhao,
-// que e onde o jogador precisa ve-la.
-func (h *Host) castCannonJudgment(ownerID string) {
-	hit := h.DestroyCannons()
-	for i, pos := range hit {
-		h.broadcastCannonBall("impact", "judgment"+ownerID+string(rune('a'+i)), pos, rl.Vector2{})
-	}
-	if len(hit) == 0 {
-		log.Printf("[UltimoSuspiro] julgamento da Paladina nao encontrou canhao de pe")
-		return
-	}
-	log.Printf("[UltimoSuspiro] julgamento da Paladina destruiu %d canhao(oes); o caminho para a porta esta livre", len(hit))
 }
 
 // reviveParty brings everyone except `except` back to LastStandPartyHeal of
