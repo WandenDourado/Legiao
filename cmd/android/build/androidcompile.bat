@@ -11,6 +11,9 @@
 @set TARGET_ARCH="all"
 @REM Copy game assets into the Android assets directory so they are bundled in the APK.
 @REM The sourceSets in android/build.gradle points assets.srcDirs = ['assets'].
+@REM Apaga a copia anterior: xcopy so sobrescreve, nunca remove o que saiu de assets/,
+@REM e arquivos apagados ou movidos continuariam indo para dentro do APK/AAB.
+@if exist "android\assets" rmdir /S /Q "android\assets"
 @xcopy /E /I /Y "..\..\..\assets" "android\assets" >nul 2>&1
 @if errorlevel 1 (
     @echo WARNING: Failed to copy assets folder. Make sure ..\..\..\assets exists.
