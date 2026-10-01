@@ -171,28 +171,38 @@ func ProcessInput(cfg Config, p *entity.Player, w *World, ts *input.TouchState, 
 		}
 	}
 
-	// Keyboard input (WASD + arrow keys) — desktop primary input
+	// Keyboard input (WASD + arrow keys) — desktop primary input.
+	//
+	// O TECLADO E NORMALIZADO NUM VETOR PROPRIO, e so depois somado. Ate
+	// 30/09/2026 as teclas eram somadas direto em dir e a correcao de diagonal
+	// (x 0,7071) rodava sobre dir inteiro — inclusive sobre o vetor que o
+	// JOYSTICK tinha acabado de escrever no Android. Como um polegar quase
+	// nunca empurra exatamente na horizontal ou na vertical, as duas
+	// componentes eram sempre diferentes de zero e o jogador do celular andava
+	// a ~71% da velocidade do PC em praticamente toda direcao. Era a causa do
+	// "celular anda mais devagar".
+	var kb rl.Vector2
 	if rl.IsKeyDown(rl.KeyW) || rl.IsKeyDown(rl.KeyUp) {
-		dir.Y -= 1
+		kb.Y -= 1
 	}
 	if rl.IsKeyDown(rl.KeyS) || rl.IsKeyDown(rl.KeyDown) {
-		dir.Y += 1
+		kb.Y += 1
 	}
 	if rl.IsKeyDown(rl.KeyA) || rl.IsKeyDown(rl.KeyLeft) {
-		dir.X -= 1
+		kb.X -= 1
 	}
 	if rl.IsKeyDown(rl.KeyD) || rl.IsKeyDown(rl.KeyRight) {
-		dir.X += 1
+		kb.X += 1
 	}
-
-	// Normalize keyboard input if diagonal
-	if dir.X != 0 || dir.Y != 0 {
-		length := float32(1.0)
-		if dir.X != 0 && dir.Y != 0 {
-			length = 0.7071 // 1/sqrt(2) for diagonal
-		}
-		dir.X *= length
-		dir.Y *= length
+	if kb.X != 0 && kb.Y != 0 {
+		kb.X *= 0.7071 // 1/sqrt(2) for diagonal
+		kb.Y *= 0.7071
+	}
+	dir.X += kb.X
+	dir.Y += kb.Y
+	// Joystick e teclado juntos (teclado fisico no celular) nao passam de 1.
+	if l := rl.Vector2Length(dir); l > 1 {
+		dir = rl.Vector2Scale(dir, 1/l)
 	}
 
 	// Handle mouse click attack on desktop — convert screen coords to world coords
