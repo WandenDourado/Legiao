@@ -1,0 +1,4 @@
+interface:
+  display_name: "Install Character Sprites"
+  short_description: "Add generated characters to Legiao"
+  default_prompt: "Use $install-character-sprites to add this generated character to Legiao."

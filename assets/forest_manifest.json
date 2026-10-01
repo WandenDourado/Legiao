@@ -1,0 +1,39 @@
+{
+  "atlas": "assets/tilesets/forest_trees.png",
+  "pieces": {
+    "tree_canopy_grande": {
+      "source": {
+        "x": 4,
+        "y": 4,
+        "width": 573,
+        "height": 503
+      },
+      "anchor": {
+        "x": 287,
+        "y": 598
+      },
+      "role": "foreground",
+      "collision": false
+    },
+    "tree_trunk_grande": {
+      "source": {
+        "x": 4,
+        "y": 511,
+        "width": 368,
+        "height": 137
+      },
+      "anchor": {
+        "x": 184,
+        "y": 137
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -88,
+        "offsetY": -137,
+        "width": 160,
+        "height": 142
+      }
+    }
+  }
+}

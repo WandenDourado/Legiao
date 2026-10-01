@@ -1,0 +1,30 @@
+{
+  "image": "gargula.png",
+  "mode": "fixed",
+  "frame_width": 448,
+  "frame_height": 256,
+  "frames": 8,
+  "origin": "center",
+  "front": "fixed_3q_camera",
+  "rotation": "none",
+  "foot_line": 253,
+  "frame_top_min": 27,
+  "frame_bottom_max": 252,
+  "bob_amplitude_px": 10,
+  "animations": {
+    "idle": {
+      "frames": 8,
+      "frame_time_seconds": 0.1,
+      "loop": true
+    }
+  },
+  "notes": [
+    "Vista fixa: a folha NUNCA e girada. Speed 0 mantem Angle em zero, mas o modo e explicito para nao depender disso.",
+    "Celula nao quadrada (448x256) porque a envergadura maxima e 572 px contra ~340 de altura de corpo; num quadro quadrado a criatura encolhia para caber a asa.",
+    "Escala e pivo COMPARTILHADOS entre os 8 quadros. O normalize_radial.py ajusta por quadro e faria a gargula pulsar de tamanho, ja que a envergadura varia de 255 a 572 px.",
+    "O sobe-e-desce esta ASSADO nos quadros (amplitude 10 px), nao em codigo: uma senoide livre no runtime desincroniza da batida, que anda em passos discretos de FrameTime.",
+    "Corbel e cornija removidos no build: o mapa desenha o pedestal por baixo e o suporte de parede nao existe em vista superior.",
+    "Paleta rebaixada offline para luminancia 44,3 / saturacao 0,25; o chao do castelo esta em 59,7 / 0,05.",
+    "Gerada por work/enemy-sprites/gargula/build_gargula.py a partir de raw_A.png e raw_B.png."
+  ]
+}

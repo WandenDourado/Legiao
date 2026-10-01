@@ -1,0 +1,30 @@
+{
+  "image": "slime.png",
+  "mode": "radial",
+  "frame_width": 256,
+  "frame_height": 256,
+  "origin": "center",
+  "anchor": {
+    "x": 128,
+    "y": 128
+  },
+  "front": "up",
+  "rotation": "runtime",
+  "inscribed_radius": 128,
+  "measured_max_radius": 102.1,
+  "fit_mode": "stretch",
+  "animations": {
+    "idle": {
+      "frames": 6,
+      "frame_time_seconds": 0.11,
+      "loop": true
+    }
+  },
+  "notes": [
+    "Radial mode: one top-down view rotated at runtime toward the velocity vector.",
+    "The sprite's front points to the top of the frame; rotation is atan2(vy,vx)+90 degrees.",
+    "Geometry was normalized by scripts/normalize_radial.py, not requested from the image generator, which ignores numeric geometry instructions.",
+    "Recolorido de carmesim para verde-jade por rotacao de matiz para 150 graus, preservando saturacao e valor: a grama e 85 graus, entao a separacao e por matiz.",
+    "Frames a 256 px para que o runtime reduza em vez de ampliar (RenderScale 0.575 = 147 px em tela)."
+  ]
+}

@@ -1,0 +1,84 @@
+@REM Set your desired api. Max is 31
+@set ANDROID_API=31
+@REM Your library name. If you change it here you should also change it in your android manifest...
+@set LIBRARY_NAME=legiao
+@REM Set your android sdk folder here
+@set ANDROID_HOME=C:\Users\guilh\AppData\Local\Android\Sdk
+@REM Set your android NDK folder here. WARNING: NDK 27 is not supported yet. See https://github.com/raysan5/raylib/issues/4166
+@set ANDROID_NDK_HOME=C:\Users\guilh\AppData\Local\Android\Sdk\ndk\25.2.9519653
+@REM The target architecture for android. See https://developer.android.com/ndk/guides/abis. 
+@REM Valid options are: armeabi-v7a,arm64-v8a,x86,x86_64 or "all" if you want to build for all architectures.
+@set TARGET_ARCH="all"
+@REM Copy game assets into the Android assets directory so they are bundled in the APK.
+@REM The sourceSets in android/build.gradle points assets.srcDirs = ['assets'].
+@REM Apaga a copia anterior: xcopy so sobrescreve, nunca remove o que saiu de assets/,
+@REM e arquivos apagados ou movidos continuariam indo para dentro do APK/AAB.
+@if exist "android\assets" rmdir /S /Q "android\assets"
+@xcopy /E /I /Y "..\..\..\assets" "android\assets" >nul 2>&1
+@if errorlevel 1 (
+    @echo WARNING: Failed to copy assets folder. Make sure ..\..\..\assets exists.
+)
+
+@REM Automatic setup. Should work by default. Do not change anything below here
+@set PATH=%ANDROID_NDK_HOME%\toolchains\llvm\prebuilt\windows-x86_64\bin;%PATH%
+@set ANDROID_SYSROOT=%ANDROID_NDK_HOME%\toolchains\llvm\prebuilt\windows-x86_64\sysroot
+@set ANDROID_TOOLCHAIN=%ANDROID_NDK_HOME%\toolchains\llvm\prebuilt\windows-x86_64
+@IF %TARGET_ARCH% == "all" (
+    @GOTO:BUILDALL
+) else (
+    @GOTO:MAIN
+)
+
+:COMPILE
+        @echo compiling for platform %FL% and architecture %GOARCH%
+        @REM NOTE: do NOT pass -D__ANDROID_API__ here. The NDK/clang already
+        @REM defines __ANDROID_API__ from the sysroot minSdk, and redefining
+        @REM it triggers -Werror,-Wmacro-redefined and the build silently
+        @REM fails (leaving the old .so in place).
+        @set CGO_CFLAGS="-I%ANDROID_SYSROOT%\usr\include -I%ANDROID_SYSROOT%\usr\include\%TRIPLE% --sysroot=%ANDROID_SYSROOT%"
+        @set CGO_LDFLAGS="-L%ANDROID_SYSROOT%\usr\lib\%TRIPLE%\%ANDROID_API% -L%ANDROID_TOOLCHAIN%\%TRIPLE%\lib --sysroot=%ANDROID_SYSROOT%"
+        @set CGO_ENABLED=1
+        @set GOOS=android
+        @set GOARCH=%GOARCH%
+        @REM -a forces a full rebuild (CGO build cache otherwise keeps stale
+        @REM .so files even after source changes, silently shipping old code).
+        @go build -a -buildmode=c-shared -ldflags="-s -w -extldflags=-Wl,-soname,lib%LIBRARY_NAME%.so,-z,max-page-size=0x4000" -o=android/libs/%FL%/lib%LIBRARY_NAME%.so
+@EXIT /B
+
+:BUILDALL
+    @set TARGET_ARCH="armeabi-v7a"
+    @CALL:MAIN
+    @set TARGET_ARCH="arm64-v8a"
+    @CALL:MAIN
+    @set TARGET_ARCH="x86"
+    @CALL:MAIN
+    @set TARGET_ARCH="x86_64"
+    @CALL:MAIN
+@EXIT /B
+
+:MAIN
+    @IF %TARGET_ARCH% == "armeabi-v7a" (
+        @set CC="armv7a-linux-androideabi%ANDROID_API%-clang"
+        @set TRIPLE=arm-linux-androideabi
+        @set FL=armeabi-v7a
+        @set GOARCH=arm
+        @CALL:COMPILE )
+    @IF %TARGET_ARCH% == "arm64-v8a" (
+        @set CC="aarch64-linux-android%ANDROID_API%-clang"
+        @set TRIPLE=aarch64-linux-android
+        @set FL=arm64-v8a
+        @set GOARCH=arm64
+        @CALL:COMPILE )
+    @IF %TARGET_ARCH% == "x86" (
+        @set CC="i686-linux-android%ANDROID_API%-clang"
+        @set TRIPLE=i686-linux-android
+        @set FL=x86
+        @set GOARCH=386
+        @CALL:COMPILE )
+    @IF %TARGET_ARCH% == "x86_64" (
+        @set CC="x86_64-linux-android%ANDROID_API%-clang"
+        @set TRIPLE=x86_64-linux-android
+        @set FL=x86_64
+        @set GOARCH=amd64
+        @CALL:COMPILE )
+@EXIT /B

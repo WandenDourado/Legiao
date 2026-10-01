@@ -1,0 +1,88 @@
+{
+  "map": "assets/maps/world_02.json",
+  "scripts": [
+    {
+      "id": "world_02_abertura",
+      "trigger": "on_map_start",
+      "lines": [
+        {
+          "speaker": "Arqueiro",
+          "portrait": "arqueiro",
+          "text": "Esta floresta está sob o efeito de alguma energia sombria. Vejam mais à frente! Pobre flora... Aos poucos, essa energia está matando tudo o que é verde. Precisamos fazer alguma coisa!"
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Essa energia me é familiar... Não pode ser. Quem se arriscaria a mexer com tamanho poder?"
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Atenção! Monstros estão vindo em nossa direção. Defendam-se!"
+        }
+      ]
+    },
+    {
+      "id": "world_02_climax",
+      "trigger": "on_last_stand",
+      "lines": [
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "Eles são muitos!"
+        },
+        {
+          "speaker": "Arqueiro",
+          "portrait": "arqueiro",
+          "text": "Devemos recuar?"
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Isso não será necessário. Venho aprimorando essa magia há algum tempo..."
+        },
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "Isso é... magia proibida!"
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Ergam-se."
+        }
+      ]
+    },
+    {
+      "id": "world_02_hordas_limpas",
+      "trigger": "on_waves_cleared",
+      "lines": [
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "Explique-se! Como ousa usar esse tipo de poder?"
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Seja grato. Você está vivo!"
+        },
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "Esse seu poder traz consequências! Se sua magia saísse de controle, todos nós estaríamos em perigo."
+        },
+        {
+          "speaker": "Arqueiro",
+          "portrait": "arqueiro",
+          "text": "Calma, pessoal. O importante é que estamos vivos."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "De fato. No momento, vamos focar em nosso objetivo. Depois, decidiremos a punição por práticas hereges."
+        }
+      ]
+    }
+  ]
+}

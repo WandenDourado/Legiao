@@ -1,0 +1,82 @@
+{
+  "map": "assets/maps/world_07.json",
+  "scripts": [
+    {
+      "id": "world_07_abertura",
+      "trigger": "on_map_start",
+      "lines": [
+        {
+          "speaker": "",
+          "portrait": "",
+          "text": "O que o grupo mais temia estava logo à sua frente. A Imperatriz das Trevas havia retornado."
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Malditos Orcs! Os desgraçados conseguiram invocar a Imperatriz!"
+        },
+        {
+          "speaker": "",
+          "portrait": "",
+          "text": "O grupo se estremece de medo perante a quantidade de poder emanado pela Imperatriz."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Meus amigos, não sintam medo. Eu estou aqui e irei proteger todos vocês."
+        },
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "E você não está sozinha. Nós vamos derrotá-la, nem que eu tenha que demolir este castelo com meu poder!"
+        },
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "Chegamos até aqui e não cairemos! Nenhum amigo meu há de cair enquanto eu estiver de vigia. Que os deuses iluminem nossa batalha!"
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Vamos matar essa vadia!"
+        }
+      ]
+    },
+    {
+      "id": "world_07_vitoria",
+      "trigger": "on_waves_cleared",
+      "lines": [
+        {
+          "speaker": "",
+          "portrait": "",
+          "text": "A Imperatriz das Trevas se desfaz em cinzas."
+        },
+        {
+          "speaker": "Arqueiro",
+          "portrait": "arqueiro",
+          "text": "É isso? Estamos vivos...? Vencemos?"
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "É isso. A energia sombria está se dissipando."
+        },
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "Graças ao Divino, que me deu forças para chegar até aqui."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Obrigada, amigos, por lutarem ao meu lado. A bravura de vocês será cantada eternamente pelos mais renomados bardos."
+        },
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "Está feito. Nossa missão foi concluída. Restabelecemos a paz na região. Devemos retornar ao reino para informar o que aconteceu... Mas acho que antes podemos celebrar essa gloriosa vitória. Parabéns, meus amigos!"
+        }
+      ]
+    }
+  ]
+}

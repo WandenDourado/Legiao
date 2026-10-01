@@ -1,0 +1,265 @@
+{
+  "atlas": "assets/tilesets/fortress_wall.png",
+  "pieces": {
+    "wall_h_middle_a": {
+      "source": {
+        "x": 8,
+        "y": 8,
+        "width": 383,
+        "height": 317
+      },
+      "anchor": {
+        "x": 191,
+        "y": 316
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -192,
+        "offsetY": -128,
+        "width": 383,
+        "height": 128
+      }
+    },
+    "wall_h_middle_b": {
+      "source": {
+        "x": 399,
+        "y": 8,
+        "width": 383,
+        "height": 319
+      },
+      "anchor": {
+        "x": 191,
+        "y": 317
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -192,
+        "offsetY": -128,
+        "width": 383,
+        "height": 128
+      }
+    },
+    "wall_h_breach": {
+      "source": {
+        "x": 790,
+        "y": 8,
+        "width": 384,
+        "height": 336
+      },
+      "anchor": {
+        "x": 192,
+        "y": 316
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -192,
+        "offsetY": -128,
+        "width": 384,
+        "height": 128
+      }
+    },
+    "wall_corner_nw": {
+      "source": {
+        "x": 1182,
+        "y": 8,
+        "width": 290,
+        "height": 357
+      },
+      "anchor": {
+        "x": 145,
+        "y": 355
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -145,
+        "offsetY": -128,
+        "width": 290,
+        "height": 128
+      }
+    },
+    "tower_round": {
+      "source": {
+        "x": 1480,
+        "y": 8,
+        "width": 245,
+        "height": 716
+      },
+      "anchor": {
+        "x": 122,
+        "y": 716
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -110,
+        "offsetY": -160,
+        "width": 220,
+        "height": 160
+      }
+    },
+    "wall_corner_ne": {
+      "source": {
+        "x": 1733,
+        "y": 8,
+        "width": 290,
+        "height": 354
+      },
+      "anchor": {
+        "x": 145,
+        "y": 353
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -145,
+        "offsetY": -128,
+        "width": 290,
+        "height": 128
+      }
+    },
+    "wall_v_middle": {
+      "source": {
+        "x": 8,
+        "y": 732,
+        "width": 127,
+        "height": 403
+      },
+      "anchor": {
+        "x": 63,
+        "y": 403
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -64,
+        "offsetY": -128,
+        "width": 127,
+        "height": 128
+      }
+    },
+    "wall_end_w": {
+      "source": {
+        "x": 143,
+        "y": 732,
+        "width": 126,
+        "height": 277
+      },
+      "anchor": {
+        "x": 63,
+        "y": 276
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -63,
+        "offsetY": -128,
+        "width": 126,
+        "height": 128
+      }
+    },
+    "wall_end_e": {
+      "source": {
+        "x": 277,
+        "y": 732,
+        "width": 124,
+        "height": 276
+      },
+      "anchor": {
+        "x": 62,
+        "y": 275
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -62,
+        "offsetY": -128,
+        "width": 124,
+        "height": 128
+      }
+    },
+    "wall_buttress": {
+      "source": {
+        "x": 409,
+        "y": 732,
+        "width": 145,
+        "height": 294
+      },
+      "anchor": {
+        "x": 72,
+        "y": 226
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -65,
+        "offsetY": 0,
+        "width": 130,
+        "height": 68
+      }
+    },
+    "gate_closed": {
+      "source": {
+        "x": 562,
+        "y": 732,
+        "width": 579,
+        "height": 342
+      },
+      "anchor": {
+        "x": 289,
+        "y": 329
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -290,
+        "offsetY": -128,
+        "width": 579,
+        "height": 128
+      }
+    },
+    "gargoyle_statue": {
+      "source": {
+        "x": 1149,
+        "y": 732,
+        "width": 165,
+        "height": 289
+      },
+      "anchor": {
+        "x": 82,
+        "y": 289
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -58,
+        "offsetY": -80,
+        "width": 115,
+        "height": 80
+      }
+    },
+    "wall_buttress_r": {
+      "source": {
+        "x": 1322,
+        "y": 732,
+        "width": 145,
+        "height": 294
+      },
+      "anchor": {
+        "x": 72,
+        "y": 226
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -65,
+        "offsetY": 0,
+        "width": 130,
+        "height": 68
+      }
+    }
+  }
+}

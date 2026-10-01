@@ -1,0 +1,265 @@
+{
+  "atlas": "assets/tilesets/siege_defenses.png",
+  "pieces": {
+    "banner_pole": {
+      "source": {
+        "x": 8,
+        "y": 8,
+        "width": 159,
+        "height": 408
+      },
+      "anchor": {
+        "x": 79,
+        "y": 408
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -44,
+        "offsetY": -70,
+        "width": 87,
+        "height": 70
+      }
+    },
+    "barricade_h_a": {
+      "source": {
+        "x": 175,
+        "y": 8,
+        "width": 452,
+        "height": 186
+      },
+      "anchor": {
+        "x": 226,
+        "y": 186
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -195,
+        "offsetY": -128,
+        "width": 384,
+        "height": 128
+      },
+      "joinX": {
+        "left": 31,
+        "right": 415
+      }
+    },
+    "barricade_h_b": {
+      "source": {
+        "x": 635,
+        "y": 8,
+        "width": 434,
+        "height": 185
+      },
+      "anchor": {
+        "x": 217,
+        "y": 185
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -173,
+        "offsetY": -128,
+        "width": 351,
+        "height": 128
+      },
+      "joinX": {
+        "left": 44,
+        "right": 395
+      }
+    },
+    "barricade_h_broken": {
+      "source": {
+        "x": 1077,
+        "y": 8,
+        "width": 440,
+        "height": 195
+      },
+      "anchor": {
+        "x": 220,
+        "y": 195
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -195,
+        "offsetY": -128,
+        "width": 380,
+        "height": 128
+      },
+      "joinX": {
+        "left": 25,
+        "right": 405
+      }
+    },
+    "barricade_v": {
+      "source": {
+        "x": 1525,
+        "y": 8,
+        "width": 414,
+        "height": 205
+      },
+      "anchor": {
+        "x": 207,
+        "y": 205
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -176,
+        "offsetY": -200,
+        "width": 352,
+        "height": 200
+      }
+    },
+    "bone_pile": {
+      "source": {
+        "x": 8,
+        "y": 424,
+        "width": 326,
+        "height": 137
+      },
+      "anchor": {
+        "x": 163,
+        "y": 137
+      },
+      "role": "structures_back",
+      "collision": false
+    },
+    "brazier_iron": {
+      "source": {
+        "x": 342,
+        "y": 424,
+        "width": 165,
+        "height": 177
+      },
+      "anchor": {
+        "x": 82,
+        "y": 177
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -62,
+        "offsetY": -80,
+        "width": 124,
+        "height": 80
+      }
+    },
+    "cheval_de_frise": {
+      "source": {
+        "x": 515,
+        "y": 424,
+        "width": 233,
+        "height": 166
+      },
+      "anchor": {
+        "x": 116,
+        "y": 166
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -111,
+        "offsetY": -140,
+        "width": 221,
+        "height": 140
+      }
+    },
+    "guard_post": {
+      "source": {
+        "x": 756,
+        "y": 424,
+        "width": 210,
+        "height": 400
+      },
+      "anchor": {
+        "x": 105,
+        "y": 400
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -95,
+        "offsetY": -130,
+        "width": 189,
+        "height": 130
+      }
+    },
+    "iron_spikes": {
+      "source": {
+        "x": 974,
+        "y": 424,
+        "width": 248,
+        "height": 122
+      },
+      "anchor": {
+        "x": 124,
+        "y": 122
+      },
+      "role": "structures_back",
+      "collision": false
+    },
+    "siege_cart": {
+      "source": {
+        "x": 1230,
+        "y": 424,
+        "width": 325,
+        "height": 238
+      },
+      "anchor": {
+        "x": 162,
+        "y": 238
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -155,
+        "offsetY": -170,
+        "width": 309,
+        "height": 170
+      }
+    },
+    "skull_stake": {
+      "source": {
+        "x": 1563,
+        "y": 424,
+        "width": 110,
+        "height": 222
+      },
+      "anchor": {
+        "x": 55,
+        "y": 222
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -25,
+        "offsetY": -50,
+        "width": 50,
+        "height": 50
+      }
+    },
+    "stake_line": {
+      "source": {
+        "x": 8,
+        "y": 832,
+        "width": 386,
+        "height": 120
+      },
+      "anchor": {
+        "x": 193,
+        "y": 120
+      },
+      "role": "structures_back",
+      "collision": true,
+      "collisionFootprint": {
+        "offsetX": -184,
+        "offsetY": -90,
+        "width": 367,
+        "height": 90
+      }
+    }
+  }
+}

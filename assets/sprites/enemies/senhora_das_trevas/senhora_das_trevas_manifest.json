@@ -1,0 +1,103 @@
+{
+  "image_dir": "assets/sprites/enemies/senhora_das_trevas",
+  "mode": "fixed",
+  "origin": "foot-center",
+  "front": "fixed_frontal_camera",
+  "rotation": "none",
+  "render_scale": 1.0,
+  "anims": {
+    "idle": {
+      "sheet": "idle.png",
+      "frame_width": 610,
+      "frame_height": 590,
+      "columns": 8,
+      "frame_time_seconds": 0.2,
+      "loop": true,
+      "foot_line": 578
+    },
+    "idle_scan": {
+      "sheet": "idle_scan.png",
+      "frame_width": 596,
+      "frame_height": 568,
+      "columns": 4,
+      "frame_time_seconds": 0.16,
+      "loop": false,
+      "play_order": [
+        0,
+        0,
+        1,
+        2,
+        3,
+        3,
+        2,
+        1
+      ],
+      "foot_line": 556
+    },
+    "cast_loop": {
+      "sheet": "cast_loop.png",
+      "frame_width": 594,
+      "frame_height": 632,
+      "columns": 4,
+      "frame_time_seconds": 0.22,
+      "loop": true,
+      "foot_line": 620
+    },
+    "cast_release": {
+      "sheet": "cast_release.png",
+      "frame_width": 592,
+      "frame_height": 626,
+      "columns": 4,
+      "frame_time_seconds": 0.11,
+      "loop": false,
+      "play_order": [
+        0,
+        1,
+        1,
+        2,
+        2,
+        2,
+        3,
+        3
+      ],
+      "foot_line": 614
+    },
+    "attack_windup": {
+      "sheet": "attack_windup.png",
+      "frame_width": 586,
+      "frame_height": 578,
+      "columns": 4,
+      "frame_time_seconds": 0.1,
+      "loop": true,
+      "foot_line": 566
+    },
+    "attack_strike": {
+      "sheet": "attack_strike.png",
+      "frame_width": 584,
+      "frame_height": 488,
+      "columns": 4,
+      "frame_time_seconds": 0.1,
+      "loop": false,
+      "play_order": [
+        0,
+        0,
+        1,
+        2,
+        2,
+        2,
+        2,
+        3
+      ],
+      "foot_line": 476
+    }
+  },
+  "vram_mb": 38.8,
+  "notes": [
+    "Vista fixa: a folha NUNCA e girada.",
+    "Escala UNICA por folha, ancorada na largura mediana do corpo em repouso; o strike ancora na celula 1, que o prompt exigiu igual a do windup.",
+    "Registro: centro horizontal da caixa + linha do chao no rodape do quadro. Preserva o agachamento do strike, que baixa o corpo sem tirar os pes do chao.",
+    "cast_loop celula 4 ESPELHADA: o gerador inclinou 2 e 4 para o mesmo lado, e sem inclinacao oposta a danca le como tremelique. Custo: a luz superior-esquerda inverte nesse quadro.",
+    "idle_scan e play_order em vai-e-vem (0,1,2,3,2,1): o retorno a pose inicial sai de graca.",
+    "O avanco do idle_scan e offset VISUAL no runtime, nao esta assado na arte, e nao move Position nem a hitbox."
+  ]
+}
