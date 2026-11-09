@@ -1,0 +1,42 @@
+{
+  "image": "paladina.png",
+  "frame_width": 128,
+  "frame_height": 192,
+  "origin": "foot-center",
+  "anchor": {
+    "x": 64,
+    "y": 186
+  },
+  "directions": [
+    "S",
+    "SW",
+    "W",
+    "N",
+    "NW"
+  ],
+  "mirror_safe": true,
+  "mirrored_directions": {
+    "E": "W",
+    "SE": "SW",
+    "NE": "NW"
+  },
+  "walk_cycle": {
+    "frame_0": "left-foot contact",
+    "frame_2": "right foot passes with left planted",
+    "frame_4": "right-foot contact",
+    "frame_6": "left foot passes with right planted"
+  },
+  "animations": {
+    "walk": {
+      "frames_per_direction": 8,
+      "frame_time_seconds": 0.12,
+      "rows": {
+        "S": 0,
+        "SW": 1,
+        "W": 2,
+        "N": 3,
+        "NW": 4
+      }
+    }
+  }
+}

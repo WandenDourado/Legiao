@@ -1,0 +1,421 @@
+{
+  "atlas": "assets/tilesets/village_fence_v2.png",
+  "pieces": {
+    "fence_h_start": {
+      "source": {
+        "x": 24,
+        "y": 24,
+        "width": 301,
+        "height": 211
+      },
+      "anchor": {
+        "x": 0,
+        "y": 211
+      },
+      "role": "structures_back",
+      "collision": true,
+      "clipOk": true,
+      "collisionFootprints": [
+        {
+          "offsetX": 0,
+          "offsetY": -211,
+          "width": 301,
+          "height": 219
+        }
+      ]
+    },
+    "fence_h_middle": {
+      "source": {
+        "x": 349,
+        "y": 24,
+        "width": 382,
+        "height": 210
+      },
+      "anchor": {
+        "x": 0,
+        "y": 210
+      },
+      "role": "structures_back",
+      "collision": true,
+      "clipOk": true,
+      "collisionFootprints": [
+        {
+          "offsetX": 0,
+          "offsetY": -210,
+          "width": 382,
+          "height": 218
+        }
+      ]
+    },
+    "fence_h_end": {
+      "source": {
+        "x": 755,
+        "y": 24,
+        "width": 300,
+        "height": 212
+      },
+      "anchor": {
+        "x": 0,
+        "y": 212
+      },
+      "role": "structures_back",
+      "collision": true,
+      "clipOk": true,
+      "collisionFootprints": [
+        {
+          "offsetX": 0,
+          "offsetY": -212,
+          "width": 300,
+          "height": 220
+        }
+      ]
+    },
+    "fence_v_start": {
+      "source": {
+        "x": 1079,
+        "y": 24,
+        "width": 107,
+        "height": 436
+      },
+      "anchor": {
+        "x": 0,
+        "y": 436
+      },
+      "role": "structures_back",
+      "collision": true,
+      "clipOk": true,
+      "collisionFootprints": [
+        {
+          "offsetX": 29,
+          "offsetY": -436,
+          "width": 49,
+          "height": 436
+        }
+      ]
+    },
+    "fence_v_middle": {
+      "source": {
+        "x": 1210,
+        "y": 24,
+        "width": 109,
+        "height": 507
+      },
+      "anchor": {
+        "x": 0,
+        "y": 507
+      },
+      "role": "structures_back",
+      "collision": true,
+      "clipOk": true,
+      "collisionFootprints": [
+        {
+          "offsetX": 27,
+          "offsetY": -507,
+          "width": 56,
+          "height": 507
+        }
+      ]
+    },
+    "fence_v_end": {
+      "source": {
+        "x": 1343,
+        "y": 24,
+        "width": 106,
+        "height": 439
+      },
+      "anchor": {
+        "x": 0,
+        "y": 439
+      },
+      "role": "structures_back",
+      "collision": true,
+      "clipOk": true,
+      "collisionFootprints": [
+        {
+          "offsetX": 25,
+          "offsetY": -439,
+          "width": 54,
+          "height": 439
+        }
+      ]
+    },
+    "fence_corner_nw": {
+      "source": {
+        "x": 1473,
+        "y": 24,
+        "width": 301,
+        "height": 351
+      },
+      "anchor": {
+        "x": 0,
+        "y": 211
+      },
+      "role": "structures_back",
+      "collision": true,
+      "clipOk": true,
+      "collisionFootprints": [
+        {
+          "offsetX": 0,
+          "offsetY": -211,
+          "width": 301,
+          "height": 219
+        },
+        {
+          "offsetX": 9,
+          "offsetY": -211,
+          "width": 46,
+          "height": 351
+        }
+      ]
+    },
+    "fence_corner_ne": {
+      "source": {
+        "x": 24,
+        "y": 555,
+        "width": 300,
+        "height": 352
+      },
+      "anchor": {
+        "x": 0,
+        "y": 212
+      },
+      "role": "structures_back",
+      "collision": true,
+      "clipOk": true,
+      "collisionFootprints": [
+        {
+          "offsetX": 0,
+          "offsetY": -212,
+          "width": 300,
+          "height": 220
+        },
+        {
+          "offsetX": 242,
+          "offsetY": -212,
+          "width": 46,
+          "height": 352
+        }
+      ]
+    },
+    "fence_corner_sw": {
+      "source": {
+        "x": 348,
+        "y": 555,
+        "width": 301,
+        "height": 351
+      },
+      "anchor": {
+        "x": 0,
+        "y": 351
+      },
+      "role": "structures_back",
+      "collision": true,
+      "clipOk": true,
+      "collisionFootprints": [
+        {
+          "offsetX": 0,
+          "offsetY": -211,
+          "width": 301,
+          "height": 219
+        },
+        {
+          "offsetX": 9,
+          "offsetY": -351,
+          "width": 46,
+          "height": 359
+        }
+      ]
+    },
+    "fence_corner_se": {
+      "source": {
+        "x": 673,
+        "y": 555,
+        "width": 300,
+        "height": 352
+      },
+      "anchor": {
+        "x": 0,
+        "y": 352
+      },
+      "role": "structures_back",
+      "collision": true,
+      "clipOk": true,
+      "collisionFootprints": [
+        {
+          "offsetX": 0,
+          "offsetY": -212,
+          "width": 300,
+          "height": 220
+        },
+        {
+          "offsetX": 242,
+          "offsetY": -352,
+          "width": 46,
+          "height": 360
+        }
+      ]
+    },
+    "fence_tee_n": {
+      "source": {
+        "x": 997,
+        "y": 555,
+        "width": 382,
+        "height": 350
+      },
+      "anchor": {
+        "x": 0,
+        "y": 350
+      },
+      "role": "structures_back",
+      "collision": true,
+      "clipOk": true,
+      "collisionFootprints": [
+        {
+          "offsetX": 0,
+          "offsetY": -210,
+          "width": 382,
+          "height": 218
+        },
+        {
+          "offsetX": 168,
+          "offsetY": -350,
+          "width": 46,
+          "height": 358
+        }
+      ]
+    },
+    "fence_tee_s": {
+      "source": {
+        "x": 1403,
+        "y": 555,
+        "width": 382,
+        "height": 350
+      },
+      "anchor": {
+        "x": 0,
+        "y": 210
+      },
+      "role": "structures_back",
+      "collision": true,
+      "clipOk": true,
+      "collisionFootprints": [
+        {
+          "offsetX": 0,
+          "offsetY": -210,
+          "width": 382,
+          "height": 218
+        },
+        {
+          "offsetX": 168,
+          "offsetY": -210,
+          "width": 46,
+          "height": 350
+        }
+      ]
+    },
+    "fence_gate_h_closed": {
+      "source": {
+        "x": 24,
+        "y": 931,
+        "width": 274,
+        "height": 209
+      },
+      "anchor": {
+        "x": 0,
+        "y": 209
+      },
+      "role": "structures_back",
+      "collision": true,
+      "clipOk": true,
+      "collisionFootprints": [
+        {
+          "offsetX": 0,
+          "offsetY": -209,
+          "width": 274,
+          "height": 217
+        }
+      ]
+    },
+    "fence_gate_h_open": {
+      "source": {
+        "x": 322,
+        "y": 931,
+        "width": 274,
+        "height": 209
+      },
+      "anchor": {
+        "x": 0,
+        "y": 209
+      },
+      "role": "structures_back",
+      "collision": true,
+      "clipOk": true,
+      "collisionFootprints": [
+        {
+          "offsetX": 0,
+          "offsetY": -209,
+          "width": 75,
+          "height": 217
+        },
+        {
+          "offsetX": 220,
+          "offsetY": -209,
+          "width": 54,
+          "height": 217
+        }
+      ]
+    },
+    "fence_gate_v_closed": {
+      "source": {
+        "x": 620,
+        "y": 931,
+        "width": 200,
+        "height": 259
+      },
+      "anchor": {
+        "x": 0,
+        "y": 259
+      },
+      "role": "structures_back",
+      "collision": true,
+      "clipOk": true,
+      "collisionFootprints": [
+        {
+          "offsetX": 0,
+          "offsetY": -259,
+          "width": 200,
+          "height": 267
+        }
+      ]
+    },
+    "fence_gate_v_open": {
+      "source": {
+        "x": 844,
+        "y": 931,
+        "width": 200,
+        "height": 259
+      },
+      "anchor": {
+        "x": 0,
+        "y": 259
+      },
+      "role": "structures_back",
+      "collision": true,
+      "clipOk": true,
+      "collisionFootprints": [
+        {
+          "offsetX": 0,
+          "offsetY": -259,
+          "width": 89,
+          "height": 267
+        },
+        {
+          "offsetX": 138,
+          "offsetY": -259,
+          "width": 62,
+          "height": 267
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,63 @@
+// AGP 8.5.1+ required for 16KB page size support
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.7.0'
+        classpath 'com.android.tools.build:bundletool:1.17.2' 
+    }
+}
+
+apply plugin: 'com.android.application'
+
+android {
+    namespace = "br.wandendourado.legiao"
+    compileSdkVersion 35
+    buildToolsVersion '35.0.0'
+
+    defaultConfig {
+        ndkVersion "25.2.9519653"  // NDK version that supports 16KB pages
+        applicationId "br.wandendourado.legiao"
+        minSdkVersion 24
+        targetSdkVersion 36
+        versionCode 25
+        versionName '1.2.2'
+    }
+
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging false  // Required for 16KB page size
+        }
+    }
+
+    signingConfigs {
+        release {
+            storeFile file("../legiao.keystore")
+            storePassword System.getenv("KEYSTORE_PASSWORD")
+            keyAlias "legiao"
+            keyPassword System.getenv("KEY_PASSWORD")
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            zipAlignEnabled true
+            signingConfig signingConfigs.release
+        }
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['libs']
+            res.srcDirs = ['res']
+            assets.srcDirs = ['assets']
+            manifest.srcFile 'AndroidManifest.xml'
+        }
+    }
+}
+
+dependencies {
+}

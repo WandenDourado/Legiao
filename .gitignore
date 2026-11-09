@@ -1,0 +1,33 @@
+# ---- Saida de build (regenerada por androidcompile.bat / full_build.bat) ----
+cmd/android/build/android/build/
+cmd/android/build/.gradle/
+# assets/ e copiado para ca pelo script de build (xcopy); a fonte e assets/ na raiz
+cmd/android/build/android/assets/
+*.apk
+*.aab
+# liblegiao.so e gerada pelo androidcompile.bat; so o .gitkeep de cada ABI e versionado
+cmd/android/build/android/libs/**/*.so
+
+# ---- Binarios compilados ----
+*.exe
+
+# ---- Pipeline de arte: intermediarios (resultado final vive em assets/) ----
+work/
+
+# ---- Transferencia / temporarios ----
+*.tar
+*.tar.gz
+*.zip
+*.log
+_to_delete/
+.claude/worktrees/
+
+# ---- Local ----
+cmd/android/build/local.properties
+
+# ---- Arquivos pessoais / de ferramenta, fora do codigo do jogo ----
+Claude outputs/
+*.pptx
+~$*
+__pycache__/
+*.pyc

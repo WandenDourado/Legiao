@@ -1,0 +1,122 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Preview — Santuário</title>
+<style>
+  body{margin:0;background:#1b1c18;color:#e8e3d5;font:13px/1.5 system-ui,sans-serif;
+       display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px}
+  canvas{border-radius:8px;box-shadow:0 6px 24px #0008}
+  .row{display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:center}
+  label{opacity:.85}
+  code{background:#0003;padding:1px 5px;border-radius:4px}
+</style>
+<div class="row">
+  <label><input type="checkbox" id="walk" checked> sacerdotisa andando</label>
+  <label>onda a cada <input id="every" type="range" min="0.4" max="2" step="0.05" value="0.9"> <code id="everyV">0.90s</code></label>
+  <label>vida da onda <input id="life" type="range" min="0.6" max="2.5" step="0.05" value="1.4"> <code id="lifeV">1.40s</code></label>
+</div>
+<canvas id="c" width="620" height="620"></canvas>
+<div class="row"><span>7s de duração + 1,5s de dissipação, em laço. Escala: raio 200 = alcance real da cura.</span></div>
+<script>
+const R=200, GROUND_DROP=56, DUR=7, FADE=1.5;
+const GOLD=[255,198,74], YELLOW=[255,232,150], WHITE=[255,252,235];
+const c=document.getElementById('c'), x=c.getContext('2d');
+const S=1.35, W=c.width, H=c.height;
+const walkEl=document.getElementById('walk'), everyEl=document.getElementById('every'), lifeEl=document.getElementById('life');
+const everyV=document.getElementById('everyV'), lifeV=document.getElementById('lifeV');
+const rgba=(rgb,a)=>`rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a})`;
+const clamp01=v=>v<0?0:v>1?1:v;
+const lerpC=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
+
+let EVERY=0.9, LIFE=1.4;
+function waveRadius(age){const p=clamp01(age/LIFE);return R*p*(2-p);}
+function waveAlpha(age){const p=clamp01(age/LIFE);return clamp01(p/0.12)*(1-p)*(1-p);}
+
+// motes
+function newMote(){const ang=Math.random()*Math.PI*2, d=Math.random()*R*0.85;
+  return{ox:Math.cos(ang)*d,oy:Math.sin(ang)*d,phase:Math.random()*Math.PI*2,
+         spd:18+Math.random()*26,r:2+Math.random()*3,seed:Math.random()};}
+let motes=[...Array(22)].map(newMote), waves=[0], waveTimer=0, t=0, life=0, px=0, py=0;
+
+function reset(){motes=[...Array(22)].map(newMote);waves=[0];waveTimer=0;life=0;}
+
+function grad(cx,cy,r,rgb,a){const g=x.createRadialGradient(cx,cy,0,cx,cy,Math.max(r,0.01));
+  g.addColorStop(0,rgba(rgb,a));g.addColorStop(1,rgba(rgb,0));x.fillStyle=g;
+  x.beginPath();x.arc(cx,cy,r,0,7);x.fill();}
+function ring(cx,cy,r,thick,rgb,a){if(r<=0)return;x.strokeStyle=rgba(rgb,a);x.lineWidth=thick;
+  x.beginPath();x.arc(cx,cy,r,0,7);x.stroke();}
+
+function waveBoost(dist){const band=34;let best=0;
+  for(const age of waves){const d=Math.abs(dist-waveRadius(age));if(d>=band)continue;
+    const b=(1-d/band)*waveAlpha(age);if(b>best)best=b;}return best;}
+
+function drawFigure(cx,cy){ // marcador simples no lugar da sprite
+  x.globalCompositeOperation='source-over';
+  x.fillStyle='#f2ead8';x.beginPath();x.ellipse(cx,cy-6*S,13*S,30*S,0,0,7);x.fill();
+  x.fillStyle='#d9c9a4';x.beginPath();x.arc(cx,cy-40*S,11*S,0,7);x.fill();
+  x.fillStyle='#c9a227';x.fillRect(cx-1.5*S,cy-14*S,3*S,16*S);x.fillRect(cx-6*S,cy-9*S,12*S,3*S);
+}
+
+let last=performance.now();
+function frame(now){
+  const dt=Math.min((now-last)/1000,0.05); last=now; t+=dt; life+=dt;
+  EVERY=+everyEl.value; LIFE=+lifeEl.value;
+  everyV.textContent=EVERY.toFixed(2)+'s'; lifeV.textContent=LIFE.toFixed(2)+'s';
+  if(life>DUR+FADE+0.6){reset();}
+  const a = life<=DUR ? 1 : Math.max(0,1-(life-DUR)/FADE);
+
+  // caminhada da sacerdotisa
+  if(walkEl.checked){px=Math.sin(t*0.55)*70; py=Math.cos(t*0.38)*34;} else {px=0;py=0;}
+
+  // motes
+  for(const m of motes){m.phase+=dt*1.5;m.oy-=m.spd*dt;
+    if(m.oy<-R*0.8){Object.assign(m,newMote());m.oy=R*0.8;}}
+  // ondas
+  waveTimer+=dt; if(waveTimer>=EVERY){waveTimer-=EVERY;waves.push(0);}
+  waves=waves.map(w=>w+dt).filter(w=>w<LIFE);
+
+  // fundo (grama)
+  x.globalCompositeOperation='source-over';
+  x.fillStyle='#6f9b45';x.fillRect(0,0,W,H);
+  for(let i=0;i<220;i++){const s=(i*97)%W,u=(i*173)%H;
+    x.fillStyle=i%3?'#67923f':'#78a44d';x.fillRect(s,u,3,3);}
+
+  const bx=W/2+px*S, by=H/2+py*S;          // corpo
+  const gx=bx, gy=by+GROUND_DROP*S;        // chão
+
+  x.globalCompositeOperation='lighter';
+  const breath=1+0.04*Math.sin(t*1.7);
+  grad(gx,gy,R*S*breath,GOLD,0.15*a);
+  grad(gx,gy,R*0.6*S*breath,YELLOW,0.13*a);
+  grad(gx,gy,R*0.22*S*breath,WHITE,0.22*a);
+
+  for(const age of waves){
+    const w=waveAlpha(age)*a; if(w<=0)continue;
+    const r=waveRadius(age)*S; if(r<6*S)continue;
+    const p=clamp01(age/LIFE), crest=lerpC(WHITE,GOLD,p);
+    ring(gx,gy,r,32*S,GOLD,0.10*w);
+    ring(gx,gy,r,18*S,crest,0.16*w);
+    ring(gx,gy,r,8*S,crest,0.30*w);
+    ring(gx,gy,r,3*S,WHITE,0.45*w);
+  }
+
+  for(const m of motes){
+    const dist=Math.hypot(m.ox,m.oy);
+    let pa=(clamp01((Math.sin(m.phase)+1)/2)*0.75+waveBoost(dist))*a; pa=Math.min(pa,a);
+    if(pa<=0)continue;
+    const mx=gx+m.ox*S, my=gy+m.oy*S, r=m.r*S;
+    if(Math.floor(m.seed*10)%3===0) grad(mx,my,r*3.4,GOLD,pa*0.5);
+    grad(mx,my,r*2.2,YELLOW,pa*0.55);
+    x.fillStyle=rgba(WHITE,pa*0.9);x.beginPath();x.arc(mx,my,r*0.8,0,7);x.fill();
+    const l=r*2.6; x.strokeStyle=rgba(WHITE,pa*0.65);x.lineWidth=1.2;
+    x.beginPath();x.moveTo(mx-l,my);x.lineTo(mx+l,my);x.moveTo(mx,my-l);x.lineTo(mx,my+l);x.stroke();
+  }
+
+  const pulse=1+0.07*Math.sin(t*3.1);
+  grad(bx,by,88*S*pulse,YELLOW,0.12*a);
+  grad(bx,by,34*S*pulse,WHITE,0.16*a);
+
+  drawFigure(bx,by);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>

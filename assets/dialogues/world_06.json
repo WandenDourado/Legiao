@@ -1,0 +1,158 @@
+{
+  "map": "assets/maps/world_06.json",
+  "scripts": [
+    {
+      "id": "world_06_abertura",
+      "trigger": "on_map_start",
+      "lines": [
+        {
+          "speaker": "",
+          "portrait": "",
+          "text": "O corredor se estende em linha reta até uma porta fechada. Diante dela, dois canhões aguardam, apontados para o grupo. A energia sombria do local nunca esteve tão pesada, fazendo com que todos do grupo estremecessem."
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Não posso acreditar que isso esteja acontecendo, mas, quanto mais nos aproximamos da origem desse poder, mais tenho certeza: os Orcs não estão apenas usando o poder da Imperatriz das Trevas. Eles conseguiram trazê-la de volta."
+        },
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "Não consigo acreditar nisso! Como eu te disse, os deuses impediram o retorno da Imperatriz. Seu poder está selado!"
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Você acha que eu não sei disso?! Por meio de magia proibida, é possível acessar o poder da Imperatriz. Os Orcs devem ter descoberto alguma forma de canalizá-lo para este mundo."
+        },
+        {
+          "speaker": "Arqueiro",
+          "portrait": "arqueiro",
+          "text": "Se realmente a Imperatriz estiver neste castelo, nosso grupo não terá chance. Seria suicídio continuar."
+        },
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "Receio que o Arqueiro esteja certo. Se todo esse poder sombrio for da Imperatriz das Trevas, nem todo o meu poder, capaz de aniquilar uma horda inteira de monstros, será suficiente para derrotá-la."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Vocês me decepcionam..."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Não sabemos se atrás daquele maldito portal está a Imperatriz. E, mesmo que ela esteja lá, eu não recuarei. Minha fé é mais forte do que qualquer mal que paire sobre estas terras. Eu seguirei em frente."
+        },
+        {
+          "speaker": "",
+          "portrait": "",
+          "text": "A Paladina caminha à frente, em direção aos canhões."
+        }
+      ]
+    },
+    {
+      "id": "world_06_climax",
+      "trigger": "on_last_stand",
+      "lines": [
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "Os canhões estão imbuídos de magia sombria. Nossos poderes não têm efeito!"
+        },
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "As explosões são muito fortes! Não sei por quanto tempo conseguirei manter nosso grupo vivo!"
+        },
+        {
+          "speaker": "",
+          "portrait": "",
+          "text": "As explosões causadas pelos canhões rapidamente derrubam o grupo. Os membros tentam se proteger, mas não há mais como recuar."
+        },
+        {
+          "speaker": "",
+          "portrait": "",
+          "text": "A Paladina então se levanta e continua caminhando. As explosões colidem com sua armadura, derretendo-a e queimando sua pele."
+        },
+        {
+          "speaker": "",
+          "portrait": "",
+          "text": "Seus companheiros observam de trás, sem saber o que fazer."
+        },
+        {
+          "speaker": "",
+          "portrait": "",
+          "text": "A Paladina continua avançando. Outra explosão a atinge, provocando queimaduras ainda mais severas. Sua armadura começa a derreter e a se misturar com sua pele."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Aaaaahhhhh! Eu não desistirei!"
+        },
+        {
+          "speaker": "",
+          "portrait": "",
+          "text": "A Paladina começa a reduzir sua velocidade. A luz de seus olhos começa a desaparecer. Seus aliados observam seus últimos momentos, sem poder fazer nada para ajudá-la, completamente perplexos, com lágrimas nos olhos e pensamentos desesperados sobre como sair daquela situação."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "E... e... eu..."
+        },
+        {
+          "speaker": "",
+          "portrait": "",
+          "text": "..."
+        },
+        {
+          "speaker": "",
+          "portrait": "",
+          "text": "Repentinamente, uma luz dourada invade o ambiente e cai sobre o corpo da Paladina, que permanece em pé, quase sem vida."
+        },
+        {
+          "speaker": "",
+          "portrait": "",
+          "text": "Os deuses, de seu plano, observaram a devoção de sua fiel e reconheceram a necessidade de uma intervenção para que seus desígnios fossem cumpridos. Então, enviaram uma luz para salvar a Paladina."
+        },
+        {
+          "speaker": "",
+          "portrait": "",
+          "text": "A luz cura suas feridas e reconstrói sua armadura. Os deuses escolheram a Paladina como sua arauta, aquela que trilhará o plano terrestre para cumprir seus objetivos."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Eu sou a Avatar dos deuses!"
+        }
+      ]
+    },
+    {
+      "id": "world_06_canhoes_destruidos",
+      "trigger": "on_waves_cleared",
+      "lines": [
+        {
+          "speaker": "Arqueiro",
+          "portrait": "arqueiro",
+          "text": "Essa foi por pouco!"
+        },
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "Louvado seja! Os deuses estão entre nós!"
+        },
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "Bom, se realmente a Imperatriz das Trevas estiver neste castelo, com a Avatar dos deuses ao nosso lado, talvez tenhamos uma chance."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Como eu sempre disse: seguiremos em frente!"
+        }
+      ]
+    }
+  ]
+}

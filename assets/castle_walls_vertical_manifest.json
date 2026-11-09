@@ -1,0 +1,103 @@
+{
+  "atlas": "assets/tilesets/castle_walls_vertical.png",
+  "pieces": {
+    "wall_v_cap_n": {
+      "source": {
+        "x": 8,
+        "y": 8,
+        "width": 70,
+        "height": 128
+      },
+      "anchor": {
+        "x": 0,
+        "y": 128
+      },
+      "role": "structures_back",
+      "collision": false
+    },
+    "wall_v_middle_a": {
+      "source": {
+        "x": 86,
+        "y": 8,
+        "width": 70,
+        "height": 256
+      },
+      "anchor": {
+        "x": 0,
+        "y": 256
+      },
+      "role": "structures_back",
+      "collision": false
+    },
+    "wall_v_middle_b": {
+      "source": {
+        "x": 164,
+        "y": 8,
+        "width": 70,
+        "height": 256
+      },
+      "anchor": {
+        "x": 0,
+        "y": 256
+      },
+      "role": "structures_back",
+      "collision": false
+    },
+    "wall_v_middle_a_short": {
+      "source": {
+        "x": 242,
+        "y": 8,
+        "width": 70,
+        "height": 128
+      },
+      "anchor": {
+        "x": 0,
+        "y": 128
+      },
+      "role": "structures_back",
+      "collision": false
+    },
+    "wall_v_middle_b_short": {
+      "source": {
+        "x": 320,
+        "y": 8,
+        "width": 70,
+        "height": 128
+      },
+      "anchor": {
+        "x": 0,
+        "y": 128
+      },
+      "role": "structures_back",
+      "collision": false
+    },
+    "wall_v_cap_s": {
+      "source": {
+        "x": 398,
+        "y": 8,
+        "width": 90,
+        "height": 286
+      },
+      "anchor": {
+        "x": 10,
+        "y": 128
+      },
+      "role": "structures_back",
+      "collision": false
+    },
+    "wall_v_pier": {
+      "source": {
+        "x": 496,
+        "y": 8,
+        "width": 109,
+        "height": 110
+      },
+      "anchor": {
+        "x": 0,
+        "y": 110
+      },
+      "role": "structures_back",
+      "collision": false
+    }
+  }
+}

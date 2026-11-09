@@ -1,0 +1,14 @@
+# Treat binary assets as binary so git never normalizes (CRLF/line-ending)
+# or mangles them. The gradle-wrapper.jar was previously corrupted because
+# git normalized the committed jar; keeping it binary prevents recurrence.
+*.jar binary
+*.so binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ttf binary
+*.otf binary
+*.wav binary
+*.mp3 binary
+*.ogg binary

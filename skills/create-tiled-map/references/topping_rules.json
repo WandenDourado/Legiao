@@ -1,0 +1,60 @@
+{
+  "_comment": "Regras padrao de espalhamento. Ajuste por mapa: um vilarejo cuidado suprime decadencia, uma ruina inverte isso.",
+  "firstgid": 400,
+  "biomes": {
+    "grass": {
+      "terrain": 1,
+      "density": 0.09,
+      "tiles": {"0": 3, "1": 2, "2": 1.5, "3": 1.5, "4": 2, "5": 2, "6": 1, "7": 1,
+                "24": 3, "25": 2, "26": 3}
+    },
+    "dirt": {
+      "terrain": 2,
+      "density": 0.2,
+      "tiles": {"8": 3, "9": 1.5, "10": 1, "11": 1, "12": 1.5, "13": 2, "14": 1.5, "15": 0.5,
+                "27": 3, "28": 2, "29": 3}
+    },
+    "stone": {
+      "terrain": 3,
+      "density": 0.26,
+      "tiles": {"16": 2, "17": 1.5, "18": 2, "19": 1, "20": 1.5, "21": 1.5, "22": 1.5, "23": 0.8,
+                "30": 3, "31": 3}
+    }
+  },
+  "contexts": [
+    {
+      "name": "sob e ao redor de arvores: folhas, cogumelos, galhos",
+      "near": {"layer": "vegetation", "prefix": "tree_"},
+      "radius": 3,
+      "density": 1.4,
+      "multiply": {"4": 6, "7": 4, "25": 3, "21": 5, "14": 2, "0": 1.5}
+    },
+    {
+      "name": "vila cuidada: sem decadencia perto de casas",
+      "near": {"layer": "buildings"},
+      "radius": 4,
+      "density": 0.8,
+      "multiply": {"19": 0, "23": 0, "17": 0.2, "9": 0.3, "15": 0.2, "11": 0.2, "20": 0.4,
+                   "16": 0.6, "2": 2, "3": 2}
+    },
+    {
+      "name": "lote cercado: pisado, seco, pouca flor",
+      "near": {"layer": "fences"},
+      "radius": 2,
+      "density": 0.9,
+      "multiply": {"12": 2.5, "8": 2, "6": 2, "2": 0.3, "3": 0.3, "7": 0}
+    },
+    {
+      "name": "beira de estrada: cascalho e pedrinhas",
+      "near": {"terrain": 2, "radius": 1, "outside": true},
+      "radius": 1,
+      "density": 1.2,
+      "multiply": {"5": 3, "8": 2, "29": 2, "31": 2}
+    }
+  ],
+  "spacing": {
+    "min_same_tile_distance": 4,
+    "max_in_3x3": 2,
+    "keep_clear_radius_around_spawn": 2
+  }
+}

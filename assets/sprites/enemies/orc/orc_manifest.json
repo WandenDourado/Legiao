@@ -1,0 +1,87 @@
+{
+  "variant": "WithSkulls",
+  "cell": 320,
+  "pivot": [
+    160,
+    160
+  ],
+  "directions": [
+    "000",
+    "022",
+    "045",
+    "067",
+    "090",
+    "112",
+    "135",
+    "157",
+    "180"
+  ],
+  "anims": {
+    "idle": {
+      "sheet": "assets/sprites/enemies/orc/idle.png",
+      "source_anim": "Idle_Armed",
+      "source_frames": 16,
+      "kept_frames": [
+        0,
+        2,
+        4,
+        6,
+        8,
+        10,
+        12,
+        14
+      ],
+      "columns": 8,
+      "rows": 9,
+      "frame_width": 154,
+      "frame_height": 134,
+      "foot_line": 131,
+      "scale": 1.0,
+      "crop_window": [
+        83,
+        106,
+        237,
+        240
+      ],
+      "pivot_in_frame": [
+        77,
+        54
+      ],
+      "pixels": 1485792
+    },
+    "walk": {
+      "sheet": "assets/sprites/enemies/orc/walk.png",
+      "source_anim": "Walk_Armed",
+      "source_frames": 20,
+      "kept_frames": [
+        0,
+        2,
+        4,
+        6,
+        8,
+        10,
+        12,
+        14,
+        16,
+        18
+      ],
+      "columns": 10,
+      "rows": 9,
+      "frame_width": 100,
+      "frame_height": 127,
+      "foot_line": 124,
+      "scale": 1.0,
+      "crop_window": [
+        110,
+        107,
+        210,
+        234
+      ],
+      "pivot_in_frame": [
+        50,
+        53
+      ],
+      "pixels": 1143000
+    }
+  }
+}

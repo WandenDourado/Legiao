@@ -1,0 +1,93 @@
+{
+  "map": "assets/maps/world_03.json",
+  "scripts": [
+    {
+      "id": "world_03_abertura",
+      "trigger": "on_map_start",
+      "lines": [
+        {
+          "speaker": "",
+          "portrait": "",
+          "text": "Os aventureiros se encontram em uma floresta escura e sombria. Ao final dela, há uma fortaleza que guarda um antigo castelo."
+        },
+        {
+          "speaker": "Arqueiro",
+          "portrait": "arqueiro",
+          "text": "Esse cheiro... É cheiro de Orc. Malditos! Provavelmente, eles estão por trás dos ataques dos monstros e da depravação da floresta."
+        },
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "Não acho que apenas os Orcs seriam capazes de causar tanto estrago. Acho que nosso amigo Necromante pode se explicar, visto que ele tem familiaridade com essa energia sombria que está afetando esta área."
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Vejo que continua sendo um julgador... Essa energia sombria me remete ao poder da Imperatriz das Trevas."
+        },
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "Impossível! A Imperatriz foi derrotada há muito tempo. Os próprios deuses garantiram que ela nunca mais voltasse a tocar neste mundo."
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Na Batalha Sagrada, a Igreja selou a Imperatriz. Mas ainda existem formas de acessar seu poder..."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "É provável que os Orcs estejam usando magia proibida para acessar o poder da Imperatriz das Trevas. Vamos seguir adiante e encontrar a fonte desse poder."
+        }
+      ]
+    },
+    {
+      "id": "world_03_climax",
+      "trigger": "on_last_stand",
+      "lines": [
+        {
+          "speaker": "Arqueiro",
+          "portrait": "arqueiro",
+          "text": "Estamos encurralados! Nós subestimamos o poder dos Orcs."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Eu não tenho mais forças... Por favor, deuses, não permitam que eu caia aqui."
+        },
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "Calma, irmã. Os deuses não nos abandonaram, pois seu poder corre através da nossa fé. Eu entrego meu corpo e minha alma à fé do Divino. Enquanto eu viver e caminhar pelo caminho do sagrado, nenhum ser maligno há de nos fazer sofrer."
+        },
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "IRMÃOS, RECEBAM A LUZ DO DIVINO!"
+        }
+      ]
+    },
+    {
+      "id": "world_03_hordas_limpas",
+      "trigger": "on_waves_cleared",
+      "lines": [
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Parabéns, irmã. Bendita seja a sua luz, que nos trouxe forças para continuar nesta jornada. Agora, devemos seguir com a investigação."
+        },
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "Não há dúvidas. Os Orcs estão usando magia proibida para se fortalecer."
+        },
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "À nossa frente está a antiga fortaleza. Os Orcs devem tê-la tomado. Provavelmente, dentro dela está a origem de todo esse caos."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "map": "assets/maps/world_01.json",
+  "scripts": [
+    {
+      "id": "world_01_abertura",
+      "trigger": "on_map_start",
+      "lines": [
+        {
+          "speaker": "",
+          "portrait": "",
+          "text": "Um grupo de aventureiros chega a um vilarejo para investigar um relato sobre atividades de monstros."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Chegamos ao local. Os aldeões desta vila relataram ataques de monstros. Nosso objetivo é proteger o vilarejo e identificar a causa do problema."
+        },
+        {
+          "speaker": "Sacerdotisa",
+          "portrait": "sacerdotisa",
+          "text": "Sinto uma energia ruim se aproximando..."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Devemos proteger esta vila. Investiguem cada perímetro e aniquilem qualquer monstro que aparecer em seu caminho."
+        }
+      ]
+    },
+    {
+      "id": "world_01_hordas_limpas",
+      "trigger": "on_waves_cleared",
+      "lines": [
+        {
+          "speaker": "Arqueiro",
+          "portrait": "arqueiro",
+          "text": "Esse foi o último!"
+        },
+        {
+          "speaker": "Necromante",
+          "portrait": "necromante",
+          "text": "Sinto uma energia sombria se aproximando do Norte."
+        },
+        {
+          "speaker": "Mago",
+          "portrait": "mago",
+          "text": "De acordo com o relatório, ao Norte existe uma fortaleza desativada, e o caminho até ela atualmente está repleto de monstros."
+        },
+        {
+          "speaker": "Paladina",
+          "portrait": "paladina",
+          "text": "Se essa energia sombria for a causa desses ataques, devemos pôr um fim nisso. Seguiremos para o Norte."
+        }
+      ]
+    }
+  ]
+}

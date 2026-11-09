@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Character Sprites"
+  short_description: "Pipeline for directional character sprite sheets"
+  default_prompt: "Use $create-character-sprites to turn this character reference into a validated directional walk sprite sheet."
